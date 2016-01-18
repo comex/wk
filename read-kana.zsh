@@ -1,0 +1,122 @@
+#!/usr/local/bin/zsh
+typeset -A kana
+kana=(
+    a   'あ'
+    i   'い'
+    u   'う'
+    e   'え'
+    o   'お'
+    ka  'か'
+    ki  'き'
+    ku  'く'
+    ke  'け'
+    ko  'こ'
+    ga  'が'
+    gi  'ぎ'
+    gu  'ぐ'
+    ge  'げ'
+    go  'ご'
+    sa  'さ'
+    si  'し'
+    su  'す'
+    se  'せ'
+    so  'そ'
+    za  'ざ'
+    ji  'じ'
+    zu  'ず'
+    ze  'ぜ'
+    zo  'ぞ'
+    ta  'た'
+    ti  'ち'
+    tu  'つ'
+    tsu  'つ'
+    te  'て'
+    to  'と'
+    da  'だ'
+    di  'ぢ'
+    du  'づ'
+    de  'で'
+    do  'ど'
+    na  'な'
+    ni  'に'
+    nu  'ぬ'
+    ne  'ね'
+    no  'の'
+    ha  'は'
+    hi  'ひ'
+    fu  'ふ'
+    he  'へ'
+    ho  'ほ'
+    ba  'ば'
+    bi  'び'
+    bu  'ぶ'
+    be  'べ'
+    bo  'ぼ'
+    pa  'ぱ'
+    pi  'ぴ'
+    pu  'ぷ'
+    pe  'ぺ'
+    po  'ぽ'
+    ma  'ま'
+    mi  'み'
+    mu  'む'
+    me  'め'
+    mo  'も'
+    ya  'や'
+    yu  'ゆ'
+    yo  'よ'
+    ra  'ら'
+    ri  'り'
+    ru  'る'
+    re  'れ'
+    ro  'ろ'
+    wa  'わ'
+    wo  'を'
+    nn  'ん'
+    shi 'し'
+    chi 'ち'
+    xya 'ゃ'
+    xyu 'ゅ'
+    xyo 'ょ'
+    xtu 'っ'
+    xtsu 'っ'
+)
+
+#for k in "${(@k)kana}"; do
+#    echo ">$k ${kana[$k]}"
+#done
+
+autoload -U regexp-replace
+
+rx="${(k)kana// /|}"
+
+function subst() {
+    text=$1
+    #setopt re_match_pcre
+    regexp-replace text '[mnrbphgk]y[aiueo]' '${MATCH[1]}ixy${MATCH[3]}'
+    regexp-replace text '(sh|ch|j)[aueo]' '${MATCH[1,$#MATCH-1]}ixy${MATCH[$#MATCH]}'
+    regexp-replace text 'kk|ss|tt|ff|bb|pp' 'xtsu${MATCH[2]}'
+    regexp-replace text "$rx" '${kana[$MATCH]}'
+    #regexp-replace text "ku" "ik"
+
+    print "$text"
+}
+
+#LANG=C subst '>> みゃku <<'
+#echo "${kana[ku]}"
+#exit
+
+function self-insert() {
+    zle .self-insert
+    #echo "!self"
+    #old="$LBUFFER"
+    LBUFFER="$(subst "$LBUFFER")"
+    #zle -M ">>> $old => $LBUFFER"
+}
+export LANG=en-US.utf-8
+zle -N self-insert
+
+line=
+vared -p '> ' line
+line="${line//n/ん}"
+echo "$line"
