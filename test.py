@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import json, random, curses, subprocess, os
 from itertools import groupby
 os.environ['ZDOTDIR'] = '/dev/null'
@@ -13,12 +15,17 @@ def read_kana():
     return subprocess.check_output(['./read-kana.zsh']).strip().decode('utf-8')
 
 def print_word(oword):
-    print oword['character'], u', '.join(oword['kana']), u', '.join(oword['meaning'])
+    print '   ', oword['character'], u', '.join(oword['kana']), u', '.join(oword['meaning'])
 
 def vocab_quiz(vocab):
     word = random.choice(vocab)
-    print u', '.join(word['meaning'])
-    k = read_kana()
+    meaning = u', '.join(word['meaning'])
+    if word['character'].startswith(u'〜'):
+        meaning = u'(〜) ' + meaning
+    while True:
+        print meaning
+        k = read_kana()
+        if k: break
     right = k in word['kana']
     print ('NOPE', 'YEP')[right], red(word['character']), blue(u', '.join(word['kana']))
     others = all_by_kana.get(k, [])[:]
@@ -26,13 +33,13 @@ def vocab_quiz(vocab):
         others.remove(word)
     except ValueError: pass
     if others:
-        print 'Others:'
+        print ' Entered kana matches:'
         for oword in others:
             print_word(oword)
     similar = set(oword['character'] for meaning in word['meaning'] for oword in all_by_meaning[meaning])
     similar.remove(word['character'])
     if similar:
-        print 'Similar:'
+        print ' Similar meaning:'
         for ochar in similar:
             print_word(all_by_character[ochar])
 
@@ -54,4 +61,10 @@ def read_it():
             all_by_meaning.setdefault(meaning, []).append(word)
 
 read_it()
-vocab_quiz(all_vocab)
+done = 0
+while True:
+    print '[%d]' % done
+    vocab_quiz(all_vocab)
+    done += 1
+    print
+    print
