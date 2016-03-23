@@ -117,6 +117,6 @@ export LANG=en-US.utf-8
 zle -N self-insert
 
 line=
-vared -p '> ' line
+vared -p "$1" line
 line="${line//n/ん}"
 echo "$line"
