@@ -12,6 +12,8 @@ def green(x):
     return '\x1b[32;1m'+x+'\x1b[0m'
 def blue(x):
     return '\x1b[34;1m'+x+'\x1b[0m'
+def purple(x):
+    return '\x1b[35;1m'+x+'\x1b[0m'
 def yback(x):
     return '\x1b[43m'+x+'\x1b[0m'
 def rback(x):
@@ -37,18 +39,13 @@ def read_eng(prompt='> '):
             continue
         return r.strip()
 
-class Word:
+class Item:
     def __init__(self, props):
         self.__dict__.update(props)
-        self.kana = self.kana.split(', ')
-        self.meaning = self.meaning.split(', ')
         if self.user_specific:
             self.srs_numeric = self.user_specific['srs_numeric']
         else:
             self.srs_numeric = 0
-
-    def print_(self):
-        print '  ', self.character, u', '.join(self.kana), u', '.join(self.meaning)
 
     def __cmp__(self, other):
         return cmp(self.character, other.character)
@@ -56,9 +53,23 @@ class Word:
     def __hash__(self):
         return hash(self.character)
 
+    def print_reading_alternatives(self, k):
+        others = self.this_type_list.by_kana.get(k, [])[:]
+        if self in others: others.remove(self)
+        if others:
+            print ' Entered kana matches:'
+            for oword in others:
+                oword.print_()
+        similar = set(oword for meaning in self.meaning for oword in self.this_type_list.by_meaning[meaning])
+        similar.remove(self)
+        if similar:
+            print ' Similar meaning:'
+            for oword in similar:
+                oword.print_()
+
     def meaning_answer_qual(self, entered):
         qual = 0
-        for meaning in word.meaning:
+        for meaning in self.meaning:
             meaning = normalize(meaning)
             # arbitrary
             ok_dist = round(0.4*len(meaning))
@@ -66,21 +77,50 @@ class Word:
             qual = max(qual, 2 if dist == 0 else 1 if dist <= ok_dist else 0)
         return qual
 
-    def print_reading_alternatives(self, k):
-        others = word_list.by_kana.get(k, [])[:]
-        if self in others: others.remove(self)
-        if others:
-            print ' Entered kana matches:'
-            for oword in others:
-                oword.print_()
-        similar = set(oword for meaning in self.meaning for oword in word_list.by_meaning[meaning])
-        similar.remove(self)
-        if similar:
-            print ' Similar meaning:'
-            for oword in similar:
-                oword.print_()
+class Word(Item):
+    def __init__(self, props):
+        Item.__init__(self, props)
+        self.kana = self.kana.split(', ')
+        self.meaning = self.meaning.split(', ')
 
-class WordList:
+    @property
+    def this_type_list(self):
+        return word_list
+
+    def print_(self):
+        print '  ', self.character, u', '.join(self.kana), u', '.join(self.meaning)
+
+    def ansi_character(self):
+        return self.character
+
+    def reading_answer_qual(self, answer):
+        return 1 if answer in self.kana else 0
+
+class Kanji(Item):
+    def __init__(self, props):
+        Item.__init__(self, props)
+        for a in ['kunyomi', 'onyomi', 'nanori']:
+            setattr(self, a, props[a].split(', ') if props[a] else [])
+        self.all_kana = self.kunyomi + self.onyomi + self.nanori
+        self.kana = getattr(self, self.important_reading)
+        self.meaning = self.meaning.split(', ')
+
+    @property
+    def this_type_list(self):
+        return kanji_list
+
+    def print_(self):
+        print '  ', purple(self.character), u', '.join(self.kana), u', '.join(self.meaning)
+
+    def ansi_character(self):
+        return purple(self.character) + ' /k'
+
+    def reading_answer_qual(self, answer):
+        return 2 if answer in self.kana else \
+               1 if answer in self.all_kana else \
+               0
+
+class ItemList:
     def __init__(self, list):
         self.list = list
         self.by_character = {word.character: word for word in list}
@@ -100,18 +140,20 @@ def meaning_to_reading(word):
     meaning = u', '.join(word.meaning)
     if word.character.startswith(u'〜'):
         meaning = u'(〜) ' + meaning
+    if isinstance(word, Kanji):
+        meaning = purple(meaning) + ' /k'
     while True:
         print meaning
         k = read_kana()
         if k: break
-    right = k in word.kana
-    print (NOPE, YEP)[right], green(word.character), red(u', '.join(word.kana))
+    right = word.reading_answer_qual(k)
+    print (NOPE, YEP+'?', YEP)[right], green(word.character), red(u', '.join(word.kana))
     word.print_reading_alternatives(k)
-    return right
+    return right > 0
 
 def reading_to_meaning(oword):
     print u', '.join(oword.kana)
-    words = sorted(set(w for k in oword.kana for w in word_list.by_kana[k]))
+    words = sorted(set(w for k in oword.kana for w in oword.this_type_list.by_kana[k]))
     e = read_eng()
     ok = (0, 0)
     en = normalize(e)
@@ -128,7 +170,7 @@ def reading_to_meaning(oword):
     return ok > (0, 0)
 
 def character_to_rm(word):
-    print word.character
+    print word.ansi_character()
     imperfect = False
     def meaning():
         while True:
@@ -141,9 +183,9 @@ def character_to_rm(word):
                 imperfect = True
     def reading():
         entered_reading = read_kana(READING_PROMPT)
-        ok = entered_reading in word.kana
-        print (NOPE, YEP)[ok], red(u', '.join(word.kana))
-        if ok:
+        qual = word.reading_answer_qual(entered_reading)
+        print (NOPE, YEP+'?', YEP)[qual], red(u', '.join(word.kana))
+        if qual > 0:
             return
         else:
             word.print_reading_alternatives(entered_reading)
@@ -154,19 +196,28 @@ def character_to_rm(word):
     for op in ops: op()
     return not imperfect
 
-x_words = map(Word, json.load(open('vocabulary.json')))
-x_words = filter(lambda word: word.srs_numeric >= 9, x_words)
-word_list = WordList(x_words)
+
+item_filter = lambda word: word.srs_numeric >= 9
+
+word_list = ItemList(filter(item_filter, map(Word, json.load(open('vocabulary.json')))))
+kanji_list = ItemList(filter(item_filter, map(Kanji, json.load(open('kanji.json')))))
+all_items = word_list.list + kanji_list.list
+
 include_straight = True
+include_m2r_kanji = False
 
 done = 0
 while True:
     print '[%d]' % done
-    word = word_list.random()
-    ops = [meaning_to_reading, reading_to_meaning]
+    item = kanji_list.random()#random.choice(all_items)
+    ops = []
+    if isinstance(item, Word) or include_m2r_kanji:
+        ops.append(meaning_to_reading)
+    if isinstance(item, Word):
+        ops.append(reading_to_meaning)
     if include_straight:
         ops.append(character_to_rm)
-    random.choice(ops)(word)
+    random.choice(ops)(item)
     done += 1
     print
     #print
