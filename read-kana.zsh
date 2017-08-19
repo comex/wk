@@ -91,13 +91,15 @@ autoload -U regexp-replace
 rx="${(k)kana// /|}"
 
 function subst() {
-    text=$1
-    #setopt re_match_pcre
-    regexp-replace text '[mnrbphgk]y[aiueo]' '${MATCH[1]}ixy${MATCH[3]}'
-    regexp-replace text '(sh|ch|j)[aueo]' '${MATCH[1,$#MATCH-1]}ixy${MATCH[$#MATCH]}'
-    regexp-replace text 'kk|ss|tt|ff|bb|pp' 'xtsu${MATCH[2]}'
-    regexp-replace text "$rx" '${kana[$MATCH]}'
-    #regexp-replace text "ku" "ik"
+    text="$1"
+    if [ "${text[1]}" != "!" ]; then
+        #setopt re_match_pcre
+        regexp-replace text '[mnrbphgk]y[aiueo]' '${MATCH[1]}ixy${MATCH[3]}'
+        regexp-replace text '(sh|ch|j)[aueo]' '${MATCH[1,$#MATCH-1]}ixy${MATCH[$#MATCH]}'
+        regexp-replace text 'kk|ss|tt|ff|bb|pp' 'xtsu${MATCH[2]}'
+        regexp-replace text "$rx" '${kana[$MATCH]}'
+        #regexp-replace text "ku" "ik"
+    fi
 
     print "$text"
 }
@@ -113,10 +115,18 @@ function self-insert() {
     LBUFFER="$(subst "$LBUFFER")"
     #zle -M ">>> $old => $LBUFFER"
 }
+bad=0
+function diaf() {
+    bad=1
+    exit
+}
 export LANG=en-US.utf-8
 zle -N self-insert
+zle -N diaf
+bindkey '^D' diaf
 
 line=
 vared -p "$1" line
+test "$bad" = "1" && exit 1
 line="${line//n/ん}"
 echo "$line"
