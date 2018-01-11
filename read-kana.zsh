@@ -128,5 +128,7 @@ bindkey '^D' diaf
 line=
 vared -p "$1" line
 test "$bad" = "1" && exit 1
-line="${line//n/ん}"
+if [ "${line[1]}" != "!" ]; then
+    line="${line//n/ん}"
+fi
 echo "$line"
