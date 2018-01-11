@@ -1,19 +1,7 @@
+#!/usr/local/bin/python2
 # -*- coding: utf-8 -*-
-# TODO have all forms require entering it right after wrong
-# and change YEP to not be green
-'''
-and wtf is this
 
-reading> はねい
-NOPE はんけい
-reading> !right
-reading> はんけい
-YEP? はんけい
-
-it doesnt leave a log at all
-'''
-
-import json, random, curses, subprocess, os, unicodedata, re, math, sys, codecs
+import json, random, curses, subprocess, os, unicodedata, re, math, sys, codecs, time
 import readline
 from itertools import groupby
 import distance
@@ -44,8 +32,9 @@ YEP_wrong = rback('YEP')
 READING_PROMPT = red('reading> ')
 MEANING_PROMPT = blue('meaning> ')
 
-def read_kana(prompt='> '):
+def read_kana(pre, prompt='> '):
     while True:
+        print pre
         try:
             text = subprocess.check_output(['./read-kana.zsh', prompt]).strip().decode('utf-8')
         except subprocess.CalledProcessError:
@@ -57,8 +46,9 @@ def read_kana(prompt='> '):
             continue
         return text
 
-def read_eng(prompt='> '):
+def read_eng(pre, prompt='> '):
     while True:
+        print pre
         # xxx no backspace?
         r = raw_input(prompt)
         try:
@@ -83,6 +73,7 @@ class Item:
             self.srs_numeric = self.user_specific['srs_numeric']
         else:
             self.srs_numeric = 0
+        self.old_tests = []
 
     def __cmp__(self, other):
         return cmp(self.character, other.character)
@@ -141,7 +132,7 @@ class Word(Item):
         return self.character
 
     def reading_answer_qual(self, answer):
-        return 1 if answer in self.kana else 0
+        return 2 if answer in self.kana else 0
 
 class Kanji(Item):
     def __init__(self, props):
@@ -188,10 +179,12 @@ def normalize(e):
 
 class Test:
     def __init__(self, kind, item):
-        self.wrong_line, self.right_line = (u'%s:%s:%s:%s\n' % (kind, item.__class__.__name__.lower(), item.character, result) for result in ('wrong', 'right'))
+        self.time = int(time.time())
         self.kind = kind
         self.item = item
-        self.unwrong()
+        self.old_tests_idx = len(item.old_tests)
+        item.old_tests.append(None)
+        self.set_wrong(False)
 
     def run(self):
         global cur_test
@@ -199,25 +192,22 @@ class Test:
         self.KINDS[self.kind](self, self.item)
         del cur_test
         if last_appended_test is not self:
-            assert not self.was_wrong
-            append_line(self.right_line)
+            self.set_wrong(self.was_wrong, force_append=True)
         return not self.was_wrong
 
-    def set_wrong(self, wrong):
-        if self.was_wrong == wrong:
-            return
+    def set_wrong(self, wrong, force_append=False):
         self.was_wrong = wrong
         self.YEP = YEP_wrong if wrong else YEP_real
+        result = 'wrong' if wrong else 'right'
+        data = {'time': int(time.time()), 'kind': self.kind, 'item': self.item, 'result': result}
+        line = u'%s:%s:%s:%s:%s\n' % (self.time, self.kind, self.item.__class__.__name__.lower(), self.item.character, result)
         if last_appended_test is self:
-            change_last_line(self.wrong_line if wrong else self.right_line)
-        elif wrong:
-            append_line(self.wrong_line)
-        global last_appended_test
-        last_appended_test = self
-
-    def unwrong(self):
-        self.YEP = YEP_real
-        self.was_wrong = False
+            change_last_line(line)
+            self.item.old_tests[-1] = data
+        elif wrong or force_append:
+            append_line(line)
+            set_last_appended_test(self)
+            self.item.old_tests.append(data)
 
     def meaning_to_reading(self, word):
         meaning = u', '.join(word.meaning)
@@ -226,8 +216,7 @@ class Test:
         if isinstance(word, Kanji):
             meaning = purple(meaning) + ' /k'
         while True:
-            print meaning
-            k = read_kana()
+            k = read_kana(meaning)
             right = word.reading_answer_qual(k)
             print (NOPE, self.YEP+'?', self.YEP)[right], green(word.character), red(u', '.join(word.kana))
             word.print_reading_alternatives(k)
@@ -235,13 +224,13 @@ class Test:
             if right > 0:
                 return
             else:
-                self.wrong()
+                self.set_wrong(True)
 
     def reading_to_meaning(self, oword):
         while True:
-            print u', '.join(oword.kana)
+            p = u', '.join(oword.kana)
+            e = read_eng(p)
             words = sorted(set(w for k in oword.kana for w in oword.this_type_list.by_kana[k]))
-            e = read_eng()
             ok = (0, 0)
             en = normalize(e)
             for word in words:
@@ -257,25 +246,24 @@ class Test:
             if ok > (0, 0):
                 return
             else:
-                self.wrong()
+                self.set_wrong(True)
 
     def character_to_rm(self, word):
-        print word.ansi_character()
         imperfect = False
         # todo combine the two?
         def meaning():
             while True:
-                entered_meaning = normalize(read_eng(MEANING_PROMPT))
+                entered_meaning = normalize(read_eng(word.ansi_character(), MEANING_PROMPT))
                 qual = word.meaning_answer_qual(entered_meaning)
                 print (NOPE, self.YEP+'?', self.YEP)[qual], blue(u', '.join(word.meaning))
                 if qual > 0:
                     return
                 else:
                     word.print_meaning_alternatives(entered_meaning)
-                    self.wrong()
+                    self.set_wrong(True)
         def reading():
             while True:
-                entered_reading = read_kana(READING_PROMPT)
+                entered_reading = read_kana(word.ansi_character(), READING_PROMPT)
                 qual = word.reading_answer_qual(entered_reading)
                 print (NOPE, self.YEP+'?', self.YEP)[qual], red(u', '.join(word.kana)),
                 if isinstance(word, Kanji) and word.unimportant_kana:
@@ -286,7 +274,7 @@ class Test:
                 else:
                     word.print_reading_alternatives(entered_reading)
                     #word.print_similar_meaning()
-                    self.wrong()
+                    self.set_wrong(True)
 
         ops = [meaning, reading]
         random.shuffle(ops)
@@ -306,6 +294,7 @@ def change_last_line(line):
     logfile.seek(pos)
     logfile.truncate()
     logfile.write(line.encode('utf-8'))
+    logfile.flush()
     last_line = line
 
 def append_line(line):
@@ -313,60 +302,90 @@ def append_line(line):
     assert line.endswith('\n')
     logfile.seek(0, 2)
     logfile.write(line.encode('utf-8'))
+    logfile.flush()
     last_line = line
 
 def handle_bang(bang):
     bang = bang.strip()
     if bang in ('!wrong', '!right'):
-        if last_line is None or not re.search(':(wrong|right)\n$', last_line):
-            print 'no last %r' % (last_line,)
+        if last_appended_test is None:
+            print 'no last'
             return
-        new = re.sub(':[^:]*\n$', ':'+bang[1:]+'\n', last_line)
-        if new != last_line:
-            global done_right
-            done_right += (1 if bang == '!right' else -1)
-            change_last_line(new)
-        if bang == '!right' and cur_test.was_wrong:
-            cur_test.unwrong()
+        last_appended_test.set_wrong(bang == '!wrong')
         return
     if bang in ('!pcton', '!pctoff'):
         global pcton
         pcton = bang == '!pcton'
         return
-    print '?bang?'
+    print '?bang?', repr(bang)
 
 word_list = ItemList(map(Word, json.load(open('vocabulary.json'))))
 kanji_list = ItemList(map(Kanji, json.load(open('kanji.json'))))
 all_items = word_list.list + kanji_list.list
 
 pcton = True
+total_right_except_lat = 0
 
 last_appended_test = None
+def set_last_appended_test(lat):
+    global last_appended_test
+    if last_appended_test is not None:
+        global total_right_except_lat
+        total_right_except_lat += not last_appended_test.was_wrong
+    last_appended_test = lat
+
+def read_log():
+    logfile.seek(0)
+    for line in logfile.read().strip().split('\n'):
+        bits = line.split(':')
+        if len(bits) == 4:
+            bits = ['0'] + bits
+        assert len(bits) == 5
+        ttime, kind, item_class, character, result = bits
+        ttime = int(ttime)
+        item_list = {'word': word_list, 'kanji': kanji_list}[item_class]
+        character = character.decode('utf-8')
+        try:
+            item = item_list.by_character[character]
+        except KeyError:
+            # interesting: quite a few were deleted
+            #print '?', character
+            continue
+        item.old_tests.append({'time': ttime, 'kind': kind, 'item': item, 'result': result})
+read_log()
 
 if __name__ == '__main__':
     kanji_ops = []#meaning_to_reading, character_to_rm]
-    word_ops = ['m2r']#['r2m', 'm2r', 'c2']
-    item_filter = lambda word: word.srs_numeric >= 9
+    word_ops = ['r2m', 'm2r', 'c2']
+    #item_filter = lambda item: item.srs_numeric >= 9
+    #item_filter = lambda item: item.old_tests and item.old_tests[-1]['result'] == 'wrong' and 0 < item.old_tests[-1]['time'] < (time.time() - 300)
+    item_filter = lambda item: item.old_tests and item.old_tests[-1]['result'] == 'wrong' and (time.time() - 3600) < item.old_tests[-1]['time']
     filtered_items = (word_list.list if word_ops else []) + \
                      (kanji_list.list if kanji_ops else [])
     filtered_items = filter(item_filter, filtered_items)
+    print '<%d items available>' % len(filtered_items)
 
     done = 0
-    done_right = 0
     while True:
         pctstuff = ''
         if pcton and done > 0:
+            done_right = total_right_except_lat + (not last_appended_test.was_wrong if last_appended_test is not None else 0)
             pctstuff = ' %d/%d=%.0f' % (done_right, done, done_right * 100.0 / done)
         print '[%d]%s' % (done, pctstuff)
         #item = kanji_list.random()
+        if not filtered_items:
+            print 'all out...'
+            break
         item = random.choice(filtered_items)
+        if not item_filter(item):
+            filtered_items = filter(item_filter, filtered_items)
+            item = random.choice(filtered_items)
         ops = word_ops if isinstance(item, Word) else kanji_ops
         try:
             right = Test(random.choice(ops), item).run()
         except EOFError:
             break
         done += 1
-        if right: done_right += 1
 
         print
         #print
