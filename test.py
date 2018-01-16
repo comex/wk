@@ -5,6 +5,7 @@ import json, random, curses, subprocess, os, unicodedata, re, math, sys, codecs,
 import readline
 from itertools import groupby
 import distance
+import ujson as json
 os.environ['ZDOTDIR'] = '/dev/null'
 
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
@@ -82,7 +83,7 @@ class Item:
         return hash(self.character)
 
     def print_reading_alternatives(self, k):
-        others = self.this_type_list.by_kana.get(k, [])[:]
+        others = self.list.by_kana.get(k, [])[:]
         if self in others: others.remove(self)
         if others:
             print ' Entered kana matches:'
@@ -90,7 +91,7 @@ class Item:
                 oword.print_()
 
     def print_meaning_alternatives(self, k):
-        others = self.this_type_list.by_meaning.get(k, [])[:]
+        others = self.list.by_meaning.get(k, [])[:]
         if self in others: others.remove(self)
         if others:
             print ' Entered meaning matches:'
@@ -98,7 +99,7 @@ class Item:
                 oword.print_()
 
     def print_similar_meaning(self):
-        similar = set(oword for meaning in self.meaning for oword in self.this_type_list.by_meaning[meaning])
+        similar = set(oword for meaning in self.meaning for oword in self.list.by_meaning[meaning])
         similar.remove(self)
         if similar:
             print ' Similar meaning:'
@@ -121,10 +122,6 @@ class Word(Item):
         self.kana = self.kana.split(', ')
         self.meaning = self.meaning.split(', ')
 
-    @property
-    def this_type_list(self):
-        return word_list
-
     def print_(self):
         print '  ', self.character, u', '.join(self.kana), u', '.join(self.meaning)
 
@@ -143,10 +140,6 @@ class Kanji(Item):
         self.unimportant_kana = self.kunyomi if self.important_reading == 'onyomi' else self.onyomi
         self.kana = getattr(self, self.important_reading)
         self.meaning = self.meaning.split(', ')
-
-    @property
-    def this_type_list(self):
-        return kanji_list
 
     def print_(self):
         print '  ', purple(self.character), u', '.join(self.kana), u', '.join(self.meaning)
@@ -230,7 +223,7 @@ class Test:
         while True:
             p = u', '.join(oword.kana)
             e = read_eng(p)
-            words = sorted(set(w for k in oword.kana for w in oword.this_type_list.by_kana[k]))
+            words = sorted(set(w for k in oword.kana for w in oword.list.by_kana[k]))
             ok = (0, 0)
             en = normalize(e)
             for word in words:
@@ -279,7 +272,14 @@ class Test:
         ops = [meaning, reading]
         random.shuffle(ops)
         for op in ops: op()
-    KINDS = {'m2r': meaning_to_reading, 'r2m': reading_to_meaning, 'c2': character_to_rm}
+
+    def kanji_confusion(self, confusion):
+        kanjis = confusion.kanjis[:]
+        random.shuffle(kanjis)
+        for kanji in kanjis:
+            self.character_to_rm(kanji)
+
+    KINDS = {'m2r': meaning_to_reading, 'r2m': reading_to_meaning, 'c2': character_to_rm, 'kc': kanji_confusion}
 
 
 last_line = None
@@ -319,9 +319,8 @@ def handle_bang(bang):
         return
     print '?bang?', repr(bang)
 
-word_list = ItemList(map(Word, json.load(open('vocabulary.json'))))
-kanji_list = ItemList(map(Kanji, json.load(open('kanji.json'))))
-all_items = word_list.list + kanji_list.list
+Word.list = ItemList(map(Word, json.load(open('vocabulary.json'))))
+Kanji.list = ItemList(map(Kanji, json.load(open('kanji.json'))))
 
 pcton = True
 total_right_except_lat = 0
@@ -343,7 +342,7 @@ def read_log():
         assert len(bits) == 5
         ttime, kind, item_class, character, result = bits
         ttime = int(ttime)
-        item_list = {'word': word_list, 'kanji': kanji_list}[item_class]
+        item_list = ITEM_CLASSES[item_class].list
         character = character.decode('utf-8')
         try:
             item = item_list.by_character[character]
@@ -352,17 +351,51 @@ def read_log():
             #print '?', character
             continue
         item.old_tests.append({'time': ttime, 'kind': kind, 'item': item, 'result': result})
+
+class Confusion(Item):
+    def __init__(self, kanjis):
+        self.character = kanjis[0].character
+        self.kanjis = kanjis
+        self.kana = []
+        self.meaning = []
+        self.user_specific = None
+        Item.__init__(self, {})
+
+ITEM_CLASSES = {'word': Word, 'kanji': Kanji, 'confusion': Confusion}
+
+def read_confusion():
+    confusions = []
+    for line in open('confusion.txt').read().strip().split('\n'):
+        line = line.decode('utf-8')
+        confusions.append(Confusion([Kanji.list.by_character[c] for c in line]))
+    Confusion.list = ItemList(confusions)
+
+
+read_confusion()
 read_log()
 
+def item_was_recently_right(item):
+    return item.old_tests and item.old_tests[-1]['result'] == 'right' and time.time() - 3600 < item.old_tests[-1]['time']
+def item_was_last_wrong(item):
+    return item.old_tests and item.old_tests[-1]['result'] == 'wrong'
+def get_filtered_items():
+    filtered_items = []
+    for cls in ITEM_CLASSES.values():
+        if cls.avail_ops:
+            filtered_items += filter(item_filter_real, cls.list.list)
+    return filtered_items
+def item_filter_real(item):
+    return item_filter(item) and not item_was_recently_right(item)
+
 if __name__ == '__main__':
-    kanji_ops = []#meaning_to_reading, character_to_rm]
-    word_ops = ['r2m', 'm2r', 'c2']
+    Kanji.avail_ops = ['r2m', 'm2r', 'c2']
+    Word.avail_ops = ['r2m', 'm2r', 'c2']
+    Confusion.avail_ops = ['kc']
     #item_filter = lambda item: item.srs_numeric >= 9
     #item_filter = lambda item: item.old_tests and item.old_tests[-1]['result'] == 'wrong' and 0 < item.old_tests[-1]['time'] < (time.time() - 300)
-    item_filter = lambda item: item.old_tests and item.old_tests[-1]['result'] == 'wrong' and (time.time() - 3600) < item.old_tests[-1]['time']
-    filtered_items = (word_list.list if word_ops else []) + \
-                     (kanji_list.list if kanji_ops else [])
-    filtered_items = filter(item_filter, filtered_items)
+    #item_filter = lambda item: 
+    item_filter = lambda item: isinstance(item, Confusion)
+    filtered_items = get_filtered_items()
     print '<%d items available>' % len(filtered_items)
 
     done = 0
@@ -372,15 +405,17 @@ if __name__ == '__main__':
             done_right = total_right_except_lat + (not last_appended_test.was_wrong if last_appended_test is not None else 0)
             pctstuff = ' %d/%d=%.0f' % (done_right, done, done_right * 100.0 / done)
         print '[%d]%s' % (done, pctstuff)
-        #item = kanji_list.random()
-        if not filtered_items:
-            print 'all out...'
-            break
-        item = random.choice(filtered_items)
-        if not item_filter(item):
-            filtered_items = filter(item_filter, filtered_items)
+        item = None
+        while True:
+            if not filtered_items:
+                print 'all out...'
+                break
             item = random.choice(filtered_items)
-        ops = word_ops if isinstance(item, Word) else kanji_ops
+            if item_filter_real(item):
+                break
+            filtered_items = get_filtered_items()
+        if not item: break
+        ops = item.avail_ops
         try:
             right = Test(random.choice(ops), item).run()
         except EOFError:
