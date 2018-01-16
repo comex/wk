@@ -378,6 +378,8 @@ def item_was_recently_right(item):
     return item.old_tests and item.old_tests[-1]['result'] == 'right' and time.time() - 3600 < item.old_tests[-1]['time']
 def item_was_last_wrong(item):
     return item.old_tests and item.old_tests[-1]['result'] == 'wrong'
+def item_was_recently_wrong(item):
+    return item.old_tests and item.old_tests[-1]['result'] == 'wrong' and time.time() - 3600 < item.old_tests[-1]['time']
 def get_filtered_items():
     filtered_items = []
     for cls in ITEM_CLASSES.values():
@@ -392,9 +394,10 @@ if __name__ == '__main__':
     Word.avail_ops = ['r2m', 'm2r', 'c2']
     Confusion.avail_ops = ['kc']
     #item_filter = lambda item: item.srs_numeric >= 9
-    #item_filter = lambda item: item.old_tests and item.old_tests[-1]['result'] == 'wrong' and 0 < item.old_tests[-1]['time'] < (time.time() - 300)
+    #item_filter = item_was_last_wrong
+    item_filter = item_was_recently_wrong
     #item_filter = lambda item: 
-    item_filter = lambda item: isinstance(item, Confusion)
+    #item_filter = lambda item: isinstance(item, Confusion)
     filtered_items = get_filtered_items()
     print '<%d items available>' % len(filtered_items)
 
@@ -405,8 +408,8 @@ if __name__ == '__main__':
             done_right = total_right_except_lat + (not last_appended_test.was_wrong if last_appended_test is not None else 0)
             pctstuff = ' %d/%d=%.0f' % (done_right, done, done_right * 100.0 / done)
         print '[%d]%s' % (done, pctstuff)
-        item = None
         while True:
+            item = None
             if not filtered_items:
                 print 'all out...'
                 break
