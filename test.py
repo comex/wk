@@ -1,7 +1,7 @@
 #!/usr/local/bin/python2
 # -*- coding: utf-8 -*-
 
-import json, random, curses, subprocess, os, unicodedata, re, math, sys, codecs, time
+import json, random, curses, subprocess, os, unicodedata, re, math, sys, codecs, time, codecs
 import readline
 from itertools import groupby
 import distance
@@ -9,7 +9,7 @@ import ujson as json
 os.environ['ZDOTDIR'] = '/dev/null'
 
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
-logfile = open('log.txt', 'r+b')
+logfile = codecs.open('log.txt', 'r+', encoding='utf-8')
 
 #sys.stdout = codecs.getwriter("utf-8")(sys.stdout) <-- THIS BREAKS IT
 
@@ -70,6 +70,7 @@ def read_eng(pre, prompt='> '):
 class Item:
     def __init__(self, props):
         self.__dict__.update(props)
+        self.character = self.character.strip()
         if self.user_specific:
             self.srs_numeric = self.user_specific['srs_numeric']
         else:
@@ -135,7 +136,8 @@ class Kanji(Item):
     def __init__(self, props):
         Item.__init__(self, props)
         for a in ['kunyomi', 'onyomi', 'nanori']:
-            setattr(self, a, props[a].split(', ') if props[a] and props[a] != 'None' else [])
+            prop = props[a]
+            setattr(self, a, [x.strip() for x in props[a].split(', ')] if prop and prop.strip() and prop != 'None' else [])
         self.all_kana = self.kunyomi + self.onyomi + self.nanori
         self.unimportant_kana = self.kunyomi if self.important_reading == 'onyomi' else self.onyomi
         self.kana = getattr(self, self.important_reading)
@@ -222,6 +224,8 @@ class Test:
     def reading_to_meaning(self, oword):
         while True:
             p = u', '.join(oword.kana)
+            if isinstance(oword, Kanji):
+                p += u' /k'
             e = read_eng(p)
             words = sorted(set(w for k in oword.kana for w in oword.list.by_kana[k]))
             ok = (0, 0)
@@ -290,10 +294,10 @@ def change_last_line(line):
     logfile.seek(-len(last_line.encode('utf-8')), 2)
     pos = logfile.tell()
     test = logfile.read() 
-    assert test == last_line.encode('utf-8')
+    assert test == last_line
     logfile.seek(pos)
     logfile.truncate()
-    logfile.write(line.encode('utf-8'))
+    logfile.write(line)
     logfile.flush()
     last_line = line
 
@@ -301,7 +305,7 @@ def append_line(line):
     global last_line
     assert line.endswith('\n')
     logfile.seek(0, 2)
-    logfile.write(line.encode('utf-8'))
+    logfile.write(line)
     logfile.flush()
     last_line = line
 
@@ -335,15 +339,14 @@ def set_last_appended_test(lat):
 
 def read_log():
     logfile.seek(0)
-    for line in logfile.read().strip().split('\n'):
-        bits = line.split(':')
+    for line in logfile.read().strip().split(u'\n'):
+        bits = line.split(u':')
         if len(bits) == 4:
-            bits = ['0'] + bits
+            bits = [u'0'] + bits
         assert len(bits) == 5
         ttime, kind, item_class, character, result = bits
         ttime = int(ttime)
         item_list = ITEM_CLASSES[item_class].list
-        character = character.decode('utf-8')
         try:
             item = item_list.by_character[character]
         except KeyError:
@@ -374,10 +377,24 @@ def read_confusion():
 read_confusion()
 read_log()
 
+def save_item_list(item_list, filename):
+    with codecs.open(filename, 'w', encoding='utf-8') as fp:
+        for item in item_list:
+            fp.write(u'%s:%s\n' % (item.__class__.__name__.lower(), item.character))
+def load_item_list(filename):
+    item_list = set()
+    for line in codecs.open(filename, encoding='utf-8'):
+        if line:
+            item_class, character = line.strip().split(':')
+            item_list.add(ITEM_CLASSES[item_class].list.by_character[character])
+    return item_list
+
 def item_was_recently_right(item):
     return item.old_tests and item.old_tests[-1]['result'] == 'right' and time.time() - 3600 < item.old_tests[-1]['time']
 def item_was_last_wrong(item):
     return item.old_tests and item.old_tests[-1]['result'] == 'wrong'
+def item_was_not_last_right(item):
+    return (not item.old_tests) or item_was_last_wrong(item)
 def item_was_recently_wrong(item):
     return item.old_tests and item.old_tests[-1]['result'] == 'wrong' and time.time() - 3600 < item.old_tests[-1]['time']
 def get_filtered_items():
@@ -393,13 +410,30 @@ if __name__ == '__main__':
     Kanji.avail_ops = ['r2m', 'm2r', 'c2']
     Word.avail_ops = ['r2m', 'm2r', 'c2']
     Confusion.avail_ops = ['kc']
-    #item_filter = lambda item: item.srs_numeric >= 9
     #item_filter = item_was_last_wrong
-    item_filter = item_was_recently_wrong
-    #item_filter = lambda item: 
+    #item_filter = lambda item: item.srs_numeric >= 9
+    #item_filter = item_was_recently_wrong
+    item_filter = lambda item: True
     #item_filter = lambda item: isinstance(item, Confusion)
+    #item_filter = item_was_not_last_right
+    item_map = lambda fi: fi
+    item_map = lambda fi: random.sample(fi, 50)
+
+    if len(sys.argv) > 1 and sys.argv[1] == '--load':
+        loaded_item_list = load_item_list(sys.argv[2])
+        item_filter = lambda item: not item_was_recently_right(item) and item in loaded_item_list
+    elif len(sys.argv) > 1 and sys.argv[1] == '--save':
+        item_filter = item_was_not_last_right
+        item_map = lambda fi: random.sample(fi, 50)
+
     filtered_items = get_filtered_items()
+    filtered_items = item_map(filtered_items)
     print '<%d items available>' % len(filtered_items)
+
+    if len(sys.argv) > 1 and sys.argv[1] == '--save':
+        assert item_filter is item_was_not_last_right#item_was_last_wrong
+        save_item_list(filtered_items, sys.argv[2])
+        exit()
 
     done = 0
     while True:
@@ -416,7 +450,8 @@ if __name__ == '__main__':
             item = random.choice(filtered_items)
             if item_filter_real(item):
                 break
-            filtered_items = get_filtered_items()
+            #filtered_items = get_filtered_items()
+            filtered_items = filter(item_filter_real, filtered_items)
         if not item: break
         ops = item.avail_ops
         try:
