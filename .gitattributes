@@ -1,0 +1,3 @@
+/wk-api-key.txt filter=crypt diff=crypt
+/*.json filter=crypt diff=crypt
+
