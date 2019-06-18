@@ -460,7 +460,7 @@ struct TestResult {
     }
     static let retired: Set<String> = ["毒言", "札", "農", "先年"]
     static let replace: [String: String] = ["取決め": "取り決め"]
-    static func parse(line: String) throws -> TestResult? {
+    static func parse(line: Substring) throws -> TestResult? {
         var components: [Substring] = trim(line).split(separator: ":")
         var date: Date? = nil
         if components.count > 4 {
@@ -498,7 +498,7 @@ struct TestResult {
     static func readAllFromLog() throws -> [TestResult] {
         let data = try Subete.instance.openLogTxt(write: false) { (fh: FileHandle) in fh.readDataToEndOfFile() }
         let text = String(decoding: data, as: UTF8.self)
-        return try text.split(separator: "\n").compactMap { try TestResult.parse(line: String($0)) }
+        return try text.split(separator: "\n").compactMap { try TestResult.parse(line: $0) }
     }
 }
 
