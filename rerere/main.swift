@@ -7,10 +7,13 @@ struct MyError: Error {
     init(_ message: String) { self.message = message }
 }
 func trim(_ s: String) -> String {
-    return s.trimmingCharacters(in: CharacterSet.whitespaces)
+    return s.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
 }
 func commaSplit(_ s: String) -> [String] {
     return s.components(separatedBy: ",").map(trim)
+}
+func commaJoin(_ ss: [String]) -> String {
+    return ss.joined(separator: ", ")
 }
 func ensure(_ condition: @autoclosure () -> Bool, _ message: @autoclosure () -> String = String(), file: StaticString = #file, line: UInt = #line) {
     if !condition() {
@@ -27,13 +30,85 @@ func loadJSON(path: String) -> Any {
         options: JSONSerialization.ReadingOptions())
 }
 
+#if false
+func runAndGetOutput(_ args: [String]) throws -> String {
+    // This is broken because it does something weird with the signal mask
+    let p = Process()
+    let pipe = Pipe()
+    p.arguments = Array(args[1...])
+    p.executableURL = URL(fileURLWithPath: args[0])
+    //p.standardOutput = pipe
+    p.standardOutput = FileHandle.standardOutput
+    p.standardError = FileHandle.standardError
+    p.standardInput = FileHandle.standardInput
+    //p.startsNewProcessGroup = false
+    try p.run()
+    let queue = DispatchQueue(label: "runAndGetOutput")
+    var output: Data? = nil
+    /*queue.async {
+        output = pipe.fileHandleForReading.readDataToEndOfFile()
+    }*/
+    p.waitUntilExit()
+    if p.terminationReason != .exit {
+        throw MyError("bad termination")
+    }
+    queue.sync {}
+    return try unwrapOrThrow(String(decoding: output!, as: UTF8.self), err: MyError("invalid utf8 in output"))
+}
+#endif
+func runAndGetOutput(_ args: [String]) throws -> String {
+    let pipe = Pipe()
+    let stdoutFd = pipe.fileHandleForWriting.fileDescriptor
+    var myArgs: [UnsafeMutablePointer<Int8>?] = args.map {
+        strdup($0)
+    } + [nil]
+    var pid: pid_t = 0
+    var fileActions: posix_spawn_file_actions_t? = nil
+    
+    posix_spawn_file_actions_init(&fileActions)
+    posix_spawn_file_actions_adddup2(&fileActions, stdoutFd, 1)
+    let res = posix_spawn(&pid, myArgs[0], &fileActions, nil, myArgs, environ)
+    
+    for arg in myArgs { free(arg) }
+    if res == -1 {
+        throw MyError("runAndGetOutput(\(args)): posix_spawn failed: \(strerror(errno)!)")
+    }
+    
+    let queue = DispatchQueue(label: "runAndGetOutput")
+    var output: Data? = nil
+    pipe.fileHandleForWriting.closeFile()
+    queue.async {
+        output = pipe.fileHandleForReading.readDataToEndOfFile()
+    }
 
+    
+    var st: Int32 = 0
+    let waited = waitpid(pid, &st, 0)
+    if waited != pid {
+        throw MyError("runAndGetOutput(\(args)): waitpid() failed: \(strerror(errno)!)")
+    }
+    let wstatus = st & 0o177
+    let exitStatus = (st >> 8) & 0xff
+
+    if wstatus != 0 {
+        throw MyError("runAndGetOutput(\(args)): exited with signal \(exitStatus)")
+    }
+    if exitStatus != 0 {
+        throw MyError("runAndGetOutput(\(args)): exited with code \(exitStatus)")
+    }
+    
+    queue.sync {}
+    return try unwrapOrThrow(String(decoding: output!, as: UTF8.self), err: MyError("invalid utf8 in output"))
+
+
+}
 class Subete {
     static var instance: Subete!
     let allWords: ItemList<Word>
     let allKanji: ItemList<Kanji>
     var allItems: [Item]! = nil
     var allConfusion: ItemList<Confusion>! = nil
+    var srs: SRS? = nil
     
     var lastAppendedTest: Test?
     
@@ -80,7 +155,31 @@ class Subete {
         fh.closeFile()
         return ret
     }
-
+    func createSRSFromLog() {
+        let results = try! TestResult.readAllFromLog()
+        let srs = SRS()
+        for result in results { srs.update(result) }
+        self.srs = srs
+    }
+    func handleBang(_ input: String) {
+        switch input {
+        case "!right":
+            handleChangeLast(outcome: .right)
+        case "!wrong":
+            handleChangeLast(outcome: .wrong)
+        case "!mu":
+            handleChangeLast(outcome: .mu)
+        default:
+            print("?bang? \(input)")
+        }
+    }
+    func handleChangeLast(outcome: TestOutcome) {
+        guard let test = self.lastAppendedTest else {
+            print("no last")
+            return
+        }
+        try! test.markResult(outcome: outcome)
+    }
 }
 
 enum ItemKind: String {
@@ -98,7 +197,20 @@ class Item: Hashable, Equatable {
     static func == (lhs: Item, rhs: Item) -> Bool {
         return lhs === rhs
     }
+    func cliPrint() {
+        fatalError("?")
+    }
 }
+func normalizeMeaning(_ meaning: String) -> String {
+    return trim(meaning)
+}
+func normalizeReading(_ input: String) -> String {
+    // TODO katakana to hiragana
+    var reading = trim(input)
+    reading = reading.replacingOccurrences(of: "-", with: "ー")
+    return reading
+}
+
 class NormalItem: Item {
     let meanings: [String]
     let readings: [String]
@@ -110,35 +222,88 @@ class NormalItem: Item {
     init(json: NSDictionary, readings: [String], importantReadings: [String], unimportantReadings: [String]) {
         self.json = json
         self.character = trim(json["character"] as! String)
-        self.meanings = commaSplit(json["meaning"] as! String)
+        self.meanings = commaSplit(json["meaning"] as! String).map(normalizeMeaning)
         self.readings = readings
         self.importantReadings = importantReadings
         self.unimportantReadings = unimportantReadings
         super.init(name: self.character)
     }
     func readingAlternatives(input: String) -> [Item] {
+        return Subete.instance.allByKind(self.kind).findByReading(input).filter { $0 != self }
         
     }
     func cliPrintReadingAlternatives(input: String) {
-        
+        let items = readingAlternatives(input: input)
+        if items.isEmpty { return }
+        print(" Entered kana matches:")
+        for item in items {
+            item.cliPrint()
+        }
+    }
+    func meaningMatches(_ input: String) -> Bool {
+        return self.meaningAnswerQuality(input: input) > 0
+    }
+    func meaningAlternatives(input: String) -> [Item] {
+        return Subete.instance.allByKind(self.kind).vagueItems.filter { (other: Item) -> Bool in
+            return other != self && (other as! NormalItem).meaningMatches(input)
+        }
+    }
+    func cliPrintMeaningAlternatives(input: String) {
+        let items = meaningAlternatives(input: input)
+        if items.isEmpty { return }
+        print(" Entered meaning matches:")
+        for item in items {
+            item.cliPrint()
+        }
+    }
+    func similarMeaning() -> [Item] {
+        return Subete.instance.allByKind(self.kind).vagueItems.filter { (other: Item) -> Bool in
+            return other != self && self.meanings.contains { (other as! NormalItem).meaningMatches($0) }
+        }
+
     }
     func cliPrintSimilarMeaning() {
-        
+        let items = similarMeaning()
+        if items.isEmpty { return }
+        print(" Similar meaning:")
+        for item in items {
+            item.cliPrint()
+        }
     }
+
     func readingAnswerQuality(input: String) -> Int {
-        return 0
+        let reading = normalizeReading(input)
+        //print("\(self.importantReadings) <-> \([reading])")
+        if self.importantReadings.contains(reading) {
+            return 2
+        } else if self.unimportantReadings.contains(reading) {
+            return 1
+        } else {
+            return 0
+        }
     }
-    
+    func meaningAnswerQuality(input: String) -> Int {
+        let inputMeaning = normalizeMeaning(input)
+        return self.meanings.lazy.map { (meaning: String) -> Int in
+            // TODO
+            return meaning == inputMeaning ? 1 : 0
+        }.max() ?? 0
+    }
+    override func cliPrint() {
+        print("\(self.ansiName) \(commaJoin(self.readings)) \(commaJoin(self.meanings))")
+    }
+    var ansiName: String { fatalError("lol") }
 }
 class Word : NormalItem, CustomStringConvertible {
     init(json: NSDictionary) {
-        let readings = commaSplit(json["kana"] as! String)
+        let readings = commaSplit(json["kana"] as! String).map(normalizeReading)
         super.init(json: json, readings: readings, importantReadings: readings, unimportantReadings: [])
     }
     var description: String {
         return "<Word \(self.character)>"
     }
     override var kind: ItemKind { return .word }
+    override var ansiName: String { return self.name }
 
 }
 class Kanji : NormalItem, CustomStringConvertible {
@@ -149,7 +314,7 @@ class Kanji : NormalItem, CustomStringConvertible {
         let importantKind = json["important_reading"] as! String
         for kind in ["kunyomi", "nanori", "onyomi"] {
             if let obj = json[kind], !(obj is NSNull) && !(obj as? NSString == "None") {
-                let theseReadings = commaSplit(obj as! String)
+                let theseReadings = commaSplit(obj as! String).map(normalizeReading)
                 readings += theseReadings
                 if kind == importantKind {
                     importantReadings += theseReadings
@@ -166,6 +331,7 @@ class Kanji : NormalItem, CustomStringConvertible {
         return "<Kanji \(self.character)>"
     }
     override var kind: ItemKind { return .kanji }
+    override var ansiName: String { return ANSI.purple(self.name) + " /k" }
     
 }
 class Confusion: Item, CustomStringConvertible {
@@ -192,6 +358,7 @@ class Confusion: Item, CustomStringConvertible {
 protocol ItemListProtocol {
     func findByName(_ name: String) -> Item?
     func findByReading(_ reading: String) -> [Item]
+    var vagueItems: [Item] { get }
 }
 class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
     let items: [X]
@@ -221,6 +388,9 @@ class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
     }
     func findByReading(_ reading: String) -> [Item] {
         return self.byReading[reading] ?? []
+    }
+    var vagueItems: [Item] {
+        return self.items
     }
 }
 
@@ -321,18 +491,25 @@ class Test {
         try Subete.instance.openLogTxt(write: true) { (fh: FileHandle) throws in
             let welp = MyError("log.txt did not end with what we just appended to it")
             let len = fh.seekToEndOfFile()
-            if len > toRemove.count { throw welp }
+            if len < toRemove.count {
+                print("len=\(len) toRemove.count=\(toRemove.count)")
+                throw welp
+            }
             let truncOffset = len - UInt64(toRemove.count)
             fh.seek(toFileOffset: truncOffset)
             let actualData = fh.readDataToEndOfFile()
-            if actualData != toRemove { throw welp }
+            if actualData != toRemove {
+                print(actualData)
+                print(toRemove)
+                throw welp
+            }
             fh.truncateFile(atOffset: truncOffset)
             Subete.instance.lastAppendedTest = nil
             self.appendedStuff = nil
         }
     }
     func addToLog() throws {
-        let toAppend = Data(("\n" + self.result!.getRecordLine()).utf8)
+        let toAppend = Data((self.result!.getRecordLine() + "\n").utf8)
         try Subete.instance.openLogTxt(write: true) { (fh: FileHandle) throws in
             fh.seekToEndOfFile()
             fh.write(toAppend)
@@ -340,28 +517,45 @@ class Test {
             self.appendedStuff = toAppend
         }
     }
-    
+    func cliGo() {
+        switch self.testKind {
+        case .meaningToReading:
+            self.doCLIMeaningToReading()
+        default: print("XXX unimplemented")
+        }
+    }
+    var wasWrong: Bool {
+        return self.result?.outcome == .wrong
+    }
+    static let NOPE = "NOPE"
+    func maybeYEP() -> String {
+        return self.wasWrong ? ANSI.rback("YEP") : ANSI.yback("YEP")
+    }
     func doCLIMeaningToReading() {
         let item = self.item as! NormalItem
-        var prompt = item.meanings.joined(separator: ", ")
+        var prompt = commaJoin(item.meanings)
         if item.character.starts(with: "〜") {
             prompt = "(〜) " + prompt
         }
         if item is Kanji {
             prompt = ANSI.purple(prompt) + " /k"
         }
+        var isFirstTime = true
         while true {
             let k = try! cliReadKana(prompt: prompt)
-            let qual = item.readingAnswerQuality(k)
-            var out: String = "?" //[NOPE, maybeYEP, + "?", maybeYEP][qual]
-            out += " " + ANSI.red(item.importantReadings.joined(separator: ", "))
+            let qual = item.readingAnswerQuality(input: k)
+            var out: String = [Test.NOPE, maybeYEP() + "?", maybeYEP()][qual]
+            out += " " + ANSI.red(commaJoin(item.importantReadings))
             if !item.unimportantReadings.isEmpty {
-                out += " >> " + ANSI.dred(item.unimportantReadings.joined(separator: ", "))
+                out += " >> " + ANSI.dred(commaJoin(item.unimportantReadings))
             }
             print(out)
             item.cliPrintReadingAlternatives(input: k)
             item.cliPrintSimilarMeaning()
-            try! self.markResult(outcome: qual > 0 ? .right : .wrong)
+            if isFirstTime {
+                try! self.markResult(outcome: qual > 0 ? .right : .wrong)
+            }
+            isFirstTime = false
             
             if qual > 0 {
                 break
@@ -373,27 +567,28 @@ class Test {
     func cliReadKana(prompt: String) throws -> String {
         while true {
             print(prompt)
-            let args = ["/Users/comex/c/wk/read_kana.zsh", prompt]
-            let cl = NSConditionLock(condition: 0)
+            let output = trim(try runAndGetOutput([Subete.instance.basePath + "/read-kana.zsh", "> "]))
             
-            try Process.run(URL(fileURLWithPath: args[0]), arguments: args) { (_: Process) -> Void in
-                cl.lock(whenCondition: 0)
-                cl.unlock(withCondition: 1)
+            if output == "" {
+                continue
             }
-            cl.lock(whenCondition: 1)
-            
-            
-
+            if output.starts(with: "!") {
+                Subete.instance.handleBang(output)
+                continue
+            }
+            // TODO: Python checks for doublewidth here
+            return output
         }
     }
     func markResult(outcome: TestOutcome) throws {
         if self.result != nil {
             try self.removeFromLog()
+            Subete.instance.srs?.revert(forItem: self.item)
         }
         self.result = TestResult(testKind: self.testKind, item: self.item, date: Date(), outcome: outcome)
         try self.addToLog()
+        Subete.instance.srs?.update(self.result!)
     }
-
 }
 
 class SRS {
@@ -442,7 +637,11 @@ class SRS {
     }
 }
 
-let _ = Subete()
-let results = try! TestResult.readAllFromLog()
-let srs = SRS()
-for result in results { srs.update(result) }
+func main() {
+    print("loading lol")
+    let subete = Subete()
+    subete.createSRSFromLog()
+    let test = Test(kind: .meaningToReading, item: subete.allWords.byName["天使"]!)
+    test.cliGo()
+}
+main()
