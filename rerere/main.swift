@@ -197,7 +197,7 @@ class Item: Hashable, Equatable {
     static func == (lhs: Item, rhs: Item) -> Bool {
         return lhs === rhs
     }
-    func cliPrint() {
+    func cliPrint(colorful: Bool) {
         fatalError("?")
     }
 }
@@ -237,28 +237,28 @@ class NormalItem: Item {
         if items.isEmpty { return }
         print(" Entered kana matches:")
         for item in items {
-            item.cliPrint()
+            item.cliPrint(colorful: false)
         }
     }
-    func meaningMatches(_ input: String) -> Bool {
-        return self.meaningAnswerQuality(input: input) > 0
+    func meaningMatches(normalizedInput: String) -> Bool {
+        return self.evaluateMeaningAnswerInner(normalizedInput: normalizedInput) > 0
     }
     func meaningAlternatives(input: String) -> [Item] {
+        let normalizedInput = normalizeMeaning(input)
         return Subete.instance.allByKind(self.kind).vagueItems.filter { (other: Item) -> Bool in
-            return other != self && (other as! NormalItem).meaningMatches(input)
+            return other != self && (other as! NormalItem).meaningMatches(normalizedInput: normalizedInput)
         }
     }
-    func cliPrintMeaningAlternatives(input: String) {
-        let items = meaningAlternatives(input: input)
+    func cliPrintMeaningAlternatives(_ items: [Item]) {
         if items.isEmpty { return }
         print(" Entered meaning matches:")
         for item in items {
-            item.cliPrint()
+            item.cliPrint(colorful: false)
         }
     }
     func similarMeaning() -> [Item] {
         return Subete.instance.allByKind(self.kind).vagueItems.filter { (other: Item) -> Bool in
-            return other != self && self.meanings.contains { (other as! NormalItem).meaningMatches($0) }
+            return other != self && self.meanings.contains { (other as! NormalItem).meaningMatches(normalizedInput: $0) }
         }
 
     }
@@ -267,30 +267,52 @@ class NormalItem: Item {
         if items.isEmpty { return }
         print(" Similar meaning:")
         for item in items {
-            item.cliPrint()
+            item.cliPrint(colorful: false)
         }
     }
 
-    func readingAnswerQuality(input: String) -> Int {
+    // without alternatives, without normalization, just return qual
+    func evaluateMeaningAnswerInner(normalizedInput: String) -> Int {
+        return self.meanings.lazy.map { (meaning: String) -> Int in
+            // TODO
+            return meaning == normalizedInput ? 1 : 0
+        }.max() ?? 0
+    }
+    func evaluateReadingAnswer(input: String) -> (outcome: TestOutcome, qual: Int) {
         let reading = normalizeReading(input)
         //print("\(self.importantReadings) <-> \([reading])")
         if self.importantReadings.contains(reading) {
-            return 2
+            return (.right, 2)
         } else if self.unimportantReadings.contains(reading) {
-            return 1
+            return (.right, 1)
         } else {
-            return 0
+            return (.wrong, 0)
         }
     }
-    func meaningAnswerQuality(input: String) -> Int {
-        let inputMeaning = normalizeMeaning(input)
-        return self.meanings.lazy.map { (meaning: String) -> Int in
-            // TODO
-            return meaning == inputMeaning ? 1 : 0
-        }.max() ?? 0
+    func evaluateMeaningAnswer(input: String, withAlternatives: Bool) -> (outcome: TestOutcome, qual: Int, alternatives: [Item]) {
+        let normalizedInput = normalizeMeaning(input)
+        let qual = evaluateMeaningAnswerInner(normalizedInput: normalizedInput)
+        var outcome: TestOutcome = qual > 0 ? .right : .wrong
+        let alternatives = withAlternatives ? meaningAlternatives(input: normalizedInput) : []
+        if outcome == .wrong && !alternatives.isEmpty {
+            outcome = .mu
+        }
+        return (qual > 0 ? .right : .wrong, qual, alternatives)
     }
-    override func cliPrint() {
-        print("\(self.ansiName) \(commaJoin(self.readings)) \(commaJoin(self.meanings))")
+    func cliReadings(colorful: Bool) -> String {
+        let x = commaJoin(self.importantReadings)
+        var out = colorful ? ANSI.red(x) : x
+        if !self.unimportantReadings.isEmpty {
+            let y = commaJoin(self.unimportantReadings)
+            out += " >> " + (colorful ? ANSI.dred(y) : y)
+        }
+        return out
+    }
+    func cliMeanings(colorful: Bool) -> String {
+        return commaJoin(self.meanings)
+    }
+    override func cliPrint(colorful: Bool) {
+        print("\(self.ansiName) \(self.cliReadings(colorful: colorful)) \(self.cliMeanings(colorful: colorful))")
     }
     var ansiName: String { fatalError("lol") }
 }
@@ -520,19 +542,30 @@ class Test {
     func cliGo() {
         switch self.testKind {
         case .meaningToReading:
-            self.doCLIMeaningToReading()
-        default: print("XXX unimplemented")
+            self.doCLIMeaningToReading(item: self.item as! NormalItem)
+        case .readingToMeaning:
+            self.doCLIReadingToMeaning(item: self.item as! NormalItem)
+        case .characterToRM:
+            self.doCLICharacterToRM(item: self.item as! NormalItem)
+        case .confusion:
+            self.doConfusion(item: self.item as! Confusion)
+        }
+        if self.result == nil {
+            try! self.markResult(outcome: .right)
         }
     }
     var wasWrong: Bool {
         return self.result?.outcome == .wrong
     }
-    static let NOPE = "NOPE"
+    static let NOPE = ANSI.rback("NOPE")
     func maybeYEP() -> String {
         return self.wasWrong ? ANSI.rback("YEP") : ANSI.yback("YEP")
     }
-    func doCLIMeaningToReading() {
-        let item = self.item as! NormalItem
+    func cliLabelForQual(_ qual: Int) -> String {
+        return [Test.NOPE, maybeYEP() + "?", maybeYEP()][qual]
+    }
+
+    func doCLIMeaningToReading(item: NormalItem) {
         var prompt = commaJoin(item.meanings)
         if item.character.starts(with: "〜") {
             prompt = "(〜) " + prompt
@@ -540,34 +573,86 @@ class Test {
         if item is Kanji {
             prompt = ANSI.purple(prompt) + " /k"
         }
-        var isFirstTime = true
         while true {
-            let k = try! cliReadKana(prompt: prompt)
-            let qual = item.readingAnswerQuality(input: k)
-            var out: String = [Test.NOPE, maybeYEP() + "?", maybeYEP()][qual]
-            out += " " + ANSI.red(commaJoin(item.importantReadings))
-            if !item.unimportantReadings.isEmpty {
-                out += " >> " + ANSI.dred(commaJoin(item.unimportantReadings))
-            }
+            let k = try! cliRead(prompt: prompt, kana: true)
+            let (outcome, qual) = item.evaluateReadingAnswer(input: k)
+            var out: String = cliLabelForQual(qual)
+            out += " " + item.cliReadings(colorful: false)
             print(out)
             item.cliPrintReadingAlternatives(input: k)
             item.cliPrintSimilarMeaning()
-            if isFirstTime {
-                try! self.markResult(outcome: qual > 0 ? .right : .wrong)
-            }
-            isFirstTime = false
-            
-            if qual > 0 {
+        
+            if outcome == .right {
                 break
+            } else if self.result == nil {
+                try! self.markResult(outcome: outcome)
             }
-            
-            
         }
     }
-    func cliReadKana(prompt: String) throws -> String {
+    func doCLIReadingToMeaning(item: NormalItem) {
+        var prompt = commaJoin(item.readings)
+        if item is Kanji {
+            prompt += " /k"
+        }
+        while true {
+            let k: String = try! cliRead(prompt: prompt, kana: false)
+            let (outcome, qual, alternatives) = item.evaluateMeaningAnswer(input: k, withAlternatives: true)
+            print(cliLabelForQual(qual))
+            item.cliPrint(colorful: true)
+            item.cliPrintMeaningAlternatives(alternatives)
+            if outcome == .right {
+                break
+            } else if self.result == nil {
+                try! self.markResult(outcome: outcome)
+            }
+        }
+    }
+    func doCLICharacterToRM(item: NormalItem) {
+        let prompt = item.character
+        
+        enum Mode { case reading, meaning }
+        for mode in [Mode.reading, Mode.meaning].shuffled() {
+            while true {
+                let k: String = try! cliRead(prompt: prompt, kana: mode == .reading)
+                let outcome: TestOutcome
+                let qual: Int
+                if mode == .meaning {
+                    (outcome, qual, _) = item.evaluateMeaningAnswer(input: k, withAlternatives: false)
+                    print(cliLabelForQual(qual))
+                    print(item.cliMeanings(colorful: true))
+                } else {
+                    (outcome, qual) = item.evaluateReadingAnswer(input: k)
+                    print(cliLabelForQual(qual))
+                    print(item.cliReadings(colorful: true))
+                }
+                
+               
+                if outcome == .right {
+                    break
+                } else if self.result == nil {
+                    try! self.markResult(outcome: outcome)
+                }
+            }
+        }
+    }
+    func doConfusion(item: Confusion) {
+        for subitem in item.items.shuffled() {
+            doCLICharacterToRM(item: subitem as! NormalItem)
+        }
+    }
+    static let readingPrompt: String = ANSI.red("reading> ")
+    static let meaningPrompt: String = ANSI.blue("meaning> ")
+
+    func cliRead(prompt: String, kana: Bool) throws -> String {
         while true {
             print(prompt)
-            let output = trim(try runAndGetOutput([Subete.instance.basePath + "/read-kana.zsh", "> "]))
+            let args: [String]
+            if kana {
+                args = [Subete.instance.basePath + "/read-kana.zsh", Test.readingPrompt]
+            } else {
+                args = ["/usr/local/bin/zsh", "-c", "a=;vared -p '\(Test.meaningPrompt)' a; echo \"$a\""]
+            }
+            let output = trim(try runAndGetOutput(args))
             
             if output == "" {
                 continue
@@ -580,6 +665,7 @@ class Test {
             return output
         }
     }
+
     func markResult(outcome: TestOutcome) throws {
         if self.result != nil {
             try self.removeFromLog()
@@ -641,7 +727,7 @@ func main() {
     print("loading lol")
     let subete = Subete()
     subete.createSRSFromLog()
-    let test = Test(kind: .meaningToReading, item: subete.allWords.byName["天使"]!)
+    let test = Test(kind: .characterToRM, item: subete.allWords.byName["天使"]!)
     test.cliGo()
 }
 main()
