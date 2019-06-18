@@ -9,11 +9,12 @@ struct MyError: Error {
 struct ExitStatusError: Error {
     let exitStatus: Int
 }
-func trim(_ s: String) -> String {
+func trim<S: StringProtocol>(_ s: S) -> String {
+    // TODO this probably goes to Foundation?
     return s.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
 }
-func commaSplit(_ s: String) -> [String] {
-    return s.components(separatedBy: ",").map(trim)
+func commaSplitNoTrim(_ s: String) -> [Substring] {
+    return s.split(separator: ",")
 }
 func commaJoin(_ ss: [String]) -> String {
     return ss.joined(separator: ", ")
@@ -211,13 +212,15 @@ class Item: Hashable, Equatable {
     }
 
 }
-func normalizeMeaning(_ meaning: String) -> String {
+func normalizeMeaning<S: StringProtocol>(_ meaning: S) -> String {
     return trim(meaning)
 }
-func normalizeReading(_ input: String) -> String {
+func normalizeReading<S: StringProtocol>(_ input: S) -> String {
     // TODO katakana to hiragana
     var reading = trim(input)
-    reading = reading.replacingOccurrences(of: "-", with: "ー")
+    if reading.contains("-") {
+        reading = reading.replacingOccurrences(of: "-", with: "ー")
+    }
     return reading
 }
 
@@ -232,7 +235,7 @@ class NormalItem: Item {
     init(json: NSDictionary, readings: [String], importantReadings: [String], unimportantReadings: [String]) {
         self.json = json
         self.character = trim(json["character"] as! String)
-        self.meanings = commaSplit(json["meaning"] as! String).map(normalizeMeaning)
+        self.meanings = commaSplitNoTrim(json["meaning"] as! String).map(normalizeMeaning)
         self.readings = readings
         self.importantReadings = importantReadings
         self.unimportantReadings = unimportantReadings
@@ -329,7 +332,7 @@ class NormalItem: Item {
 }
 class Word : NormalItem, CustomStringConvertible {
     init(json: NSDictionary) {
-        let readings = commaSplit(json["kana"] as! String).map(normalizeReading)
+        let readings = commaSplitNoTrim(json["kana"] as! String).map(normalizeReading)
         super.init(json: json, readings: readings, importantReadings: readings, unimportantReadings: [])
     }
     var description: String {
@@ -347,7 +350,7 @@ class Kanji : NormalItem, CustomStringConvertible {
         let importantKind = json["important_reading"] as! String
         for kind in ["kunyomi", "nanori", "onyomi"] {
             if let obj = json[kind], !(obj is NSNull) && !(obj as? NSString == "None") {
-                let theseReadings = commaSplit(obj as! String).map(normalizeReading)
+                let theseReadings = commaSplitNoTrim(obj as! String).map(normalizeReading)
                 readings += theseReadings
                 if kind == importantKind {
                     importantReadings += theseReadings
@@ -458,7 +461,7 @@ struct TestResult {
     static let retired: Set<String> = ["毒言", "札", "農", "先年"]
     static let replace: [String: String] = ["取決め": "取り決め"]
     static func parse(line: String) throws -> TestResult? {
-        var components: [String] = trim(line).split(separator: ":").map { String($0) }
+        var components: [Substring] = trim(line).split(separator: ":")
         var date: Date? = nil
         if components.count > 4 {
             
@@ -473,7 +476,8 @@ struct TestResult {
             warn("extra components")
         }
         
-        let itemKind = try unwrapOrThrow(ItemKind(rawValue: components[1]),
+        // TODO: rawValue with substring?
+        let itemKind = try unwrapOrThrow(ItemKind(rawValue: String(components[1])),
                                      err: MyError("invalid item kind \(components[1])"))
         var name = String(components[2])
         if retired.contains(name) {
@@ -482,12 +486,12 @@ struct TestResult {
             name = newName
         }
         return TestResult(
-            testKind: try unwrapOrThrow(TestKind(rawValue: components[0]),
+            testKind: try unwrapOrThrow(TestKind(rawValue: String(components[0])),
                                     err: MyError("invalid test kind \(components[0])")),
             item: try unwrapOrThrow(Subete.instance.allByKind(itemKind).findByName(name),
                                 err: MyError("no such item kind \(components[1]) name \(name)")),
             date: date,
-            outcome: try unwrapOrThrow(TestOutcome(rawValue: components[3]),
+            outcome: try unwrapOrThrow(TestOutcome(rawValue: String(components[3])),
                                    err: MyError("invalid outcome kind \(components[3])"))
         )
     }
@@ -738,6 +742,7 @@ class SRS {
 func main() {
     let subete = Subete()
     subete.createSRSFromLog()
+    return
     var remainingItems: Set<Item> = Set(Subete.instance.allItems.shuffled()[..<50])
     var numDone = 0
     do {
