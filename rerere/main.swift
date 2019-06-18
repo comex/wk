@@ -6,6 +6,9 @@ struct MyError: Error {
     let message: String
     init(_ message: String) { self.message = message }
 }
+struct ExitStatusError: Error {
+    let exitStatus: Int
+}
 func trim(_ s: String) -> String {
     return s.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
 }
@@ -94,7 +97,7 @@ func runAndGetOutput(_ args: [String]) throws -> String {
         throw MyError("runAndGetOutput(\(args)): exited with signal \(exitStatus)")
     }
     if exitStatus != 0 {
-        throw MyError("runAndGetOutput(\(args)): exited with code \(exitStatus)")
+        throw ExitStatusError(exitStatus: Int(exitStatus))
     }
     
     queue.sync {}
@@ -115,13 +118,16 @@ class Subete {
     let basePath = "/Users/comex/c/wk/"
 
     init() {
+        print("loading json")
         self.allWords = ItemList((loadJSON(path: basePath + "vocabulary.json") as! NSArray).map { Word(json: $0 as! NSDictionary) })
         self.allKanji = ItemList((loadJSON(path: basePath + "kanji.json") as! NSArray).map { Kanji(json: $0 as! NSDictionary) })
         Subete.instance = self
+        print("loading confusion")
         let allKanjiConfusion = loadConfusion(path: basePath + "confusion.txt", isWord: false)
         let allWordConfusion = loadConfusion(path: basePath + "confusion-vocab.txt", isWord: true)
         self.allConfusion = ItemList(allKanjiConfusion + allWordConfusion)
         self.allItems = self.allWords.items + self.allKanji.items + self.allConfusion.items
+        print("done loading")
 
     }
     func allByKind(_ kind: ItemKind) -> ItemListProtocol {
@@ -200,6 +206,10 @@ class Item: Hashable, Equatable {
     func cliPrint(colorful: Bool) {
         fatalError("?")
     }
+    var availableTests: [TestKind] {
+        fatalError("TODO")
+    }
+
 }
 func normalizeMeaning(_ meaning: String) -> String {
     return trim(meaning)
@@ -314,7 +324,8 @@ class NormalItem: Item {
     override func cliPrint(colorful: Bool) {
         print("\(self.ansiName) \(self.cliReadings(colorful: colorful)) \(self.cliMeanings(colorful: colorful))")
     }
-    var ansiName: String { fatalError("lol") }
+    var ansiName: String { fatalError("lol") } // TODO
+    override var availableTests: [TestKind] { return [.characterToRM, .meaningToReading, .readingToMeaning] }
 }
 class Word : NormalItem, CustomStringConvertible {
     init(json: NSDictionary) {
@@ -375,6 +386,7 @@ class Confusion: Item, CustomStringConvertible {
         return "<Confusion \(self.items)>"
     }
     override var kind: ItemKind { return .confusion }
+    override var availableTests: [TestKind] { return [.confusion] }
 }
 
 protocol ItemListProtocol {
@@ -539,16 +551,16 @@ class Test {
             self.appendedStuff = toAppend
         }
     }
-    func cliGo() {
+    func cliGo() throws {
         switch self.testKind {
         case .meaningToReading:
-            self.doCLIMeaningToReading(item: self.item as! NormalItem)
+            try self.doCLIMeaningToReading(item: self.item as! NormalItem)
         case .readingToMeaning:
-            self.doCLIReadingToMeaning(item: self.item as! NormalItem)
+            try self.doCLIReadingToMeaning(item: self.item as! NormalItem)
         case .characterToRM:
-            self.doCLICharacterToRM(item: self.item as! NormalItem)
+            try self.doCLICharacterToRM(item: self.item as! NormalItem)
         case .confusion:
-            self.doConfusion(item: self.item as! Confusion)
+            try self.doConfusion(item: self.item as! Confusion)
         }
         if self.result == nil {
             try! self.markResult(outcome: .right)
@@ -565,7 +577,7 @@ class Test {
         return [Test.NOPE, maybeYEP() + "?", maybeYEP()][qual]
     }
 
-    func doCLIMeaningToReading(item: NormalItem) {
+    func doCLIMeaningToReading(item: NormalItem) throws {
         var prompt = commaJoin(item.meanings)
         if item.character.starts(with: "〜") {
             prompt = "(〜) " + prompt
@@ -574,7 +586,7 @@ class Test {
             prompt = ANSI.purple(prompt) + " /k"
         }
         while true {
-            let k = try! cliRead(prompt: prompt, kana: true)
+            let k = try cliRead(prompt: prompt, kana: true)
             let (outcome, qual) = item.evaluateReadingAnswer(input: k)
             var out: String = cliLabelForQual(qual)
             out += " " + item.cliReadings(colorful: false)
@@ -589,13 +601,13 @@ class Test {
             }
         }
     }
-    func doCLIReadingToMeaning(item: NormalItem) {
+    func doCLIReadingToMeaning(item: NormalItem) throws {
         var prompt = commaJoin(item.readings)
         if item is Kanji {
             prompt += " /k"
         }
         while true {
-            let k: String = try! cliRead(prompt: prompt, kana: false)
+            let k: String = try cliRead(prompt: prompt, kana: false)
             let (outcome, qual, alternatives) = item.evaluateMeaningAnswer(input: k, withAlternatives: true)
             print(cliLabelForQual(qual))
             item.cliPrint(colorful: true)
@@ -607,13 +619,13 @@ class Test {
             }
         }
     }
-    func doCLICharacterToRM(item: NormalItem) {
+    func doCLICharacterToRM(item: NormalItem) throws {
         let prompt = item.character
         
         enum Mode { case reading, meaning }
         for mode in [Mode.reading, Mode.meaning].shuffled() {
             while true {
-                let k: String = try! cliRead(prompt: prompt, kana: mode == .reading)
+                let k: String = try cliRead(prompt: prompt, kana: mode == .reading)
                 let outcome: TestOutcome
                 let qual: Int
                 if mode == .meaning {
@@ -635,9 +647,9 @@ class Test {
             }
         }
     }
-    func doConfusion(item: Confusion) {
+    func doConfusion(item: Confusion) throws {
         for subitem in item.items.shuffled() {
-            doCLICharacterToRM(item: subitem as! NormalItem)
+            try doCLICharacterToRM(item: subitem as! NormalItem)
         }
     }
     static let readingPrompt: String = ANSI.red("reading> ")
@@ -650,7 +662,7 @@ class Test {
             if kana {
                 args = [Subete.instance.basePath + "/read-kana.zsh", Test.readingPrompt]
             } else {
-                args = ["/usr/local/bin/zsh", "-c", "a=;vared -p '\(Test.meaningPrompt)' a; echo \"$a\""]
+                args = [Subete.instance.basePath + "/read-english.zsh", Test.meaningPrompt]
             }
             let output = trim(try runAndGetOutput(args))
             
@@ -724,10 +736,26 @@ class SRS {
 }
 
 func main() {
-    print("loading lol")
     let subete = Subete()
     subete.createSRSFromLog()
-    let test = Test(kind: .characterToRM, item: subete.allWords.byName["天使"]!)
-    test.cliGo()
+    var remainingItems: Set<Item> = Set(Subete.instance.allItems.shuffled()[..<50])
+    var numDone = 0
+    do {
+        while let item = remainingItems.randomElement() {
+            let testKind = item.availableTests.randomElement()!
+            let test = Test(kind: testKind, item: item)
+            print("[\(numDone)]")
+            try test.cliGo()
+            numDone += 1
+            if test.result!.outcome == .right {
+                remainingItems.remove(item)
+            }
+            
+        }
+    } catch is ExitStatusError {
+        return
+    } catch let e {
+        try! { throw e }() // TODO
+    }
 }
 main()
