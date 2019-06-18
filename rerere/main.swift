@@ -9,10 +9,29 @@ struct MyError: Error {
 struct ExitStatusError: Error {
     let exitStatus: Int
 }
+#if false
 func trim<S: StringProtocol>(_ s: S) -> String {
-    // TODO this probably goes to Foundation?
+    // this goes to foundation
     return s.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
 }
+#endif
+@inline(__always)
+func isSpace(_ c: UTF8.CodeUnit) -> Bool {
+    return c == 32 || c == 10
+}
+func trimSubstring(_ s: Substring) -> Substring {
+    var a = s.utf8
+    a = a.drop(while: isSpace)
+    if let end = a.lastIndex(where: { !isSpace($0) }) {
+        a = a.prefix(through: end)
+    }
+    return Substring(a)
+
+}
+func trim<S: StringProtocol>(_ s: S) -> Substring {
+    return trimSubstring(Substring(s))
+}
+
 func commaSplitNoTrim(_ s: String) -> [Substring] {
     return s.split(separator: ",")
 }
@@ -212,12 +231,12 @@ class Item: Hashable, Equatable {
     }
 
 }
-func normalizeMeaning<S: StringProtocol>(_ meaning: S) -> String {
+func normalizeMeaning<S: StringProtocol>(_ meaning: S) -> Substring {
     return trim(meaning)
 }
 func normalizeReading<S: StringProtocol>(_ input: S) -> String {
     // TODO katakana to hiragana
-    var reading = trim(input)
+    var reading = String(trim(input))
     if reading.contains("-") {
         reading = reading.replacingOccurrences(of: "-", with: "ー")
     }
@@ -234,8 +253,8 @@ class NormalItem: Item {
     
     init(json: NSDictionary, readings: [String], importantReadings: [String], unimportantReadings: [String]) {
         self.json = json
-        self.character = trim(json["character"] as! String)
-        self.meanings = commaSplitNoTrim(json["meaning"] as! String).map(normalizeMeaning)
+        self.character = String(trim(json["character"] as! String))
+        self.meanings = commaSplitNoTrim(json["meaning"] as! String).map { String(normalizeMeaning($0)) }
         self.readings = readings
         self.importantReadings = importantReadings
         self.unimportantReadings = unimportantReadings
@@ -257,7 +276,7 @@ class NormalItem: Item {
         return self.evaluateMeaningAnswerInner(normalizedInput: normalizedInput) > 0
     }
     func meaningAlternatives(input: String) -> [Item] {
-        let normalizedInput = normalizeMeaning(input)
+        let normalizedInput = String(normalizeMeaning(input))
         return Subete.instance.allByKind(self.kind).vagueItems.filter { (other: Item) -> Bool in
             return other != self && (other as! NormalItem).meaningMatches(normalizedInput: normalizedInput)
         }
@@ -303,7 +322,7 @@ class NormalItem: Item {
         }
     }
     func evaluateMeaningAnswer(input: String, withAlternatives: Bool) -> (outcome: TestOutcome, qual: Int, alternatives: [Item]) {
-        let normalizedInput = normalizeMeaning(input)
+        let normalizedInput = String(normalizeMeaning(input))
         let qual = evaluateMeaningAnswerInner(normalizedInput: normalizedInput)
         var outcome: TestOutcome = qual > 0 ? .right : .wrong
         let alternatives = withAlternatives ? meaningAlternatives(input: normalizedInput) : []
@@ -376,7 +395,7 @@ class Confusion: Item, CustomStringConvertible {
     init(line: String, isWord: Bool) {
         let allXs: ItemListProtocol
         if isWord {
-            self.characters = line.split(separator: "/").map { trim(String($0)) }
+            self.characters = line.split(separator: "/").map { String(trim($0)) }
             allXs = Subete.instance.allWords
         } else {
             self.characters = trim(line).map { String($0) }
@@ -668,7 +687,7 @@ class Test {
             } else {
                 args = [Subete.instance.basePath + "/read-english.zsh", Test.meaningPrompt]
             }
-            let output = trim(try runAndGetOutput(args))
+            let output = String(trim(try runAndGetOutput(args)))
             
             if output == "" {
                 continue
