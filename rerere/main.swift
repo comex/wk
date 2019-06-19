@@ -260,12 +260,11 @@ class NormalItem: Item {
         self.unimportantReadings = unimportantReadings
         super.init(name: self.character)
     }
-    func readingAlternatives(input: String) -> [Item] {
-        return Subete.instance.allByKind(self.kind).findByReading(input).filter { $0 != self }
-        
+    func readingAlternatives(reading: String) -> [Item] {
+        let normalizedReading = String(normalizeReading(reading))
+        return Subete.instance.allByKind(self.kind).findByReading(normalizedReading).filter { $0 != self }
     }
-    func cliPrintReadingAlternatives(input: String) {
-        let items = readingAlternatives(input: input)
+    func cliPrintReadingAlternatives(_ items: [Item]) {
         if items.isEmpty { return }
         print(" Entered kana matches:")
         for item in items {
@@ -275,10 +274,10 @@ class NormalItem: Item {
     func meaningMatches(normalizedInput: String) -> Bool {
         return self.evaluateMeaningAnswerInner(normalizedInput: normalizedInput) > 0
     }
-    func meaningAlternatives(input: String) -> [Item] {
-        let normalizedInput = String(normalizeMeaning(input))
+    func meaningAlternatives(meaning: String) -> [Item] {
+        let normalizedMeaning = String(normalizeMeaning(meaning))
         return Subete.instance.allByKind(self.kind).vagueItems.filter { (other: Item) -> Bool in
-            return other != self && (other as! NormalItem).meaningMatches(normalizedInput: normalizedInput)
+            return other != self && (other as! NormalItem).meaningMatches(normalizedInput: normalizedMeaning)
         }
     }
     func cliPrintMeaningAlternatives(_ items: [Item]) {
@@ -310,22 +309,32 @@ class NormalItem: Item {
             return meaning == normalizedInput ? 1 : 0
         }.max() ?? 0
     }
-    func evaluateReadingAnswer(input: String) -> (outcome: TestOutcome, qual: Int) {
-        let reading = normalizeReading(input)
-        //print("\(self.importantReadings) <-> \([reading])")
+    func evaluateReadingAnswerInner(normalizedInput reading: String) -> Int {
         if self.importantReadings.contains(reading) {
-            return (.right, 2)
+            return 2
         } else if self.unimportantReadings.contains(reading) {
-            return (.right, 1)
+            return 1
         } else {
-            return (.wrong, 0)
+            return 0
         }
+    }
+    func evaluateReadingAnswer(input: String, withAlternatives: Bool) -> (outcome: TestOutcome, qual: Int, alternatives: [Item]) {
+        // TODO this sucks
+        let normalizedInput = normalizeReading(input)
+        let qual = evaluateReadingAnswerInner(normalizedInput: normalizedInput)
+        var outcome: TestOutcome = qual > 0 ? .right : .wrong
+        let alternatives = withAlternatives ? readingAlternatives(reading: normalizedInput) : []
+        if outcome == .wrong && !alternatives.isEmpty {
+            outcome = .mu
+        }
+        return (qual > 0 ? .right : .wrong, qual, alternatives)
+
     }
     func evaluateMeaningAnswer(input: String, withAlternatives: Bool) -> (outcome: TestOutcome, qual: Int, alternatives: [Item]) {
         let normalizedInput = String(normalizeMeaning(input))
         let qual = evaluateMeaningAnswerInner(normalizedInput: normalizedInput)
         var outcome: TestOutcome = qual > 0 ? .right : .wrong
-        let alternatives = withAlternatives ? meaningAlternatives(input: normalizedInput) : []
+        let alternatives = withAlternatives ? meaningAlternatives(meaning: normalizedInput) : []
         if outcome == .wrong && !alternatives.isEmpty {
             outcome = .mu
         }
@@ -610,11 +619,11 @@ class Test {
         }
         while true {
             let k = try cliRead(prompt: prompt, kana: true)
-            let (outcome, qual) = item.evaluateReadingAnswer(input: k)
+            let (outcome, qual, alternatives) = item.evaluateReadingAnswer(input: k, withAlternatives: true)
             var out: String = cliLabelForQual(qual)
             out += " " + item.cliReadings(colorful: false)
             print(out)
-            item.cliPrintReadingAlternatives(input: k)
+            item.cliPrintReadingAlternatives(alternatives)
             item.cliPrintSimilarMeaning()
         
             if outcome == .right {
@@ -656,7 +665,7 @@ class Test {
                     print(cliLabelForQual(qual))
                     print(item.cliMeanings(colorful: true))
                 } else {
-                    (outcome, qual) = item.evaluateReadingAnswer(input: k)
+                    (outcome, qual, _) = item.evaluateReadingAnswer(input: k, withAlternatives: false)
                     print(cliLabelForQual(qual))
                     print(item.cliReadings(colorful: true))
                 }
@@ -760,7 +769,7 @@ class SRS {
 
 func main() {
     let subete = Subete()
-    subete.createSRSFromLog()
+    //subete.createSRSFromLog()
     return
     var remainingItems: Set<Item> = Set(Subete.instance.allItems.shuffled()[..<50])
     var numDone = 0
