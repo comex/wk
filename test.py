@@ -1,7 +1,7 @@
 #!/usr/local/bin/python2
 # -*- coding: utf-8 -*-
 
-import json, random, curses, subprocess, os, unicodedata, re, math, sys, codecs, time, codecs
+import json, random, curses, subprocess, os, unicodedata, re, math, sys, codecs, time, codecs, fcntl
 import readline
 from itertools import groupby
 import distance
@@ -10,6 +10,7 @@ os.environ['ZDOTDIR'] = '/dev/null'
 
 os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
 logfile = codecs.open('log.txt', 'r+', encoding='utf-8')
+fcntl.flock(logfile.stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
 
 #sys.stdout = codecs.getwriter("utf-8")(sys.stdout) <-- THIS BREAKS IT
 
@@ -406,7 +407,7 @@ def get_filtered_items():
 def item_filter_real(item):
     return item_filter(item) and not item_was_recently_right(item)
 
-if __name__ == '__main__':
+if __name__ == '__main__' and 0:
     Kanji.avail_ops = ['r2m', 'm2r', 'c2']
     Word.avail_ops = ['r2m', 'm2r', 'c2']
     Confusion.avail_ops = ['kc']
