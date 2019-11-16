@@ -1,4 +1,8 @@
 import Foundation
+// TODO: ~ is broken
+// TODO: !wrong doesn't act as expected when halfway through a k2rm
+// TODO: don't let you mu more than once
+// TODO: reading alternatives for words
 func warn(_ s: String) {
     print(s)
 }
@@ -127,8 +131,8 @@ func runAndGetOutput(_ args: [String]) throws -> String {
 }
 class Subete {
     static var instance: Subete!
-    let allWords: ItemList<Word>
-    let allKanji: ItemList<Kanji>
+    var allWords: ItemList<Word>! = nil
+    var allKanji: ItemList<Kanji>! = nil
     var allItems: [Item]! = nil
     var allConfusion: ItemList<Confusion>! = nil
     var srs: SRS? = nil
@@ -137,11 +141,13 @@ class Subete {
     
     let basePath = "/Users/comex/c/wk/"
 
+    var nextItemID = 0
+
     init() {
+        Subete.instance = self
         print("loading json")
         self.allWords = ItemList((loadJSON(path: basePath + "vocabulary.json") as! NSArray).map { Word(json: $0 as! NSDictionary) })
         self.allKanji = ItemList((loadJSON(path: basePath + "kanji.json") as! NSArray).map { Kanji(json: $0 as! NSDictionary) })
-        Subete.instance = self
         print("loading confusion")
         let allKanjiConfusion = loadConfusion(path: basePath + "confusion.txt", isWord: false)
         let allWordConfusion = loadConfusion(path: basePath + "confusion-vocab.txt", isWord: true)
@@ -211,10 +217,13 @@ class Subete {
 enum ItemKind: String {
     case word, kanji, confusion
 }
-class Item: Hashable, Equatable {
+class Item: Hashable, Equatable, Comparable {
     let name: String
+    let id: Int
     init(name: String) {
         self.name = name
+        self.id = Subete.instance.nextItemID
+        Subete.instance.nextItemID = self.id + 1
     }
     var kind: ItemKind { fatalError("?") }
     func hash(into hasher: inout Hasher) {
@@ -222,6 +231,9 @@ class Item: Hashable, Equatable {
     }
     static func == (lhs: Item, rhs: Item) -> Bool {
         return lhs === rhs
+    }
+    static func < (lhs: Item, rhs: Item) -> Bool {
+        return lhs.id < rhs.id
     }
     func cliPrint(colorful: Bool) {
         fatalError("?")
@@ -271,14 +283,18 @@ class NormalItem: Item {
             item.cliPrint(colorful: false)
         }
     }
-    func meaningMatches(normalizedInput: String) -> Bool {
-        return self.evaluateMeaningAnswerInner(normalizedInput: normalizedInput) > 0
+    func meaningMatches(normalizedInput: String, levenshtein: inout Levenshtein) -> Bool {
+        return self.evaluateMeaningAnswerInner(normalizedInput: normalizedInput, levenshtein: &levenshtein) > 0
     }
     func meaningAlternatives(meaning: String) -> [Item] {
         let normalizedMeaning = String(normalizeMeaning(meaning))
+        /*
+        var levenshtein = Levenshtein()
         return Subete.instance.allByKind(self.kind).vagueItems.filter { (other: Item) -> Bool in
-            return other != self && (other as! NormalItem).meaningMatches(normalizedInput: normalizedMeaning)
+            return other != self && (other as! NormalItem).meaningMatches(normalizedInput: normalizedMeaning, levenshtein: &levenshtein)
         }
+        */
+        return Subete.instance.allByKind(self.kind).findByMeaning(normalizedMeaning).filter { $0 != self }
     }
     func cliPrintMeaningAlternatives(_ items: [Item]) {
         if items.isEmpty { return }
@@ -288,10 +304,12 @@ class NormalItem: Item {
         }
     }
     func similarMeaning() -> [Item] {
-        return Subete.instance.allByKind(self.kind).vagueItems.filter { (other: Item) -> Bool in
-            return other != self && self.meanings.contains { (other as! NormalItem).meaningMatches(normalizedInput: $0) }
+        var set: Set<Item> = []
+        for meaning in self.meanings {
+            set.formUnion(Subete.instance.allByKind(self.kind).findByMeaning(meaning))
         }
-
+        set.remove(self)
+        return Array(set).sorted()
     }
     func cliPrintSimilarMeaning() {
         let items = similarMeaning()
@@ -303,11 +321,17 @@ class NormalItem: Item {
     }
 
     // without alternatives, without normalization, just return qual
-    func evaluateMeaningAnswerInner(normalizedInput: String) -> Int {
-        return self.meanings.lazy.map { (meaning: String) -> Int in
-            // TODO
-            return meaning == normalizedInput ? 1 : 0
-        }.max() ?? 0
+    func evaluateMeaningAnswerInner(normalizedInput: String, levenshtein: inout Levenshtein) -> Int {
+        var bestQual = 0
+        for meaning in self.meanings {
+            let okDist = Int(round(0.4 * Double(meaning.count)))
+            if normalizedInput == meaning {
+                bestQual = max(bestQual, 2)
+            } else if levenshtein.distance(between: normalizedInput, and: meaning) <= okDist {
+                bestQual = max(bestQual, 1)
+            }
+        }
+        return bestQual
     }
     func evaluateReadingAnswerInner(normalizedInput reading: String) -> Int {
         if self.importantReadings.contains(reading) {
@@ -324,21 +348,30 @@ class NormalItem: Item {
         let qual = evaluateReadingAnswerInner(normalizedInput: normalizedInput)
         var outcome: TestOutcome = qual > 0 ? .right : .wrong
         let alternatives = withAlternatives ? readingAlternatives(reading: normalizedInput) : []
-        if outcome == .wrong && !alternatives.isEmpty {
+        if outcome == .wrong && alternatives.contains(where: { (alternative: Item) in
+            (alternative as! NormalItem).meanings.contains(where: { (meaning: String) in
+                self.meanings.contains(meaning)
+            })
+        }) {
             outcome = .mu
         }
-        return (qual > 0 ? .right : .wrong, qual, alternatives)
+        return (outcome, qual, alternatives)
 
     }
     func evaluateMeaningAnswer(input: String, withAlternatives: Bool) -> (outcome: TestOutcome, qual: Int, alternatives: [Item]) {
         let normalizedInput = String(normalizeMeaning(input))
-        let qual = evaluateMeaningAnswerInner(normalizedInput: normalizedInput)
+        var levenshtein = Levenshtein()
+        let qual = evaluateMeaningAnswerInner(normalizedInput: normalizedInput, levenshtein: &levenshtein)
         var outcome: TestOutcome = qual > 0 ? .right : .wrong
         let alternatives = withAlternatives ? meaningAlternatives(meaning: normalizedInput) : []
-        if outcome == .wrong && !alternatives.isEmpty {
+        if outcome == .wrong && alternatives.contains(where: { (alternative: Item) in
+            (alternative as! NormalItem).readings.contains(where: { (reading: String) in
+                self.readings.contains(reading)
+            })
+        }) {
             outcome = .mu
         }
-        return (qual > 0 ? .right : .wrong, qual, alternatives)
+        return (outcome, qual, alternatives)
     }
     func cliReadings(colorful: Bool) -> String {
         let x = commaJoin(self.importantReadings)
@@ -353,9 +386,9 @@ class NormalItem: Item {
         return commaJoin(self.meanings)
     }
     override func cliPrint(colorful: Bool) {
-        print("\(self.ansiName) \(self.cliReadings(colorful: colorful)) \(self.cliMeanings(colorful: colorful))")
+        print("\(self.cliName) \(self.cliReadings(colorful: colorful)) \(self.cliMeanings(colorful: colorful))")
     }
-    var ansiName: String { fatalError("lol") } // TODO
+    var cliName: String { fatalError("lol") } // TODO
     override var availableTests: [TestKind] { return [.characterToRM, .meaningToReading, .readingToMeaning] }
 }
 class Word : NormalItem, CustomStringConvertible {
@@ -367,7 +400,7 @@ class Word : NormalItem, CustomStringConvertible {
         return "<Word \(self.character)>"
     }
     override var kind: ItemKind { return .word }
-    override var ansiName: String { return self.name }
+    override var cliName: String { return self.name }
 
 }
 class Kanji : NormalItem, CustomStringConvertible {
@@ -395,12 +428,12 @@ class Kanji : NormalItem, CustomStringConvertible {
         return "<Kanji \(self.character)>"
     }
     override var kind: ItemKind { return .kanji }
-    override var ansiName: String { return ANSI.purple(self.name) + " /k" }
-    
+    override var cliName: String { return ANSI.purple(self.name) + " /k" }
 }
 class Confusion: Item, CustomStringConvertible {
     let characters: [String]
     let items: [Item]
+    let isWord: Bool
     init(line: String, isWord: Bool) {
         let allXs: ItemListProtocol
         if isWord {
@@ -411,6 +444,7 @@ class Confusion: Item, CustomStringConvertible {
             allXs = Subete.instance.allKanji
         }
         self.items = self.characters.map { allXs.findByName($0)! }
+        self.isWord = isWord
         super.init(name: self.characters[0])
     }
     var description: String {
@@ -423,16 +457,19 @@ class Confusion: Item, CustomStringConvertible {
 protocol ItemListProtocol {
     func findByName(_ name: String) -> Item?
     func findByReading(_ reading: String) -> [Item]
+    func findByMeaning(_ meaning: String) -> [Item]
     var vagueItems: [Item] { get }
 }
 class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
     let items: [X]
     let byName: [String: X]
     let byReading: [String: [X]]
+    let byMeaning: [String: [X]]
     init(_ items: [X]) {
         self.items = items
         var byName: [String: X] = [:]
         var byReading: [String: [X]] = [:]
+        var byMeaning: [String: [X]] = [:]
         for item in items {
             ensure(byName[item.name] == nil)
             byName[item.name] = item
@@ -440,10 +477,14 @@ class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
                 for reading in normalItem.readings {
                     byReading[reading] = (byReading[reading] ?? []) + [item]
                 }
+                for meaning in normalItem.meanings {
+                    byMeaning[meaning] = (byMeaning[meaning] ?? []) + [item]
+                }
             }
         }
         self.byName = byName
         self.byReading = byReading
+        self.byMeaning = byMeaning
     }
     var description: String {
         return "ItemList[\(self.items)]"
@@ -453,6 +494,9 @@ class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
     }
     func findByReading(_ reading: String) -> [Item] {
         return self.byReading[reading] ?? []
+    }
+    func findByMeaning(_ meaning: String) -> [Item] {
+        return self.byMeaning[meaning] ?? []
     }
     var vagueItems: [Item] {
         return self.items
@@ -541,6 +585,7 @@ struct ANSI {
     static func purple(_ s: String) -> String { return color("35;1", s) }
     static func yback(_ s: String) -> String { return color("43", s) }
     static func rback(_ s: String) -> String { return color("41", s) }
+    static func cback(_ s: String) -> String { return color("106", s) }
 }
 class Test {
     let testKind: TestKind
@@ -592,21 +637,30 @@ class Test {
         case .characterToRM:
             try self.doCLICharacterToRM(item: self.item as! NormalItem)
         case .confusion:
-            try self.doConfusion(item: self.item as! Confusion)
+            try self.doCLIConfusion(item: self.item as! Confusion)
         }
         if self.result == nil {
             try! self.markResult(outcome: .right)
         }
     }
-    var wasWrong: Bool {
-        return self.result?.outcome == .wrong
-    }
-    static let NOPE = ANSI.rback("NOPE")
-    func maybeYEP() -> String {
-        return self.wasWrong ? ANSI.rback("YEP") : ANSI.yback("YEP")
-    }
-    func cliLabelForQual(_ qual: Int) -> String {
-        return [Test.NOPE, maybeYEP() + "?", maybeYEP()][qual]
+    func cliLabel(outcome: TestOutcome, qual: Int) -> String {
+        let text: String
+        var back: (String) -> String
+        switch outcome {
+        case .wrong:
+            (text, back) = ("NOPE", ANSI.rback)
+        case .mu:
+            (text, back) = ("MU", ANSI.cback)
+        case .right:
+            (text, back) = ("YEP" + (qual == 1 ? "?" : ""), ANSI.yback)
+        }
+        // THIS SUCKS
+        if self.result?.outcome == .wrong {
+            back = ANSI.rback
+        } else if self.result?.outcome == .mu {
+            back = ANSI.cback
+        }
+        return back(text)
     }
 
     func doCLIMeaningToReading(item: NormalItem) throws {
@@ -620,8 +674,8 @@ class Test {
         while true {
             let k = try cliRead(prompt: prompt, kana: true)
             let (outcome, qual, alternatives) = item.evaluateReadingAnswer(input: k, withAlternatives: true)
-            var out: String = cliLabelForQual(qual)
-            out += " " + item.cliReadings(colorful: false)
+            var out: String = cliLabel(outcome: outcome, qual: qual)
+            out += " " + item.cliName + " " + item.cliReadings(colorful: false)
             print(out)
             item.cliPrintReadingAlternatives(alternatives)
             item.cliPrintSimilarMeaning()
@@ -641,7 +695,7 @@ class Test {
         while true {
             let k: String = try cliRead(prompt: prompt, kana: false)
             let (outcome, qual, alternatives) = item.evaluateMeaningAnswer(input: k, withAlternatives: true)
-            print(cliLabelForQual(qual))
+            print(cliLabel(outcome: outcome, qual: qual))
             item.cliPrint(colorful: true)
             item.cliPrintMeaningAlternatives(alternatives)
             if outcome == .right {
@@ -652,7 +706,7 @@ class Test {
         }
     }
     func doCLICharacterToRM(item: NormalItem) throws {
-        let prompt = item.character
+        let prompt = item.cliName
         
         enum Mode { case reading, meaning }
         for mode in [Mode.reading, Mode.meaning].shuffled() {
@@ -660,13 +714,15 @@ class Test {
                 let k: String = try cliRead(prompt: prompt, kana: mode == .reading)
                 let outcome: TestOutcome
                 let qual: Int
+                let alternatives: [Item]
                 if mode == .meaning {
-                    (outcome, qual, _) = item.evaluateMeaningAnswer(input: k, withAlternatives: false)
-                    print(cliLabelForQual(qual))
+                    (outcome, qual, alternatives) = item.evaluateMeaningAnswer(input: k, withAlternatives: false)
+                    print(cliLabel(outcome: outcome, qual: qual))
                     print(item.cliMeanings(colorful: true))
+                    item.cliPrintMeaningAlternatives(alternatives)
                 } else {
                     (outcome, qual, _) = item.evaluateReadingAnswer(input: k, withAlternatives: false)
-                    print(cliLabelForQual(qual))
+                    print(cliLabel(outcome: outcome, qual: qual))
                     print(item.cliReadings(colorful: true))
                 }
                 
@@ -679,7 +735,7 @@ class Test {
             }
         }
     }
-    func doConfusion(item: Confusion) throws {
+    func doCLIConfusion(item: Confusion) throws {
         for subitem in item.items.shuffled() {
             try doCLICharacterToRM(item: subitem as! NormalItem)
         }
@@ -768,16 +824,20 @@ class SRS {
 }
 
 func main() {
-    let subete = Subete()
+    let _ = Subete()
     //subete.createSRSFromLog()
-    return
-    var remainingItems: Set<Item> = Set(Subete.instance.allItems.shuffled()[..<50])
+    //print(Subete.instance.allByKind(.word).findByMeaning(String(normalizeMeaning("to narrow"))))
+    //return
+    //let items: [Item] = Subete.instance.allItems
+    let items: [Item] = Subete.instance.allConfusion.items
+    //let items: [Item] = Subete.instance.allConfusion.items.filter { $0.isWord }
+    var remainingItems: Set<Item> = Set(items.shuffled()[..<min(items.count, 50)])
     var numDone = 0
     do {
         while let item = remainingItems.randomElement() {
             let testKind = item.availableTests.randomElement()!
             let test = Test(kind: testKind, item: item)
-            print("[\(numDone)]")
+            print("[\(numDone)]") // TODO remainingItems
             try test.cliGo()
             numDone += 1
             if test.result!.outcome == .right {
@@ -791,4 +851,5 @@ func main() {
         try! { throw e }() // TODO
     }
 }
+Levenshtein.test()
 main()
