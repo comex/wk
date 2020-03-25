@@ -1,5 +1,7 @@
 import Foundation
-// TODO: ~ is broken
+import Yams
+
+// TODO(fixed?): ~ is broken
 // TODO: !wrong doesn't act as expected when halfway through a k2rm
 // TODO: don't let you mu more than once
 // TODO: reading alternatives for words
@@ -56,6 +58,14 @@ func loadJSON(path: String) -> Any {
         with: try! Data(contentsOf: URL(fileURLWithPath: path)),
         options: JSONSerialization.ReadingOptions())
 }
+func loadYAML(path: String) -> Any {
+    return try! Yams.load(yaml: try! String(contentsOf: URL(fileURLWithPath: path)))!
+}
+func loadJSONAndExtraYAML(basePath: String, stem: String) -> [NSDictionary] {
+    let base = loadJSON(path: "\(basePath)/\(stem).json") as! [NSDictionary]
+    let extra = loadYAML(path: "\(basePath)/extra-\(stem).yaml") as! [NSDictionary]
+    return base + extra
+}
 
 #if false
 func runAndGetOutput(_ args: [String]) throws -> String {
@@ -86,7 +96,7 @@ func runAndGetOutput(_ args: [String]) throws -> String {
 func runAndGetOutput(_ args: [String]) throws -> String {
     let pipe = Pipe()
     let stdoutFd = pipe.fileHandleForWriting.fileDescriptor
-    var myArgs: [UnsafeMutablePointer<Int8>?] = args.map {
+    let myArgs: [UnsafeMutablePointer<Int8>?] = args.map {
         strdup($0)
     } + [nil]
     var pid: pid_t = 0
@@ -146,8 +156,8 @@ class Subete {
     init() {
         Subete.instance = self
         print("loading json")
-        self.allWords = ItemList((loadJSON(path: basePath + "vocabulary.json") as! NSArray).map { Word(json: $0 as! NSDictionary) })
-        self.allKanji = ItemList((loadJSON(path: basePath + "kanji.json") as! NSArray).map { Kanji(json: $0 as! NSDictionary) })
+        self.allWords = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "vocabulary").map { Word(json: $0) })
+        self.allKanji = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "kanji").map { Kanji(json: $0) })
         print("loading confusion")
         let allKanjiConfusion = loadConfusion(path: basePath + "confusion.txt", isWord: false)
         let allWordConfusion = loadConfusion(path: basePath + "confusion-vocab.txt", isWord: true)
@@ -193,22 +203,32 @@ class Subete {
         for result in results { srs.update(result) }
         self.srs = srs
     }
-    func handleBang(_ input: String) {
+    func handleBang(_ input: String, curTest: Test) {
         switch input {
         case "!right":
-            handleChangeLast(outcome: .right)
+            handleChangeLast(outcome: .right, curTest: curTest)
         case "!wrong":
-            handleChangeLast(outcome: .wrong)
+            handleChangeLast(outcome: .wrong, curTest: curTest)
         case "!mu":
-            handleChangeLast(outcome: .mu)
+            handleChangeLast(outcome: .mu, curTest: curTest)
         default:
             print("?bang? \(input)")
         }
     }
-    func handleChangeLast(outcome: TestOutcome) {
-        guard let test = self.lastAppendedTest else {
-            print("no last")
-            return
+    func handleChangeLast(outcome: TestOutcome, curTest: Test) {
+        let test: Test
+        var outcome: TestOutcome? = outcome
+        if curTest.didCliRead {
+            print("changing this test")
+            test = curTest
+            if outcome == .right { outcome = nil }
+        } else {
+            print("changing last test")
+            guard let t = self.lastAppendedTest else {
+                print("no last")
+                return
+            }
+            test = t
         }
         try! test.markResult(outcome: outcome)
     }
@@ -276,13 +296,6 @@ class NormalItem: Item {
         let normalizedReading = String(normalizeReading(reading))
         return Subete.instance.allByKind(self.kind).findByReading(normalizedReading).filter { $0 != self }
     }
-    func cliPrintReadingAlternatives(_ items: [Item]) {
-        if items.isEmpty { return }
-        print(" Entered kana matches:")
-        for item in items {
-            item.cliPrint(colorful: false)
-        }
-    }
     func meaningMatches(normalizedInput: String, levenshtein: inout Levenshtein) -> Bool {
         return self.evaluateMeaningAnswerInner(normalizedInput: normalizedInput, levenshtein: &levenshtein) > 0
     }
@@ -295,6 +308,19 @@ class NormalItem: Item {
         }
         */
         return Subete.instance.allByKind(self.kind).findByMeaning(normalizedMeaning).filter { $0 != self }
+    }
+    func cliPrintAlternatives(_ items: [Item], isReading: Bool) {
+        if items.isEmpty { return }
+        let s = "Entered \(isReading ? "kana" : "meaning") matches"
+        if items.count > 8 {
+            print(" (\(s) \(items.count) items)")
+            return
+        } else {
+            print(" \(s):")
+            for item in items {
+                item.cliPrint(colorful: false)
+            }
+        }
     }
     func cliPrintMeaningAlternatives(_ items: [Item]) {
         if items.isEmpty { return }
@@ -315,6 +341,23 @@ class NormalItem: Item {
         let items = similarMeaning()
         if items.isEmpty { return }
         print(" Similar meaning:")
+        for item in items {
+            item.cliPrint(colorful: false)
+        }
+    }
+    func sameReading() -> [Item] {
+        var set: Set<Item> = []
+        for reading in self.readings {
+            set.formUnion(Subete.instance.allByKind(self.kind).findByReading(reading))
+        }
+        set.remove(self)
+        return Array(set).sorted()
+    }
+    func cliPrintSameReadingIfFew() {
+        let items = sameReading()
+        if items.isEmpty { return }
+        if items.count > 6 { return }
+        print(" Same reading:")
         for item in items {
             item.cliPrint(colorful: false)
         }
@@ -388,6 +431,13 @@ class NormalItem: Item {
     override func cliPrint(colorful: Bool) {
         print("\(self.cliName) \(self.cliReadings(colorful: colorful)) \(self.cliMeanings(colorful: colorful))")
     }
+    func tildify(_ prompt: String) -> String {
+        if self.character.starts(with: "〜") {
+            return "(〜) " + prompt
+        } else {
+            return prompt
+        }
+    }
     var cliName: String { fatalError("lol") } // TODO
     override var availableTests: [TestKind] { return [.characterToRM, .meaningToReading, .readingToMeaning] }
 }
@@ -443,7 +493,11 @@ class Confusion: Item, CustomStringConvertible {
             self.characters = trim(line).map { String($0) }
             allXs = Subete.instance.allKanji
         }
-        self.items = self.characters.map { allXs.findByName($0)! }
+        self.items = self.characters.map {
+            let item = allXs.findByName($0)
+            if item == nil { fatalError("invalid item '\($0)' in confusion") }
+            return item!
+        }
         self.isWord = isWord
         super.init(name: self.characters[0])
     }
@@ -592,11 +646,12 @@ class Test {
     let item: Item
     var result: TestResult? = nil
     var appendedStuff: Data? = nil
+    var didCliRead: Bool = false
     init(kind: TestKind, item: Item) {
         self.testKind = kind
         self.item = item
     }
-   
+
     func removeFromLog() throws {
         let toRemove = self.appendedStuff!
         try Subete.instance.openLogTxt(write: true) { (fh: FileHandle) throws in
@@ -665,9 +720,7 @@ class Test {
 
     func doCLIMeaningToReading(item: NormalItem) throws {
         var prompt = commaJoin(item.meanings)
-        if item.character.starts(with: "〜") {
-            prompt = "(〜) " + prompt
-        }
+        prompt = item.tildify(prompt)
         if item is Kanji {
             prompt = ANSI.purple(prompt) + " /k"
         }
@@ -677,7 +730,7 @@ class Test {
             var out: String = cliLabel(outcome: outcome, qual: qual)
             out += " " + item.cliName + " " + item.cliReadings(colorful: false)
             print(out)
-            item.cliPrintReadingAlternatives(alternatives)
+            item.cliPrintAlternatives(alternatives, isReading: true)
             item.cliPrintSimilarMeaning()
         
             if outcome == .right {
@@ -688,7 +741,9 @@ class Test {
         }
     }
     func doCLIReadingToMeaning(item: NormalItem) throws {
-        var prompt = commaJoin(item.readings)
+        //var prompt = commaJoin(item.readings)
+        var prompt = item.cliReadings(colorful: false)
+        prompt = item.tildify(prompt)
         if item is Kanji {
             prompt += " /k"
         }
@@ -697,7 +752,10 @@ class Test {
             let (outcome, qual, alternatives) = item.evaluateMeaningAnswer(input: k, withAlternatives: true)
             print(cliLabel(outcome: outcome, qual: qual))
             item.cliPrint(colorful: true)
-            item.cliPrintMeaningAlternatives(alternatives)
+            item.cliPrintAlternatives(alternatives, isReading: false)
+            if outcome != .right {
+                item.cliPrintSameReadingIfFew()
+            }
             if outcome == .right {
                 break
             } else if self.result == nil {
@@ -758,22 +816,25 @@ class Test {
                 continue
             }
             if output.starts(with: "!") {
-                Subete.instance.handleBang(output)
+                Subete.instance.handleBang(output, curTest: self)
                 continue
             }
             // TODO: Python checks for doublewidth here
+            self.didCliRead = true
             return output
         }
     }
 
-    func markResult(outcome: TestOutcome) throws {
+    func markResult(outcome: TestOutcome?) throws {
         if self.result != nil {
             try self.removeFromLog()
             Subete.instance.srs?.revert(forItem: self.item)
         }
-        self.result = TestResult(testKind: self.testKind, item: self.item, date: Date(), outcome: outcome)
-        try self.addToLog()
-        Subete.instance.srs?.update(self.result!)
+        if let outcome = outcome {
+            self.result = TestResult(testKind: self.testKind, item: self.item, date: Date(), outcome: outcome)
+            try self.addToLog()
+            Subete.instance.srs?.update(self.result!)
+        }
     }
 }
 
@@ -828,10 +889,30 @@ func main() {
     //subete.createSRSFromLog()
     //print(Subete.instance.allByKind(.word).findByMeaning(String(normalizeMeaning("to narrow"))))
     //return
-    //let items: [Item] = Subete.instance.allItems
-    let items: [Item] = Subete.instance.allConfusion.items
+    let argv = CommandLine.arguments
+    if argv.count > 2 {
+        fatalError("too many CLI arguments")
+    }
+    let mode = argv.count > 1 ? argv[1] : "all"
+    var items: [Item]
+    //print("w \(Subete.instance.allItems.count) \(Subete.instance.allConfusion.items.count)")
+    switch mode {
+        case "all":
+            items = Subete.instance.allItems
+            for _ in 0..<15 { items += Subete.instance.allConfusion.items }
+        case "confusion":
+            items = Subete.instance.allConfusion.items
+        default:
+            fatalError("unknown mode \(mode)")
+    }
+
+    //let items: [Item] 
     //let items: [Item] = Subete.instance.allConfusion.items.filter { $0.isWord }
-    var remainingItems: Set<Item> = Set(items.shuffled()[..<min(items.count, 50)])
+    items.shuffle()
+    var remainingItems: Set<Item> = Set()
+    while remainingItems.count < 50 && !items.isEmpty {
+        remainingItems.insert(items.removeLast())
+    }
     var numDone = 0
     do {
         while let item = remainingItems.randomElement() {
