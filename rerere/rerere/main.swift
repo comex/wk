@@ -1,3 +1,4 @@
+// TODO FIX BANGS ON CONFUSION
 import Foundation
 import Yams
 
@@ -834,6 +835,8 @@ class Test {
             self.result = TestResult(testKind: self.testKind, item: self.item, date: Date(), outcome: outcome)
             try self.addToLog()
             Subete.instance.srs?.update(self.result!)
+        } else {
+            self.result = nil
         }
     }
 }
