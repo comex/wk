@@ -28,7 +28,7 @@ func trim<S: StringProtocol>(_ s: S) -> String {
 func isSpace(_ c: UTF8.CodeUnit) -> Bool {
     return c == 32 || c == 10
 }
-func trimSubstring(_ s: Substring) -> Substring {
+func trim(_ s: Substring) -> Substring {
     var a = s.utf8
     a = a.drop(while: isSpace)
     if let end = a.lastIndex(where: { !isSpace($0) }) {
@@ -37,9 +37,11 @@ func trimSubstring(_ s: Substring) -> Substring {
     return Substring(a)
 
 }
-func trim<S: StringProtocol>(_ s: S) -> Substring {
-    return trimSubstring(Substring(s))
+func trim(_ s: String) -> Substring {
+  return trim(Substring(s))
 }
+
+
 
 func commaSplitNoTrim(_ s: String) -> [Substring] {
     return s.split(separator: ",")
@@ -241,9 +243,9 @@ enum ItemKind: String {
     case word, kanji, confusion
 }
 class Item: Hashable, Equatable, Comparable {
-    let name: String
+    let name: Substring
     let id: Int
-    init(name: String) {
+    init(name: Substring) {
         self.name = name
         self.id = Subete.instance.nextItemID
         Subete.instance.nextItemID = self.id + 1
@@ -266,14 +268,14 @@ class Item: Hashable, Equatable, Comparable {
     }
 
 }
-func normalizeMeaning<S: StringProtocol>(_ meaning: S) -> Substring {
+func normalizeMeaning(_ meaning: Xstring) -> Xstring {
     return trim(meaning)
 }
-func normalizeReading<S: StringProtocol>(_ input: S) -> String {
+func normalizeReading(_ input: Xstring) -> Xstring {
     // TODO katakana to hiragana
-    var reading = String(trim(input))
+    var reading: Xstring = trim(input)
     if reading.contains("-") {
-        reading = reading.replacingOccurrences(of: "-", with: "ー")
+        reading = Xstring(reading.replacingOccurrences(of: "-", with: "ー"))
     }
     return reading
 }
@@ -296,14 +298,14 @@ class NormalItem: Item {
         super.init(name: self.character)
     }
     func readingAlternatives(reading: String) -> [Item] {
-        let normalizedReading = String(normalizeReading(reading))
+        let normalizedReading = String(normalizeReading(Substring(reading)))
         return Subete.instance.allByKind(self.kind).findByReading(normalizedReading).filter { $0 != self }
     }
     func meaningMatches(normalizedInput: String, levenshtein: inout Levenshtein) -> Bool {
         return self.evaluateMeaningAnswerInner(normalizedInput: normalizedInput, levenshtein: &levenshtein) > 0
     }
     func meaningAlternatives(meaning: String) -> [Item] {
-        let normalizedMeaning = String(normalizeMeaning(meaning))
+        let normalizedMeaning = String(normalizeMeaning(Substring(meaning)))
         /*
         var levenshtein = Levenshtein()
         return Subete.instance.allByKind(self.kind).vagueItems.filter { (other: Item) -> Bool in
@@ -390,7 +392,7 @@ class NormalItem: Item {
     }
     func evaluateReadingAnswer(input: String, withAlternatives: Bool) -> (outcome: TestOutcome, qual: Int, alternatives: [Item]) {
         // TODO this sucks
-        let normalizedInput = normalizeReading(input)
+        let normalizedInput = String(normalizeReading(Substring(input)))
         let qual = evaluateReadingAnswerInner(normalizedInput: normalizedInput)
         var outcome: TestOutcome = qual > 0 ? .right : .wrong
         let alternatives = withAlternatives ? readingAlternatives(reading: normalizedInput) : []
@@ -405,7 +407,7 @@ class NormalItem: Item {
 
     }
     func evaluateMeaningAnswer(input: String, withAlternatives: Bool) -> (outcome: TestOutcome, qual: Int, alternatives: [Item]) {
-        let normalizedInput = String(normalizeMeaning(input))
+        let normalizedInput = String(normalizeMeaning(Substring(input)))
         var levenshtein = Levenshtein()
         let qual = evaluateMeaningAnswerInner(normalizedInput: normalizedInput, levenshtein: &levenshtein)
         var outcome: TestOutcome = qual > 0 ? .right : .wrong
@@ -458,9 +460,9 @@ class Word : NormalItem, CustomStringConvertible {
 }
 class Kanji : NormalItem, CustomStringConvertible {
     init(json: NSDictionary) {
-        var readings: [String] = []
-        var importantReadings: [String] = []
-        var unimportantReadings: [String] = []
+        var readings: [Substring] = []
+        var importantReadings: [Substring] = []
+        var unimportantReadings: [Substring] = []
         let importantKind = json["important_reading"] as! String
         for kind in ["kunyomi", "nanori", "onyomi"] {
             if let obj = json[kind], !(obj is NSNull) && !(obj as? NSString == "None") {
@@ -589,9 +591,10 @@ struct TestResult {
         ]
         return components.joined(separator: ":")
     }
-    static let retired: Set<String> = ["毒言", "札", "農", "先年"]
-    static let replace: [String: String] = ["取決め": "取り決め"]
-    static func parse(line: Substring) throws -> TestResult? {
+    static let retiredInfo: NSDictionary = loadYAML(path: "\(Subete.instance.basePath)/retired.yaml") as! NSDictionary
+    static let retired: Set<String> = Set(retiredInfo["retired"] as! [String])
+    static let replace: [String: String] = retiredInfo["replace"] as! [String: String]
+	static func parse(line: Substring) throws -> TestResult? {
         var components: [Substring] = trim(line).split(separator: ":")
         var date: Date? = nil
         if components.count > 4 {
@@ -612,10 +615,11 @@ struct TestResult {
                                      err: MyError("invalid item kind \(components[1])"))
         var name = String(components[2])
         if retired.contains(name) {
-            return nil
-        } else if let newName = replace[name] {
-            name = newName
-        }
+			return nil
+		} else if let newName = replace[name] {
+			name = newName
+		}
+
         return TestResult(
             testKind: try unwrapOrThrow(TestKind(rawValue: String(components[0])),
                                     err: MyError("invalid test kind \(components[0])")),
@@ -629,7 +633,14 @@ struct TestResult {
     static func readAllFromLog() throws -> [TestResult] {
         let data = try Subete.instance.openLogTxt(write: false) { (fh: FileHandle) in fh.readDataToEndOfFile() }
         let text = String(decoding: data, as: UTF8.self)
-        return try text.split(separator: "\n").compactMap { try TestResult.parse(line: $0) }
+        return text.split(separator: "\n").compactMap {
+			do {
+				return try TestResult.parse(line: $0)
+			} catch let e {
+				warn("error parsing log line: \(e)")
+				return nil
+			}
+		}
     }
 }
 
@@ -891,9 +902,86 @@ class SRS {
     }
 }
 
+
+struct WeightedList<T> {
+    struct Entry {
+        let value: T
+        let weight: Double
+        var cumulativeWeight: Double
+        var taken: Bool
+    }
+    var entries: [Entry] = []
+    var totalUntakenWeight: Double = 0
+
+    init() {}
+
+    var totalWeight: Double {
+        return entries.last?.cumulativeWeight ?? 0
+    }
+    var isEmpty: Bool { return entries.isEmpty }
+    
+    mutating func addAll(_ values: [T], weight: Double) {
+        for value in values {
+            add(value, weight: weight)
+        }
+    }
+    mutating func add(_ value: T, weight: Double) {
+        entries.append(Entry(value: value, weight: weight, cumulativeWeight: totalWeight + weight, taken: false))
+        totalUntakenWeight += weight
+    }
+    func indexOfRandomElement() -> Int {
+        let target = Double.random(in: 0.0 ..< totalWeight)
+        var lo: Int = 0
+        var hi: Int = entries.count - 1
+        while lo <= hi {
+            let mid = (lo + hi) / 2
+            let cw = entries[mid].cumulativeWeight
+            if target < cw - entries[mid].weight {
+                hi = mid - 1
+            } else if target >= cw {
+                lo = mid + 1
+            } else {
+                return mid
+            }
+        }
+        fatalError("binary search failed, target=\(target) totalWeight=\(totalWeight)")
+    }
+    mutating func reindex() {
+        var cw: Double = 0
+        for i in 0..<entries.count {
+            cw += entries[i].weight
+            entries[i].taken = false
+            entries[i].cumulativeWeight = cw
+        }
+        totalUntakenWeight = cw
+    }
+
+    mutating func takeRandomElement() -> T? {
+        if isEmpty { return nil }
+        var i: Int = -1
+		while true {
+            i = indexOfRandomElement()
+            if !entries[i].taken { break }
+        }
+        entries[i].taken = true
+        totalUntakenWeight -= entries[i].weight
+
+        if totalUntakenWeight < totalWeight / 2 {
+            reindex()
+        }
+        return entries[i].value
+    }
+}
+
 func main() {
     let _ = Subete()
-    //subete.createSRSFromLog()
+    while true {
+		let a = CFAbsoluteTimeGetCurrent()
+		Subete.instance.createSRSFromLog()
+		let b = CFAbsoluteTimeGetCurrent()
+		print(b - a)
+	}
+    return
     //print(Subete.instance.allByKind(.word).findByMeaning(String(normalizeMeaning("to narrow"))))
     //return
     let argv = CommandLine.arguments
@@ -901,24 +989,23 @@ func main() {
         fatalError("too many CLI arguments")
     }
     let mode = argv.count > 1 ? argv[1] : "all"
-    var items: [Item]
+    var items: WeightedList<Item> = WeightedList()
     //print("w \(Subete.instance.allItems.count) \(Subete.instance.allConfusion.items.count)")
     switch mode {
         case "all":
-            items = Subete.instance.allItems
-            for _ in 0..<10 { items += Subete.instance.allConfusion.items }
+            items.addAll(Subete.instance.allItems, weight: 1.0)
+            items.addAll(Subete.instance.allConfusion.items, weight: 10.0)
         case "confusion":
-            items = Subete.instance.allConfusion.items
+            items.addAll(Subete.instance.allConfusion.items, weight: 1.0)
         default:
             fatalError("unknown mode \(mode)")
     }
 
     //let items: [Item] 
     //let items: [Item] = Subete.instance.allConfusion.items.filter { $0.isWord }
-    items.shuffle()
     var remainingItems: Set<Item> = Set()
     while remainingItems.count < 50 && !items.isEmpty {
-        remainingItems.insert(items.removeLast())
+        remainingItems.insert(items.takeRandomElement()!)
     }
     var numDone = 0
     do {
