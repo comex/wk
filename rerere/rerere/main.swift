@@ -35,7 +35,7 @@ func trim<S: StringProtocol>(_ s: S) -> String {
 func isSpace(_ c: UTF8.CodeUnit) -> Bool {
     return c == 32 || c == 10
 }
-typealias Xstring = Substring;
+typealias Xstring = String;
 func trim(_ s: Xstring) -> Xstring {
     let a = s.utf8
     guard let start = a.firstIndex(where: { !isSpace($0) }) else {
@@ -45,18 +45,21 @@ func trim(_ s: Xstring) -> Xstring {
     if start == a.startIndex && end == a.endIndex {
         return s
     } else {
-        return Xstring(a[start...end])
+		return Xstring(a[start...end])!
     }
 }
-
+#if true
+func trim(_ s: Substring) -> Xstring {
+  return trim(Xstring(s))
+}
+#else
 func trim(_ s: String) -> Xstring {
   return trim(Xstring(s))
 }
-
-
+#endif
 
 func commaSplitNoTrim(_ s: String) -> [Xstring] {
-    return s.split(separator: ",")
+    return s.split(separator: ",").map { Xstring($0) }
 }
 func commaJoin(_ ss: [Xstring]) -> String {
     return ss.joined(separator: ", ")
@@ -606,7 +609,7 @@ struct TestResult {
     static let retired: Set<String> = Set(retiredInfo["retired"] as! [String])
     static let replace: [String: String] = retiredInfo["replace"] as! [String: String]
 	static func parse(line: Xstring) throws -> TestResult? {
-        var components: [Xstring] = trim(line).split(separator: ":")
+        var components: [Xstring] = trim(line).split(separator: ":").map { Xstring($0) }
         var date: Date? = nil
         if components.count > 4 {
             
@@ -646,7 +649,7 @@ struct TestResult {
         let text = String(decoding: data, as: UTF8.self)
         return text.split(separator: "\n").compactMap {
 			do {
-				return try TestResult.parse(line: $0)
+				return try TestResult.parse(line: Xstring($0))
 			} catch let e {
 				warn("error parsing log line: \(e)")
 				return nil
