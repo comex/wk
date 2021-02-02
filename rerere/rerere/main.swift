@@ -276,12 +276,12 @@ class Item: Hashable, Equatable, Comparable {
     }
 
 }
-func normalizeMeaning(_ meaning: String) -> String {
-    return trim(meaning)
+func normalizeMeaningTrimmed(_ meaning: String) -> String {
+    return meaning
 }
-func normalizeReading(_ input: String) -> String {
+func normalizeReadingTrimmed(_ input: String) -> String {
     // TODO katakana to hiragana
-    var reading: String = trim(input)
+    var reading: String = input //trim(input)
     if reading.contains("-") {
         reading = String(reading.replacingOccurrences(of: "-", with: "ー"))
     }
@@ -299,21 +299,21 @@ class NormalItem: Item {
     init(json: NSDictionary, readings: [String], importantReadings: [String], unimportantReadings: [String]) {
         self.json = json
         self.character = trim(json["character"] as! String)
-        self.meanings = commaSplitNoTrim(json["meaning"] as! String).map { normalizeMeaning($0) }
+        self.meanings = (json["meaning"] as! String).splut(separator: 44, includingSpaces: true, map: normalizeMeaningTrimmed)
         self.readings = readings
         self.importantReadings = importantReadings
         self.unimportantReadings = unimportantReadings
         super.init(name: self.character)
     }
     func readingAlternatives(reading: String) -> [Item] {
-        let normalizedReading = String(normalizeReading(String(reading)))
+        let normalizedReading = normalizeReadingTrimmed(trim(reading))
         return Subete.instance.allByKind(self.kind).findByReading(normalizedReading).filter { $0 != self }
     }
     func meaningMatches(normalizedInput: String, levenshtein: inout Levenshtein) -> Bool {
         return self.evaluateMeaningAnswerInner(normalizedInput: normalizedInput, levenshtein: &levenshtein) > 0
     }
     func meaningAlternatives(meaning: String) -> [Item] {
-        let normalizedMeaning = String(normalizeMeaning(String(meaning)))
+        let normalizedMeaning = normalizeMeaningTrimmed(trim(meaning))
         /*
         var levenshtein = Levenshtein()
         return Subete.instance.allByKind(self.kind).vagueItems.filter { (other: Item) -> Bool in
@@ -400,7 +400,7 @@ class NormalItem: Item {
     }
     func evaluateReadingAnswer(input: String, withAlternatives: Bool) -> (outcome: TestOutcome, qual: Int, alternatives: [Item]) {
         // TODO this sucks
-        let normalizedInput = String(normalizeReading(String(input)))
+        let normalizedInput = normalizeReadingTrimmed(trim(input))
         let qual = evaluateReadingAnswerInner(normalizedInput: normalizedInput)
         var outcome: TestOutcome = qual > 0 ? .right : .wrong
         let alternatives = withAlternatives ? readingAlternatives(reading: normalizedInput) : []
@@ -415,7 +415,7 @@ class NormalItem: Item {
 
     }
     func evaluateMeaningAnswer(input: String, withAlternatives: Bool) -> (outcome: TestOutcome, qual: Int, alternatives: [Item]) {
-        let normalizedInput = String(normalizeMeaning(String(input)))
+        let normalizedInput = normalizeMeaningTrimmed(trim(input))
         var levenshtein = Levenshtein()
         let qual = evaluateMeaningAnswerInner(normalizedInput: normalizedInput, levenshtein: &levenshtein)
         var outcome: TestOutcome = qual > 0 ? .right : .wrong
@@ -456,7 +456,7 @@ class NormalItem: Item {
 }
 class Word : NormalItem, CustomStringConvertible {
     init(json: NSDictionary) {
-        let readings = commaSplitNoTrim(json["kana"] as! String).map(normalizeReading)
+        let readings = (json["kana"] as! String).splut(separator: 44, includingSpaces: true, map:normalizeReadingTrimmed)
         super.init(json: json, readings: readings, importantReadings: readings, unimportantReadings: [])
     }
     var description: String {
@@ -473,7 +473,7 @@ class Kanji : NormalItem, CustomStringConvertible {
         let importantKind = json["important_reading"] as! String
         for kind in ["kunyomi", "nanori", "onyomi"] {
             if let obj = json[kind], !(obj is NSNull) && !(obj as? NSString == "None") {
-                let theseReadings = commaSplitNoTrim(obj as! String).map(normalizeReading)
+                let theseReadings = (obj as! String).splut(separator: 44, includingSpaces: true, map: normalizeReadingTrimmed)
                 readings += theseReadings
                 if kind == importantKind {
                     importantReadings += theseReadings
@@ -582,7 +582,43 @@ enum TestOutcome: String {
     case wrong
     case mu
 }
-
+extension String {
+	func splut(separator: UTF8.CodeUnit, includingSpaces: Bool = false, map: (String) -> String) -> [String] {
+		var res: [String] = []
+		let utf = self.utf8
+		let start = utf.startIndex
+		let end = utf.endIndex
+		var i = start
+		var lastStart = i
+		while true {
+			if i == end || utf[i] == separator {
+				var lastEnd = i
+				if includingSpaces {
+					while true {
+						if lastEnd == lastStart { break }
+						let prev = utf.index(before: lastEnd)
+						if !isSpace(utf[prev]) { break }
+						lastEnd = prev
+					}
+					if i != end {
+						while true {
+							let next = utf.index(after: i)
+							if next == end { break }
+							if !isSpace(utf[next]) { break }
+							i = next
+						}
+					}
+				}
+				res.append(map(String(utf[lastStart..<lastEnd])!))
+				if i == end { return res }
+				lastStart = utf.index(after: i)
+			}
+			i = utf.index(after: i)
+		}
+		return res
+	}
+	
+}
 struct TestResult {
     let testKind: TestKind
     let item: Item
@@ -602,7 +638,7 @@ struct TestResult {
     static let retired: Set<String> = Set(retiredInfo["retired"] as! [String])
     static let replace: [String: String] = retiredInfo["replace"] as! [String: String]
 	static func parse(line: String) throws -> TestResult? {
-        var components: [String] = trim(line).split(separator: ":").map { String($0) }
+        var components: [String] = line.splut(separator: 58 /* ':' */, includingSpaces: true, map: { $0 })
         var date: Date? = nil
         if components.count > 4 {
             
@@ -982,9 +1018,9 @@ struct WeightedList<T> {
 
 func main() {
     let _ = Subete()
-    while true {
-		time { Subete.instance.createSRSFromLog() }
-	}
+    
+    //while true { time { Subete.instance.createSRSFromLog() } }
+	
     return
     //print(Subete.instance.allByKind(.word).findByMeaning(String(normalizeMeaning("to narrow"))))
     //return
@@ -1031,4 +1067,5 @@ func main() {
     }
 }
 Levenshtein.test()
+//print("   :xsamdfa: b  :  c:   ".splut(separator: 58, includingSpaces: true, map: { $0 }))
 main()
