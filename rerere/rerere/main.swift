@@ -1,5 +1,6 @@
 // TODO FIX BANGS ON CONFUSION
 // TODO why didn't I get a reading match for 挟む
+// TODO mu overwrites a later wrong?
 import Foundation
 import Yams
 
@@ -527,7 +528,9 @@ class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
         var byReading: [String: [X]] = [:]
         var byMeaning: [String: [X]] = [:]
         for item in items {
-            ensure(byName[item.name] == nil)
+            if byName[item.name] != nil {
+                fatalError("duplicate \(X.self) item named \(item.name)")
+            }
             byName[item.name] = item
             if let normalItem = item as? NormalItem {
                 for reading in normalItem.readings {
@@ -903,7 +906,7 @@ func main() {
     switch mode {
         case "all":
             items = Subete.instance.allItems
-            for _ in 0..<15 { items += Subete.instance.allConfusion.items }
+            for _ in 0..<10 { items += Subete.instance.allConfusion.items }
         case "confusion":
             items = Subete.instance.allConfusion.items
         default:
