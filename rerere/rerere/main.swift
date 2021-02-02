@@ -906,11 +906,17 @@ class SRS {
         var level: Int {
             return 0 // XXX
         }
+        var nextTestDays: Double {
+            guard let lastSeen = self.lastSeen else {
+                return Date()
+            }
+		}
         var nextTestDate: Date {
             guard let lastSeen = self.lastSeen else {
                 return Date()
             }
             let interval: TimeInterval
+            let days = pow(2.5, self.level)
             switch self.level {
             case 0:
                 interval = 60*60*12
@@ -925,15 +931,7 @@ class SRS {
     func update(_ result: TestResult) {
         var info = itemInfo[result.item] ?? ItemInfo()
         self.backup = (result.item, info)
-        var pointsToAward = 1
-        if let lastSeen = info.lastSeen, let date = result.date {
-            let interval = date.timeIntervalSince(lastSeen)
-            // TODO copy from some sources
-            if interval >= 60*60*24 {
-                pointsToAward = 2
-            }
-        }
-        info.points += pointsToAward
+        updateInner(info: &info, forResult: result)
         info.lastSeen = result.date
         itemInfo[result.item] = info
     }
@@ -943,6 +941,25 @@ class SRS {
         self.itemInfo[backup.0] = backup.1
         self.backup = nil
     }
+    func updateInner(info: inout ItemInfo, forResult result: TestResult) {
+		if let lastSeen = info.lastSeen, let date = result.date {
+            let interval = date.timeIntervalSince(lastSeen)
+            if interval < 60*60*6 {
+				// lockout
+				return
+			}
+        }
+        switch result.outcome {
+        case .mu:
+			return
+		case .right:
+			info.points += 1
+		case .wrong:
+			info.points /= 2
+		}
+		
+		
+	}
 }
 
 
