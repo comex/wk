@@ -35,8 +35,7 @@ func trim<S: StringProtocol>(_ s: S) -> String {
 func isSpace(_ c: UTF8.CodeUnit) -> Bool {
     return c == 32 || c == 10
 }
-typealias Xstring = String;
-func trim(_ s: Xstring) -> Xstring {
+func trim(_ s: String) -> String {
     let a = s.utf8
     guard let start = a.firstIndex(where: { !isSpace($0) }) else {
         return s
@@ -45,23 +44,17 @@ func trim(_ s: Xstring) -> Xstring {
     if start == a.startIndex && end == a.endIndex {
         return s
     } else {
-		return Xstring(a[start...end])!
+		return String(a[start...end])!
     }
 }
-#if true
-func trim(_ s: Substring) -> Xstring {
-  return trim(Xstring(s))
+func trim(_ s: Substring) -> String {
+  return trim(String(s))
 }
-#else
-func trim(_ s: String) -> Xstring {
-  return trim(Xstring(s))
-}
-#endif
 
-func commaSplitNoTrim(_ s: String) -> [Xstring] {
-    return s.split(separator: ",").map { Xstring($0) }
+func commaSplitNoTrim(_ s: String) -> [String] {
+    return s.split(separator: ",").map { String($0) }
 }
-func commaJoin(_ ss: [Xstring]) -> String {
+func commaJoin(_ ss: [String]) -> String {
     return ss.joined(separator: ", ")
 }
 func ensure(_ condition: @autoclosure () -> Bool, _ message: @autoclosure () -> String = String(), file: StaticString = #file, line: UInt = #line) {
@@ -258,9 +251,9 @@ enum ItemKind: String {
     case word, kanji, confusion
 }
 class Item: Hashable, Equatable, Comparable {
-    let name: Xstring
+    let name: String
     let id: Int
-    init(name: Xstring) {
+    init(name: String) {
         self.name = name
         self.id = Subete.instance.nextItemID
         Subete.instance.nextItemID = self.id + 1
@@ -283,27 +276,27 @@ class Item: Hashable, Equatable, Comparable {
     }
 
 }
-func normalizeMeaning(_ meaning: Xstring) -> Xstring {
+func normalizeMeaning(_ meaning: String) -> String {
     return trim(meaning)
 }
-func normalizeReading(_ input: Xstring) -> Xstring {
+func normalizeReading(_ input: String) -> String {
     // TODO katakana to hiragana
-    var reading: Xstring = trim(input)
+    var reading: String = trim(input)
     if reading.contains("-") {
-        reading = Xstring(reading.replacingOccurrences(of: "-", with: "ー"))
+        reading = String(reading.replacingOccurrences(of: "-", with: "ー"))
     }
     return reading
 }
 
 class NormalItem: Item {
-    let meanings: [Xstring]
-    let readings: [Xstring]
-    let importantReadings: [Xstring]
-    let unimportantReadings: [Xstring]
-    let character: Xstring
+    let meanings: [String]
+    let readings: [String]
+    let importantReadings: [String]
+    let unimportantReadings: [String]
+    let character: String
     let json: NSDictionary
     
-    init(json: NSDictionary, readings: [Xstring], importantReadings: [Xstring], unimportantReadings: [Xstring]) {
+    init(json: NSDictionary, readings: [String], importantReadings: [String], unimportantReadings: [String]) {
         self.json = json
         self.character = trim(json["character"] as! String)
         self.meanings = commaSplitNoTrim(json["meaning"] as! String).map { normalizeMeaning($0) }
@@ -313,14 +306,14 @@ class NormalItem: Item {
         super.init(name: self.character)
     }
     func readingAlternatives(reading: String) -> [Item] {
-        let normalizedReading = String(normalizeReading(Xstring(reading)))
+        let normalizedReading = String(normalizeReading(String(reading)))
         return Subete.instance.allByKind(self.kind).findByReading(normalizedReading).filter { $0 != self }
     }
     func meaningMatches(normalizedInput: String, levenshtein: inout Levenshtein) -> Bool {
         return self.evaluateMeaningAnswerInner(normalizedInput: normalizedInput, levenshtein: &levenshtein) > 0
     }
     func meaningAlternatives(meaning: String) -> [Item] {
-        let normalizedMeaning = String(normalizeMeaning(Xstring(meaning)))
+        let normalizedMeaning = String(normalizeMeaning(String(meaning)))
         /*
         var levenshtein = Levenshtein()
         return Subete.instance.allByKind(self.kind).vagueItems.filter { (other: Item) -> Bool in
@@ -397,9 +390,9 @@ class NormalItem: Item {
         return bestQual
     }
     func evaluateReadingAnswerInner(normalizedInput reading: String) -> Int {
-        if self.importantReadings.contains(Xstring(reading)) {
+        if self.importantReadings.contains(String(reading)) {
             return 2
-        } else if self.unimportantReadings.contains(Xstring(reading)) {
+        } else if self.unimportantReadings.contains(String(reading)) {
             return 1
         } else {
             return 0
@@ -407,12 +400,12 @@ class NormalItem: Item {
     }
     func evaluateReadingAnswer(input: String, withAlternatives: Bool) -> (outcome: TestOutcome, qual: Int, alternatives: [Item]) {
         // TODO this sucks
-        let normalizedInput = String(normalizeReading(Xstring(input)))
+        let normalizedInput = String(normalizeReading(String(input)))
         let qual = evaluateReadingAnswerInner(normalizedInput: normalizedInput)
         var outcome: TestOutcome = qual > 0 ? .right : .wrong
         let alternatives = withAlternatives ? readingAlternatives(reading: normalizedInput) : []
         if outcome == .wrong && alternatives.contains(where: { (alternative: Item) in
-            (alternative as! NormalItem).meanings.contains(where: { (meaning: Xstring) in
+            (alternative as! NormalItem).meanings.contains(where: { (meaning: String) in
                 self.meanings.contains(meaning)
             })
         }) {
@@ -422,13 +415,13 @@ class NormalItem: Item {
 
     }
     func evaluateMeaningAnswer(input: String, withAlternatives: Bool) -> (outcome: TestOutcome, qual: Int, alternatives: [Item]) {
-        let normalizedInput = String(normalizeMeaning(Xstring(input)))
+        let normalizedInput = String(normalizeMeaning(String(input)))
         var levenshtein = Levenshtein()
         let qual = evaluateMeaningAnswerInner(normalizedInput: normalizedInput, levenshtein: &levenshtein)
         var outcome: TestOutcome = qual > 0 ? .right : .wrong
         let alternatives = withAlternatives ? meaningAlternatives(meaning: normalizedInput) : []
         if outcome == .wrong && alternatives.contains(where: { (alternative: Item) in
-            (alternative as! NormalItem).readings.contains(where: { (reading: Xstring) in
+            (alternative as! NormalItem).readings.contains(where: { (reading: String) in
                 self.readings.contains(reading)
             })
         }) {
@@ -474,9 +467,9 @@ class Word : NormalItem, CustomStringConvertible {
 }
 class Kanji : NormalItem, CustomStringConvertible {
     init(json: NSDictionary) {
-        var readings: [Xstring] = []
-        var importantReadings: [Xstring] = []
-        var unimportantReadings: [Xstring] = []
+        var readings: [String] = []
+        var importantReadings: [String] = []
+        var unimportantReadings: [String] = []
         let importantKind = json["important_reading"] as! String
         for kind in ["kunyomi", "nanori", "onyomi"] {
             if let obj = json[kind], !(obj is NSNull) && !(obj as? NSString == "None") {
@@ -500,7 +493,7 @@ class Kanji : NormalItem, CustomStringConvertible {
     override var cliName: String { return ANSI.purple(String(self.name) + " /k") }
 }
 class Confusion: Item, CustomStringConvertible {
-    let characters: [Xstring]
+    let characters: [String]
     let items: [Item]
     let isWord: Bool
     init(line: String, isWord: Bool) {
@@ -509,11 +502,11 @@ class Confusion: Item, CustomStringConvertible {
             self.characters = line.split(separator: "/").map { trim($0) }
             allXs = Subete.instance.allWords
         } else {
-            self.characters = trim(line).map { Xstring(String($0)) } // xxx
+            self.characters = trim(line).map { String($0) }
             allXs = Subete.instance.allKanji
         }
         self.items = self.characters.map {
-			let item = allXs.findByName(String($0))
+			let item = allXs.findByName($0)
             if item == nil { fatalError("invalid item '\($0)' in confusion") }
             return item!
         }
@@ -535,14 +528,14 @@ protocol ItemListProtocol {
 }
 class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
     let items: [X]
-    let byName: [Xstring: X]
-    let byReading: [Xstring: [X]]
-    let byMeaning: [Xstring: [X]]
+    let byName: [String: X]
+    let byReading: [String: [X]]
+    let byMeaning: [String: [X]]
     init(_ items: [X]) {
         self.items = items
-        var byName: [Xstring: X] = [:]
-        var byReading: [Xstring: [X]] = [:]
-        var byMeaning: [Xstring: [X]] = [:]
+        var byName: [String: X] = [:]
+        var byReading: [String: [X]] = [:]
+        var byMeaning: [String: [X]] = [:]
         for item in items {
             if byName[item.name] != nil {
                 fatalError("duplicate \(X.self) item named \(item.name)")
@@ -565,13 +558,13 @@ class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
         return "ItemList[\(self.items)]"
     }
     func findByName(_ name: String) -> Item? {
-        return self.byName[Xstring(name)]
+        return self.byName[name]
     }
     func findByReading(_ reading: String) -> [Item] {
-        return self.byReading[Xstring(reading)] ?? []
+        return self.byReading[reading] ?? []
     }
     func findByMeaning(_ meaning: String) -> [Item] {
-        return self.byMeaning[Xstring(meaning)] ?? []
+        return self.byMeaning[meaning] ?? []
     }
     var vagueItems: [Item] {
         return self.items
@@ -600,7 +593,7 @@ struct TestResult {
             String(Int(Date().timeIntervalSince1970)),
             self.testKind.rawValue,
             self.item.kind.rawValue,
-            String(self.item.name),
+            self.item.name,
             self.outcome.rawValue
         ]
         return components.joined(separator: ":")
@@ -608,8 +601,8 @@ struct TestResult {
     static let retiredInfo: NSDictionary = loadYAML(path: "\(Subete.instance.basePath)/retired.yaml") as! NSDictionary
     static let retired: Set<String> = Set(retiredInfo["retired"] as! [String])
     static let replace: [String: String] = retiredInfo["replace"] as! [String: String]
-	static func parse(line: Xstring) throws -> TestResult? {
-        var components: [Xstring] = trim(line).split(separator: ":").map { Xstring($0) }
+	static func parse(line: String) throws -> TestResult? {
+        var components: [String] = trim(line).split(separator: ":").map { String($0) }
         var date: Date? = nil
         if components.count > 4 {
             
@@ -649,7 +642,7 @@ struct TestResult {
         let text = String(decoding: data, as: UTF8.self)
         return text.split(separator: "\n").compactMap {
 			do {
-				return try TestResult.parse(line: Xstring($0))
+				return try TestResult.parse(line: String($0))
 			} catch let e {
 				warn("error parsing log line: \(e)")
 				return nil
@@ -840,7 +833,7 @@ class Test {
             } else {
                 args = [Subete.instance.basePath + "/read-english.zsh", Test.meaningPrompt]
             }
-            let output = String(trim(try runAndGetOutput(args)))
+            let output = trim(try runAndGetOutput(args))
             
             if output == "" {
                 continue
@@ -989,9 +982,9 @@ struct WeightedList<T> {
 
 func main() {
     let _ = Subete()
-    /*while true {
+    while true {
 		time { Subete.instance.createSRSFromLog() }
-	}*/
+	}
     return
     //print(Subete.instance.allByKind(.word).findByMeaning(String(normalizeMeaning("to narrow"))))
     //return
