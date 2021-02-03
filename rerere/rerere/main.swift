@@ -252,7 +252,8 @@ class Subete {
             }
             test = t
         }
-        if let srsUpdate = try! test.markResult(outcome: outcome) {
+        let srsUpdate = try! test.markResult(outcome: outcome)
+        if !srsUpdate.isNoChangeOther {
 			print(srsUpdate.cliLabel)
 		}
     }
@@ -766,7 +767,7 @@ class Test {
         }
         if self.result == nil { fatalError("should have marked result") }
     }
-    func cliLabel(outcome: TestOutcome, qual: Int, srsUpdate: SRSUpdate?) -> String {
+    func cliLabel(outcome: TestOutcome, qual: Int, srsUpdate: SRSUpdate) -> String {
         let text: String
         var back: (String) -> String
         switch outcome {
@@ -783,11 +784,7 @@ class Test {
         } else if self.result?.outcome == .mu {
             back = ANSI.cback
         }
-        var label = back(text)
-        if let srsUpdate = srsUpdate {
-			label += " \(srsUpdate.cliLabel)"
-		}
-        return label
+        return back(text) + srsUpdate.cliLabel
     }
 
     func doCLIMeaningToReading(item: NormalItem) throws {
@@ -890,14 +887,14 @@ class Test {
             return output
         }
     }
-	func maybeMarkResult(outcome: TestOutcome, final: Bool) throws -> SRSUpdate? {
+	func maybeMarkResult(outcome: TestOutcome, final: Bool) throws -> SRSUpdate {
 		if self.result == nil && (outcome == .wrong || final) {
 			return try self.markResult(outcome: outcome)
 		} else {
-			return nil
+			return .noChangeOther
 		}
 	}
-    func markResult(outcome: TestOutcome?) throws -> SRSUpdate? {
+    func markResult(outcome: TestOutcome?) throws -> SRSUpdate {
         if self.result != nil {
             try self.removeFromLog()
             Subete.instance.srs?.revert(forItem: self.item)
@@ -905,10 +902,10 @@ class Test {
         if let outcome = outcome {
             self.result = TestResult(testKind: self.testKind, item: self.item, date: Date(), outcome: outcome)
             try self.addToLog()
-			return Subete.instance.srs?.update(forResult: self.result!)
+			return Subete.instance.srs!.update(forResult: self.result!)
         } else {
             self.result = nil
-            return nil
+            return .noChangeOther
         }
     }
 }
@@ -916,13 +913,26 @@ class Test {
 enum SRSUpdate {
 	case nextDays(Double)
 	case burned
+	case lockedOut
+	case noChangeOther
 	
+	var isNoChangeOther: Bool {
+		if case .noChangeOther = self {
+			return true
+		} else {
+			return false
+		}
+	}
 	var cliLabel: String {
 		switch self {
 			case .nextDays(let days):
-				return String(format: "+%.1fd", days)
+				return String(format: " +%.1fd", days)
 			case .burned:
-				return "🔥"
+				return " 🔥"
+			case .lockedOut:
+				return " ⟳"
+			case .noChangeOther:
+				return ""
 		}
 	}
 }
@@ -956,7 +966,7 @@ class SRS {
 			}
 			return info
 		}
-		static func update(info info0: ItemInfo?, forResult result: TestResult) -> ItemInfo? {
+		static func update(info info0: ItemInfo?, forResult result: TestResult) -> (ItemInfo?, SRSUpdate) {
 			let date = result.date ?? Date(timeIntervalSince1970: 0)
 			//print("updating \(String(describing: info0)) for result \(result)")
 			let info = updateIfStale(info: info0, date: date)
@@ -967,48 +977,41 @@ class SRS {
 				let sinceLast = date.timeIntervalSince(info.lastSeen)
 				//print("sinceLast=\(sinceLast)")
 				if sinceLast < 60*60*6 {
-					// lockout
-					return newInfo
+					return (newInfo, .lockedOut)
 				}
 				switch result.outcome {
 				case .mu:
-					return newInfo
+					return (newInfo, .noChangeOther)
 				case .right:
 					newInfo.points += max(sinceLast / (60*60*24), 1.0)
 					newInfo.urgentRetest = false
 					if newInfo.points >= 60 {
-						return nil
+						return (nil, .burned)
 					}
 				case .wrong:
 					newInfo.points /= 2
 					newInfo.urgentRetest = true
 				}
 				//print("outcome=\(result.outcome) newInfo.points = \(newInfo.points)")
-				return newInfo
+				return (newInfo, .nextDays(newInfo.nextTestDays))
 			} else {
 				if result.outcome == .wrong {
-					return ItemInfo(lastSeen: date, points: 0, urgentRetest: false)
+					let newInfo = ItemInfo(lastSeen: date, points: 0, urgentRetest: false)
+					return (newInfo, .nextDays(newInfo.nextTestDays))
 				}
-				return nil
-			}
-		}
-		static func toSRSUpdate(_ info: ItemInfo?) -> SRSUpdate {
-			if let info = info {
-				return .nextDays(info.nextTestDays)
-			} else {
-				return .burned
+				return (nil, .noChangeOther)
 			}
 		}
 
     }
     private var itemInfo: [Item: ItemInfo] = [:]
     private var backup: (Item, ItemInfo?)? = nil
-    func update(forResult result: TestResult) -> SRSUpdate? {
+    func update(forResult result: TestResult) -> SRSUpdate {
 		let info = itemInfo[result.item]
         self.backup = (result.item, info)
-        let res = ItemInfo.update(info: info, forResult: result)
+        let (res, srsUpdate) = ItemInfo.update(info: info, forResult: result)
         itemInfo[result.item] = res
-        return ItemInfo.toSRSUpdate(res)
+        return srsUpdate
     }
     func updateStales(date: Date) {
 		for (item, info) in itemInfo {
@@ -1033,16 +1036,16 @@ func testSRS() {
 							forResult: TestResult(testKind: .confusion,
 												  item: item,
 												  date: Date(timeIntervalSince1970: 0),
-												  outcome: .wrong))!
+												  outcome: .wrong)).0!
 	for i in 0... {
-		let next =
+		let (next, srsUpdate) =
 			SRS.ItemInfo.update(info: info,
 								forResult: TestResult(testKind: .confusion,
 													  item: item,
 													  date: info.nextTestDate,
 													  outcome: .right))
 		guard let next = next else { break }
-		print("\(i). \(next) \(SRS.ItemInfo.toSRSUpdate(next).cliLabel)")
+		print("\(i). \(next)\(srsUpdate.cliLabel)")
 		info = next
 	}
 	
