@@ -176,6 +176,8 @@ class Subete {
         let allWordConfusion = loadConfusion(path: basePath + "confusion-vocab.txt", isWord: true)
         self.allConfusion = ItemList(allKanjiConfusion + allWordConfusion)
         self.allItems = self.allWords.items + self.allKanji.items + self.allConfusion.items
+        print("loading srs")
+        self.srs = self.createSRSFromLog()
         print("done loading")
 
     }
@@ -210,11 +212,18 @@ class Subete {
         fh.closeFile()
         return ret
     }
-    func createSRSFromLog() {
+    func createSRSFromLog() -> SRS {
         let results = try! TestResult.readAllFromLog()
         let srs = SRS()
-        for result in results { srs.update(result) }
-        self.srs = srs
+        let srsEpoch = Date(timeIntervalSince1970: 1611966197)
+		for result in results {
+			guard let date = result.date else { continue }
+			if date < srsEpoch { continue }
+			
+			let _ = srs.update(forResult: result)
+		}
+		srs.updateStales(date: Date())
+		return srs
     }
     func handleBang(_ input: String, curTest: Test) {
         switch input {
@@ -243,7 +252,9 @@ class Subete {
             }
             test = t
         }
-        try! test.markResult(outcome: outcome)
+        if let srsUpdate = try! test.markResult(outcome: outcome) {
+			print(srsUpdate.cliLabel)
+		}
     }
 }
 
@@ -749,15 +760,13 @@ class Test {
         case .readingToMeaning:
             try self.doCLIReadingToMeaning(item: self.item as! NormalItem)
         case .characterToRM:
-            try self.doCLICharacterToRM(item: self.item as! NormalItem)
+            try self.doCLICharacterToRM(item: self.item as! NormalItem, final: true)
         case .confusion:
             try self.doCLIConfusion(item: self.item as! Confusion)
         }
-        if self.result == nil {
-            try! self.markResult(outcome: .right)
-        }
+        if self.result == nil { fatalError("should have marked result") }
     }
-    func cliLabel(outcome: TestOutcome, qual: Int) -> String {
+    func cliLabel(outcome: TestOutcome, qual: Int, srsUpdate: SRSUpdate?) -> String {
         let text: String
         var back: (String) -> String
         switch outcome {
@@ -774,7 +783,11 @@ class Test {
         } else if self.result?.outcome == .mu {
             back = ANSI.cback
         }
-        return back(text)
+        var label = back(text)
+        if let srsUpdate = srsUpdate {
+			label += " \(srsUpdate.cliLabel)"
+		}
+        return label
     }
 
     func doCLIMeaningToReading(item: NormalItem) throws {
@@ -786,17 +799,14 @@ class Test {
         while true {
             let k = try cliRead(prompt: prompt, kana: true)
             let (outcome, qual, alternatives) = item.evaluateReadingAnswer(input: k, withAlternatives: true)
-            var out: String = cliLabel(outcome: outcome, qual: qual)
+			let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: true)
+            var out: String = cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate)
             out += " " + item.cliName + " " + item.cliReadings(colorful: false)
             print(out)
             item.cliPrintAlternatives(alternatives, isReading: true)
             item.cliPrintSimilarMeaning()
         
-            if outcome == .right {
-                break
-            } else if self.result == nil {
-                try! self.markResult(outcome: outcome)
-            }
+            if outcome == .right { break }
         }
     }
     func doCLIReadingToMeaning(item: NormalItem) throws {
@@ -809,24 +819,22 @@ class Test {
         while true {
             let k: String = try cliRead(prompt: prompt, kana: false)
             let (outcome, qual, alternatives) = item.evaluateMeaningAnswer(input: k, withAlternatives: true)
-            print(cliLabel(outcome: outcome, qual: qual))
+			let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: true)
+            print(cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate))
             item.cliPrint(colorful: true)
             item.cliPrintAlternatives(alternatives, isReading: false)
             if outcome != .right {
                 item.cliPrintSameReadingIfFew()
-            }
-            if outcome == .right {
-                break
-            } else if self.result == nil {
-                try! self.markResult(outcome: outcome)
-            }
+            } else {
+				break
+			}
         }
     }
-    func doCLICharacterToRM(item: NormalItem) throws {
+    func doCLICharacterToRM(item: NormalItem, final: Bool) throws {
         let prompt = item.cliName
         
         enum Mode { case reading, meaning }
-        for mode in [Mode.reading, Mode.meaning].shuffled() {
+        for (modeIdx, mode) in [Mode.reading, Mode.meaning].shuffled().enumerated() {
             while true {
                 let k: String = try cliRead(prompt: prompt, kana: mode == .reading)
                 let outcome: TestOutcome
@@ -834,27 +842,26 @@ class Test {
                 let alternatives: [Item]
                 if mode == .meaning {
                     (outcome, qual, alternatives) = item.evaluateMeaningAnswer(input: k, withAlternatives: false)
-                    print(cliLabel(outcome: outcome, qual: qual))
+					let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: final && modeIdx == 1)
+                    print(cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate))
                     print(item.cliMeanings(colorful: true))
                     item.cliPrintMeaningAlternatives(alternatives)
                 } else {
                     (outcome, qual, _) = item.evaluateReadingAnswer(input: k, withAlternatives: false)
-                    print(cliLabel(outcome: outcome, qual: qual))
+					let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: final && modeIdx == 1)
+                    print(cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate))
                     print(item.cliReadings(colorful: true))
                 }
                 
                
-                if outcome == .right {
-                    break
-                } else if self.result == nil {
-                    try! self.markResult(outcome: outcome)
-                }
+                if outcome == .right { break }
             }
         }
     }
     func doCLIConfusion(item: Confusion) throws {
-        for subitem in item.items.shuffled() {
-            try doCLICharacterToRM(item: subitem as! NormalItem)
+		let items = item.items.shuffled()
+        for (i, subitem) in items.enumerated() {
+            try doCLICharacterToRM(item: subitem as! NormalItem, final: i == items.count - 1 )
         }
     }
     static let readingPrompt: String = ANSI.red("reading> ")
@@ -883,8 +890,14 @@ class Test {
             return output
         }
     }
-
-    func markResult(outcome: TestOutcome?) throws {
+	func maybeMarkResult(outcome: TestOutcome, final: Bool) throws -> SRSUpdate? {
+		if self.result == nil && (outcome == .wrong || final) {
+			return try self.markResult(outcome: outcome)
+		} else {
+			return nil
+		}
+	}
+    func markResult(outcome: TestOutcome?) throws -> SRSUpdate? {
         if self.result != nil {
             try self.removeFromLog()
             Subete.instance.srs?.revert(forItem: self.item)
@@ -892,76 +905,148 @@ class Test {
         if let outcome = outcome {
             self.result = TestResult(testKind: self.testKind, item: self.item, date: Date(), outcome: outcome)
             try self.addToLog()
-            Subete.instance.srs?.update(self.result!)
+			return Subete.instance.srs?.update(forResult: self.result!)
         } else {
             self.result = nil
+            return nil
         }
     }
 }
 
+enum SRSUpdate {
+	case nextDays(Double)
+	case burned
+	
+	var cliLabel: String {
+		switch self {
+			case .nextDays(let days):
+				return String(format: "+%.1fd", days)
+			case .burned:
+				return "🔥"
+		}
+	}
+}
+
 class SRS {
     struct ItemInfo {
-        var points: Int = 0
-        var lastSeen: Date? = nil
-        var level: Int {
-            return 0 // XXX
-        }
+		var lastSeen: Date
+        var points: Double
+        var urgentRetest: Bool
+
         var nextTestDays: Double {
-            guard let lastSeen = self.lastSeen else {
-                return Date()
-            }
+			if self.urgentRetest || self.points == 0 {
+				return 0.5
+			} else {
+				return pow(2.5, log2(self.points + 0.5))
+			}
 		}
         var nextTestDate: Date {
-            guard let lastSeen = self.lastSeen else {
-                return Date()
-            }
-            let interval: TimeInterval
-            let days = pow(2.5, self.level)
-            switch self.level {
-            case 0:
-                interval = 60*60*12
-            default:
-                fatalError("?")
-            }
-            return lastSeen + interval
+			//print("points=\(self.points) nextTestDays=\(self.nextTestDays)")
+            return self.lastSeen + self.nextTestDays * 60 * 60 * 24
         }
+        var timePastDue: TimeInterval? {
+			let next = self.nextTestDate, now = Date()
+			return now >= next ? now.timeIntervalSince(next) : nil
+		}
+		static func updateIfStale(info: ItemInfo?, date: Date) -> ItemInfo? {
+			guard let info = info else { return nil }
+			if date.timeIntervalSince(info.lastSeen) > 60 * 60 * 24 * 60 {
+				//print("staling")
+				return nil
+			}
+			return info
+		}
+		static func update(info info0: ItemInfo?, forResult result: TestResult) -> ItemInfo? {
+			let date = result.date ?? Date(timeIntervalSince1970: 0)
+			//print("updating \(String(describing: info0)) for result \(result)")
+			let info = updateIfStale(info: info0, date: date)
+			
+			if let info = info {
+				var newInfo = info
+				newInfo.lastSeen = date
+				let sinceLast = date.timeIntervalSince(info.lastSeen)
+				//print("sinceLast=\(sinceLast)")
+				if sinceLast < 60*60*6 {
+					// lockout
+					return newInfo
+				}
+				switch result.outcome {
+				case .mu:
+					return newInfo
+				case .right:
+					newInfo.points += max(sinceLast / (60*60*24), 1.0)
+					newInfo.urgentRetest = false
+					if newInfo.points >= 60 {
+						return nil
+					}
+				case .wrong:
+					newInfo.points /= 2
+					newInfo.urgentRetest = true
+				}
+				//print("outcome=\(result.outcome) newInfo.points = \(newInfo.points)")
+				return newInfo
+			} else {
+				if result.outcome == .wrong {
+					return ItemInfo(lastSeen: date, points: 0, urgentRetest: false)
+				}
+				return nil
+			}
+		}
+		static func toSRSUpdate(_ info: ItemInfo?) -> SRSUpdate {
+			if let info = info {
+				return .nextDays(info.nextTestDays)
+			} else {
+				return .burned
+			}
+		}
+
     }
-    var itemInfo: [Item: ItemInfo] = [:]
-    var backup: (Item, ItemInfo)? = nil
-    func update(_ result: TestResult) {
-        var info = itemInfo[result.item] ?? ItemInfo()
+    private var itemInfo: [Item: ItemInfo] = [:]
+    private var backup: (Item, ItemInfo?)? = nil
+    func update(forResult result: TestResult) -> SRSUpdate? {
+		let info = itemInfo[result.item]
         self.backup = (result.item, info)
-        updateInner(info: &info, forResult: result)
-        info.lastSeen = result.date
-        itemInfo[result.item] = info
+        let res = ItemInfo.update(info: info, forResult: result)
+        itemInfo[result.item] = res
+        return ItemInfo.toSRSUpdate(res)
     }
+    func updateStales(date: Date) {
+		for (item, info) in itemInfo {
+			itemInfo[item] = ItemInfo.updateIfStale(info: info, date: date)
+		}
+	}
     func revert(forItem item: Item) {
         let backup = self.backup!
         ensure(backup.0 == item)
         self.itemInfo[backup.0] = backup.1
         self.backup = nil
     }
-    func updateInner(info: inout ItemInfo, forResult result: TestResult) {
-		if let lastSeen = info.lastSeen, let date = result.date {
-            let interval = date.timeIntervalSince(lastSeen)
-            if interval < 60*60*6 {
-				// lockout
-				return
-			}
-        }
-        switch result.outcome {
-        case .mu:
-			return
-		case .right:
-			info.points += 1
-		case .wrong:
-			info.points /= 2
-		}
-		
-		
+    func info(item: Item) -> ItemInfo? {
+		return self.itemInfo[item]
 	}
 }
 
+func testSRS() {
+	let item = Item(name: "test")
+	var info: SRS.ItemInfo =
+		SRS.ItemInfo.update(info: nil,
+							forResult: TestResult(testKind: .confusion,
+												  item: item,
+												  date: Date(timeIntervalSince1970: 0),
+												  outcome: .wrong))!
+	for i in 0... {
+		let next =
+			SRS.ItemInfo.update(info: info,
+								forResult: TestResult(testKind: .confusion,
+													  item: item,
+													  date: info.nextTestDate,
+													  outcome: .right))
+		guard let next = next else { break }
+		print("\(i). \(next) \(SRS.ItemInfo.toSRSUpdate(next).cliLabel)")
+		info = next
+	}
+	
+}
 
 struct WeightedList<T> {
     struct Entry {
@@ -974,17 +1059,17 @@ struct WeightedList<T> {
     var totalUntakenWeight: Double = 0
 
     init() {}
+    init(items: [(T, Double)]) {
+		for (item, weight) in items {
+			self.add(item, weight: weight)
+		}
+    }
 
     var totalWeight: Double {
         return entries.last?.cumulativeWeight ?? 0
     }
     var isEmpty: Bool { return entries.isEmpty }
     
-    mutating func addAll(_ values: [T], weight: Double) {
-        for value in values {
-            add(value, weight: weight)
-        }
-    }
     mutating func add(_ value: T, weight: Double) {
         entries.append(Entry(value: value, weight: weight, cumulativeWeight: totalWeight + weight, taken: false))
         totalUntakenWeight += weight
@@ -1035,10 +1120,7 @@ struct WeightedList<T> {
 
 func main() {
     let _ = Subete()
-    
-    //while true { time { Subete.instance.createSRSFromLog() } }
-	
-    return
+    //testSRS(); return
     //print(Subete.instance.allByKind(.word).findByMeaning(String(normalizeMeaning("to narrow"))))
     //return
     let argv = CommandLine.arguments
@@ -1046,30 +1128,63 @@ func main() {
         fatalError("too many CLI arguments")
     }
     let mode = argv.count > 1 ? argv[1] : "all"
-    var items: WeightedList<Item> = WeightedList()
+    
+    var remainingItems: Set<Item> = Set()
+    
+	let useSRS = true, useRandom = true, minItems = 50, maxItems = 75, minRandomItems = 25
+	
+    if useSRS {
+		let srs = Subete.instance.srs!
+		let now = Date()
+		var srsItems: [(nextTestDate: Date, item: Item)] = Subete.instance.allItems.compactMap { (item) in
+			guard let nextTestDate = srs.info(item: item)?.nextTestDate else { return nil }
+			return nextTestDate <= now ? (nextTestDate: nextTestDate, item: item) : nil
+		}
+		print("got \(srsItems.count) SRS items")
+		let maxSRSItems = maxItems - minRandomItems
+		if srsItems.count > maxSRSItems {
+			srsItems.sort { $0.nextTestDate > $1.nextTestDate}
+			srsItems = Array(srsItems[0..<maxSRSItems])
+			print("...but limiting to \(maxSRSItems)")
+		}
+	
+		for (_, item) in srsItems { remainingItems.insert(item) }
+		
+	}
+	
+	if useRandom {
+		var items: [(Item, Double)] = []
+		switch mode {
+			case "all":
+				items += (Subete.instance.allWords.items + Subete.instance.allKanji.items).map { ($0, 1.0) }
+				items += Subete.instance.allConfusion.items.map { ($0, 10.0) }
+			case "confusion":
+				items += Subete.instance.allConfusion.items.map { ($0, 1.0) }
+			default:
+				fatalError("unknown mode \(mode)")
+		}
+		var lottery: WeightedList<Item> = WeightedList(items: items)
+		var count = 0
+		while (remainingItems.count < minItems || count < minRandomItems) && !lottery.isEmpty {
+			remainingItems.insert(lottery.takeRandomElement()!)
+			count += 1
+		}
+	}
+    
     //print("w \(Subete.instance.allItems.count) \(Subete.instance.allConfusion.items.count)")
-    switch mode {
-        case "all":
-            items.addAll(Subete.instance.allItems, weight: 1.0)
-            items.addAll(Subete.instance.allConfusion.items, weight: 10.0)
-        case "confusion":
-            items.addAll(Subete.instance.allConfusion.items, weight: 1.0)
-        default:
-            fatalError("unknown mode \(mode)")
-    }
+
+    
+    
 
     //let items: [Item] 
     //let items: [Item] = Subete.instance.allConfusion.items.filter { $0.isWord }
-    var remainingItems: Set<Item> = Set()
-    while remainingItems.count < 50 && !items.isEmpty {
-        remainingItems.insert(items.takeRandomElement()!)
-    }
+    
     var numDone = 0
     do {
         while let item = remainingItems.randomElement() {
             let testKind = item.availableTests.randomElement()!
             let test = Test(kind: testKind, item: item)
-            print("[\(numDone)]") // TODO remainingItems
+            print("[\(numDone) | \(remainingItems.count)]")
             try test.cliGo()
             numDone += 1
             if test.result!.outcome == .right {
