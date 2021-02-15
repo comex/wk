@@ -1,4 +1,5 @@
 #!/usr/local/bin/python2
+XXX outdated
 # -*- coding: utf-8 -*-
 
 import json, random, curses, subprocess, os, unicodedata, re, math, sys, codecs, time, codecs, fcntl
