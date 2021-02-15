@@ -54,9 +54,6 @@ func trim(_ s: Substring) -> String {
 func commaSplitNoTrim(_ s: String) -> [String] {
     return s.split(separator: ",").map { String($0) }
 }
-func commaJoin(_ ss: [String]) -> String {
-    return ss.joined(separator: ", ")
-}
 func ensure(_ condition: @autoclosure () -> Bool, _ message: @autoclosure () -> String = String(), file: StaticString = #file, line: UInt = #line) {
     if !condition() {
         fatalError(message(), file: file, line: line)
@@ -74,9 +71,9 @@ func loadJSON(path: String) -> Any {
 func loadYAML(path: String) -> Any {
     return try! Yams.load(yaml: try! String(contentsOf: URL(fileURLWithPath: path)))!
 }
-func loadJSONAndExtraYAML(basePath: String, stem: String) -> [NSDictionary] {
-    let base = loadJSON(path: "\(basePath)/\(stem).json") as! [NSDictionary]
-    let extra = loadYAML(path: "\(basePath)/extra-\(stem).yaml") as! [NSDictionary]
+func loadJSONAndExtraYAML<T: JSONInit>(basePath: String, stem: String, class: T.Type) -> [T] {
+    let base = (loadJSON(path: "\(basePath)/\(stem).json") as! [NSDictionary]).map { T(json: $0, relaxed: false) }
+    let extra = (loadYAML(path: "\(basePath)/extra-\(stem).yaml") as! [NSDictionary]).map { T(json: $0, relaxed: true) }
     return base + extra
 }
 
@@ -169,8 +166,8 @@ class Subete {
     init() {
         Subete.instance = self
         print("loading json")
-        self.allWords = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "vocabulary").map { Word(json: $0) })
-        self.allKanji = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "kanji").map { Kanji(json: $0) })
+        self.allWords = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "vocabulary", class: Word.self))
+        self.allKanji = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "kanji", class: Kanji.self))
         print("loading confusion")
         let allKanjiConfusion = loadConfusion(path: basePath + "confusion.txt", isWord: false)
         let allWordConfusion = loadConfusion(path: basePath + "confusion-vocab.txt", isWord: true)
@@ -300,21 +297,85 @@ func normalizeReadingTrimmed(_ input: String) -> String {
     return reading
 }
 
-class NormalItem: Item {
-    let meanings: [String]
-    let readings: [String]
-    let importantReadings: [String]
-    let unimportantReadings: [String]
+enum IngType: Comparable {
+    case primary, secondary, whitelist
+}
+
+struct Ing {
+    let text: String
+    let type: IngType
+    let acceptedAnswerWK: Bool
+
+    var acceptedAnswerForMe: Bool {
+        // it's fiiiiine
+        return true
+    }
+
+    init(readingWithJSON json: Any, relaxed: Bool) {
+        if let text = json as? String, relaxed {
+            self.text = text
+            self.type = .primary
+            self.acceptedAnswerWK = true
+        } else {
+            let json = json as! NSDictionary
+            self.text = json["reading"] as! String
+            self.type = json["primary"] as! Bool ? .primary : .secondary
+            self.acceptedAnswerWK = json["accepted_answer"] as! Bool
+        }
+    }
+    init(meaningWithJSON json: Any, relaxed: Bool) {
+        if let text = json as? String, relaxed {
+            self.text = text
+            self.type = .primary
+            self.acceptedAnswerWK = true
+        } else {
+            let json = json as! NSDictionary
+            self.text = (json["meaning"] as! String).lowercased()
+            self.type = json["primary"] as! Bool ? .primary : .secondary
+            self.acceptedAnswerWK = json["accepted_answer"] as! Bool
+        }
+    }
+    init(auxiliaryMeaningWithJSON json: Any) {
+        let json = json as! NSDictionary
+        self.text = json["meaning"] as! String
+        let type = json["type"] as! String
+        switch type {
+        case "whitelist":
+            self.type = .whitelist
+            self.acceptedAnswerWK = true
+        default:
+            fatalError("unknown auxiliary meaning type \(type)")
+        }
+    }
+}
+
+protocol JSONInit {
+    init(json: NSDictionary, relaxed: Bool)
+}
+
+class NormalItem: Item, JSONInit {
+    let meanings: [Ing]
+    let readings: [Ing]
     let character: String
-    let json: NSDictionary
+    //let json: NSDictionary
     
-    init(json: NSDictionary, readings: [String], importantReadings: [String], unimportantReadings: [String]) {
-        self.json = json
-        self.character = trim(json["character"] as! String)
-        self.meanings = (json["meaning"] as! String).splut(separator: 44, includingSpaces: true, map: normalizeMeaningTrimmed)
-        self.readings = readings
-        self.importantReadings = importantReadings
-        self.unimportantReadings = unimportantReadings
+    required init(json: NSDictionary, relaxed: Bool) {
+        let data: NSDictionary
+        if let d = json["data"] {
+            data = d as! NSDictionary
+        } else {
+            if !relaxed { fatalError("expected 'data'") }
+            data = json
+        }
+
+        //self.json = json
+        self.character = trim(data["characters"] as! String)
+        self.readings = (data["readings"] as! [Any]).map { Ing(readingWithJSON: $0, relaxed: relaxed) }
+        var meanings = (data["meanings"] as! [Any]).map { Ing(meaningWithJSON: $0, relaxed: relaxed) }
+        if let auxiliaryMeanings = json["auxiliary_meanings"] {
+            meanings += (auxiliaryMeanings as! [Any]).map { Ing(auxiliaryMeaningWithJSON: $0) }
+        }
+        self.meanings = meanings
         super.init(name: self.character)
     }
     func readingAlternatives(reading: String) -> [Item] {
@@ -357,7 +418,7 @@ class NormalItem: Item {
     func similarMeaning() -> [Item] {
         var set: Set<Item> = []
         for meaning in self.meanings {
-            set.formUnion(Subete.instance.allByKind(self.kind).findByMeaning(String(meaning)))
+            set.formUnion(Subete.instance.allByKind(self.kind).findByMeaning(meaning.text))
         }
         set.remove(self)
         return Array(set).sorted()
@@ -373,7 +434,7 @@ class NormalItem: Item {
     func sameReading() -> [Item] {
         var set: Set<Item> = []
         for reading in self.readings {
-            set.formUnion(Subete.instance.allByKind(self.kind).findByReading(String(reading)))
+            set.formUnion(Subete.instance.allByKind(self.kind).findByReading(reading.text))
         }
         set.remove(self)
         return Array(set).sorted()
@@ -390,26 +451,33 @@ class NormalItem: Item {
 
     // without alternatives, without normalization, just return qual
     func evaluateMeaningAnswerInner(normalizedInput: String, levenshtein: inout Levenshtein) -> Int {
-        var bestQual = 0
+        var bestQual: Int = 0
         for meaning in self.meanings {
-            let okDist = Int(round(0.4 * Double(meaning.count)))
-            if normalizedInput == meaning {
-                bestQual = max(bestQual, 2)
-			} else if levenshtein.distance(between: normalizedInput, and: String(meaning)) <= okDist {
-                bestQual = max(bestQual, 1)
+            let okDist = Int(round(0.4 * Double(meaning.text.count)))
+            let thisQual: Int
+            if normalizedInput == meaning.text {
+                thisQual = 2
+			} else if levenshtein.distance(between: normalizedInput, and: meaning.text) <= okDist {
+                thisQual = 1
+            } else {
+                continue
+            }
+            bestQual = max(bestQual, thisQual)
+        }
+        return bestQual
+    }
+
+    func evaluateReadingAnswerInner(normalizedInput: String) -> Int {
+        var bestQual: Int = 0
+        for reading in self.readings {
+            if reading.text == normalizedInput {
+                let thisQual = reading.type == .primary ? 2 : 1
+                bestQual = max(bestQual, thisQual)
             }
         }
         return bestQual
     }
-    func evaluateReadingAnswerInner(normalizedInput reading: String) -> Int {
-        if self.importantReadings.contains(String(reading)) {
-            return 2
-        } else if self.unimportantReadings.contains(String(reading)) {
-            return 1
-        } else {
-            return 0
-        }
-    }
+
     func evaluateReadingAnswer(input: String, withAlternatives: Bool) -> (outcome: TestOutcome, qual: Int, alternatives: [Item]) {
         // TODO this sucks
         let normalizedInput = normalizeReadingTrimmed(trim(input))
@@ -417,8 +485,10 @@ class NormalItem: Item {
         var outcome: TestOutcome = qual > 0 ? .right : .wrong
         let alternatives = withAlternatives ? readingAlternatives(reading: normalizedInput) : []
         if outcome == .wrong && alternatives.contains(where: { (alternative: Item) in
-            (alternative as! NormalItem).meanings.contains(where: { (meaning: String) in
-                self.meanings.contains(meaning)
+            (alternative as! NormalItem).meanings.contains(where: { (meaning: Ing) in
+                meaning.acceptedAnswerForMe && self.meanings.contains(where: { (meaning2: Ing) in
+                    meaning2.acceptedAnswerForMe && meaning.text == meaning2.text
+                })
             })
         }) {
             outcome = .mu
@@ -433,25 +503,37 @@ class NormalItem: Item {
         var outcome: TestOutcome = qual > 0 ? .right : .wrong
         let alternatives = withAlternatives ? meaningAlternatives(meaning: normalizedInput) : []
         if outcome == .wrong && alternatives.contains(where: { (alternative: Item) in
-            (alternative as! NormalItem).readings.contains(where: { (reading: String) in
-                self.readings.contains(reading)
+            (alternative as! NormalItem).readings.contains(where: { (reading: Ing) in
+                reading.acceptedAnswerForMe && self.readings.contains(where: { (reading2: Ing) in
+                    reading2.acceptedAnswerForMe && reading.text == reading2.text
+                })
             })
         }) {
             outcome = .mu
         }
         return (outcome, qual, alternatives)
     }
-    func cliReadings(colorful: Bool) -> String {
-        let x = commaJoin(self.importantReadings)
-        var out = colorful ? ANSI.red(x) : x
-        if !self.unimportantReadings.isEmpty {
-            let y = commaJoin(self.unimportantReadings)
-            out += " >> " + (colorful ? ANSI.dred(y) : y)
+    func cliIngs(ings: [Ing], colorful: Bool) -> String {
+        var prev: Ing? = nil
+        var out: String = ""
+        for ing in (ings.sorted { $0.type < $1.type }) {
+            if ing.type != .whitelist {
+                let separator = prev == nil ? "" :
+                                prev!.type == ing.type ? ", " :
+                                " >> ";
+                var colored = ing.text
+                if colorful { colored = (ing.type == .primary ? ANSI.red : ANSI.dred)(colored) }
+                out += separator + colored
+            }
+            prev = ing
         }
         return out
     }
+    func cliReadings(colorful: Bool) -> String {
+        return self.cliIngs(ings: self.readings, colorful: colorful)
+    }
     func cliMeanings(colorful: Bool) -> String {
-        return commaJoin(self.meanings)
+        return self.cliIngs(ings: self.meanings, colorful: false) // yes, ignore colorful for now
     }
     override func cliPrint(colorful: Bool) {
         print("\(self.cliName) \(self.cliReadings(colorful: colorful)) \(self.cliMeanings(colorful: colorful))")
@@ -467,10 +549,6 @@ class NormalItem: Item {
     override var availableTests: [TestKind] { return [.characterToRM, .meaningToReading, .readingToMeaning] }
 }
 class Word : NormalItem, CustomStringConvertible {
-    init(json: NSDictionary) {
-        let readings = (json["kana"] as! String).splut(separator: 44, includingSpaces: true, map:normalizeReadingTrimmed)
-        super.init(json: json, readings: readings, importantReadings: readings, unimportantReadings: [])
-    }
     var description: String {
         return "<Word \(self.character)>"
     }
@@ -478,26 +556,6 @@ class Word : NormalItem, CustomStringConvertible {
     override var cliName: String { return String(self.name) }
 }
 class Kanji : NormalItem, CustomStringConvertible {
-    init(json: NSDictionary) {
-        var readings: [String] = []
-        var importantReadings: [String] = []
-        var unimportantReadings: [String] = []
-        let importantKind = json["important_reading"] as! String
-        for kind in ["kunyomi", "nanori", "onyomi"] {
-            if let obj = json[kind], !(obj is NSNull) && !(obj as? NSString == "None") {
-                let theseReadings = (obj as! String).splut(separator: 44, includingSpaces: true, map: normalizeReadingTrimmed)
-                readings += theseReadings
-                if kind == importantKind {
-                    importantReadings += theseReadings
-                } else {
-                    unimportantReadings += theseReadings
-                }
-            }
-        }
-        ensure(!readings.isEmpty)
-        ensure(!importantReadings.isEmpty)
-        super.init(json: json, readings: readings, importantReadings: importantReadings, unimportantReadings: unimportantReadings)
-    }
     var description: String {
         return "<Kanji \(self.character)>"
     }
@@ -555,10 +613,10 @@ class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
             byName[item.name] = item
             if let normalItem = item as? NormalItem {
                 for reading in normalItem.readings {
-                    byReading[reading] = (byReading[reading] ?? []) + [item]
+                    byReading[reading.text] = (byReading[reading.text] ?? []) + [item]
                 }
                 for meaning in normalItem.meanings {
-                    byMeaning[meaning] = (byMeaning[meaning] ?? []) + [item]
+                    byMeaning[meaning.text] = (byMeaning[meaning.text] ?? []) + [item]
                 }
             }
         }
@@ -712,6 +770,7 @@ struct ANSI {
     static func rback(_ s: String) -> String { return color("41", s) }
     static func cback(_ s: String) -> String { return color("106", s) }
 }
+
 class Test {
     let testKind: TestKind
     let item: Item
@@ -788,7 +847,7 @@ class Test {
     }
 
     func doCLIMeaningToReading(item: NormalItem) throws {
-        var prompt = commaJoin(item.meanings)
+        var prompt = item.cliMeanings(colorful: false)
         prompt = item.tildify(prompt)
         if item is Kanji {
             prompt = ANSI.purple(prompt) + " /k"
@@ -807,7 +866,6 @@ class Test {
         }
     }
     func doCLIReadingToMeaning(item: NormalItem) throws {
-        //var prompt = commaJoin(item.readings)
         var prompt = item.cliReadings(colorful: false)
         prompt = item.tildify(prompt)
         if item is Kanji {
