@@ -1,0 +1,8 @@
+[package]
+authors = ["comex <comexk@gmail.com>"]
+edition = "2018"
+name = "preproc_jmdict"
+version = "0.1.0"
+[dependencies]
+roxmltree = "0.14"
+
