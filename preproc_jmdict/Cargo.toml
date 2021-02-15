@@ -4,5 +4,6 @@ edition = "2018"
 name = "preproc_jmdict"
 version = "0.1.0"
 [dependencies]
-roxmltree = "0.14"
+serde = { version = "1.0", features = [ "derive" ] }
+quick-xml = { version = "0.17", features = [ "serialize" ] }
 
