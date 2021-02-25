@@ -1,0 +1,5 @@
+*.sw[op]
+.swiftpm
+*.pyc
+target
+jmdict.lmdb
