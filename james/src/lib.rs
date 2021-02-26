@@ -2,6 +2,7 @@ use serde::{Serialize, Deserialize};
 use itertools::Itertools;
 use regex::{Regex, Captures};
 use lazy_static::lazy_static;
+use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct KEle {
@@ -68,7 +69,6 @@ pub struct Sense {
 }
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct Entry {
-    #[serde(skip_serializing)]
     pub ent_seq: u32,
     #[serde(default)]
     pub k_ele: Vec<KEle>,
@@ -266,9 +266,12 @@ static REPLACEMENTS: phf::Map<&'static str, &'static str> = phf::phf_map! {
 };
 
 lazy_static! {
-    static ref REPLACEMENTS_REGEX: Regex =
-        Regex::new(&REPLACEMENTS.keys().map(|s| regex::escape(s)).join("|"))
-            .expect("regex");
+    static ref REPLACEMENTS_REGEX: Regex = {
+        let keys: Vec<_> = REPLACEMENTS.keys().sorted().collect();
+        Regex::new(&keys.iter().rev()
+                   .map(|s| regex::escape(s)).join("|"))
+            .expect("regex")
+    };
 }
 
 pub fn query_to_key(query: &str) -> String {
@@ -286,7 +289,10 @@ pub fn query_to_key(query: &str) -> String {
     let mut out: String = out.to_lowercase();
     for _ in 0..2 {
         out = REPLACEMENTS_REGEX.replace_all(&out,
-            |x: &Captures| -> &'static str { REPLACEMENTS[&x[0]] }
+            |x: &Captures| -> &'static str { 
+                //println!("replaced {}", &x[0]);
+                REPLACEMENTS[&x[0]]
+            }
         ).into_owned();
     }
     let out: String = out.chars()
@@ -294,7 +300,17 @@ pub fn query_to_key(query: &str) -> String {
         .dedup_by(|&c1, &c2| { c1 == c2 && c1 < (0x80 as char) })
         .collect();
 
-    println!("'{}' => '{}'", query, out);
+    //println!("'{}' => '{}'", query, out);
     out
+}
 
+pub fn db_path() -> PathBuf {
+    "../jmdict.lmdb".into()
+}
+
+pub fn db_environment_builder() -> lmdb::EnvironmentBuilder {
+    let mut eb = lmdb::Environment::new();
+    eb.set_max_dbs(2);
+    eb.set_map_size(1024 * 1024 * 128);
+    eb
 }
