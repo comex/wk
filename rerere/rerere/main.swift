@@ -3,6 +3,7 @@
 // TODO mu overwrites a later wrong?
 import Foundation
 import Yams
+import ArgumentParser
 
 // TODO(fixed?): ~ is broken
 // TODO: !wrong doesn't act as expected when halfway through a k2rm
@@ -996,68 +997,81 @@ enum SRSUpdate {
 }
 
 class SRS {
-    struct ItemInfo {
-		var lastSeen: Date
-        var points: Double
-        var urgentRetest: Bool
+    enum ItemInfo {
+        case active((lastSeen: Date, points: Double, urgentRetest: Bool))
+        case burned
 
-        var nextTestDays: Double {
-			if self.urgentRetest || self.points == 0 {
-				return 0.5
-			} else {
-				return pow(2.5, log2(self.points + 0.5))
+        var nextTestDays: Double? {
+            switch self {
+                case .active(let info):
+			        if info.urgentRetest || info.points == 0 {
+				        return 0.5
+			        } else {
+				        return pow(2.5, log2(info.points + 0.5))
+			        }
+			    case .burned:
+			        return nil
 			}
 		}
-        var nextTestDate: Date {
+        var nextTestDate: Date? {
 			//print("points=\(self.points) nextTestDays=\(self.nextTestDays)")
-            return self.lastSeen + self.nextTestDays * 60 * 60 * 24
+            switch self {
+                case let .active(info):
+                    return info.lastSeen + self.nextTestDays! * 60 * 60 * 24
+                case .burned:
+                    return nil
+            }
         }
         var timePastDue: TimeInterval? {
-			let next = self.nextTestDate, now = Date()
+			guard let next = self.nextTestDate else { return nil }
+			let now = Date()
 			return now >= next ? now.timeIntervalSince(next) : nil
 		}
-		static func updateIfStale(info: ItemInfo?, date: Date) -> ItemInfo? {
-			guard let info = info else { return nil }
-			if date.timeIntervalSince(info.lastSeen) > 60 * 60 * 24 * 60 {
-				//print("staling")
-				return nil
+		mutating func updateIfStale(date: Date) {
+		    if case let .active(info) = self {
+			    if date.timeIntervalSince(info.lastSeen) > 60 * 60 * 24 * 60 {
+				    //print("staling \(self)")
+				    self = .burned
+			    }
 			}
-			return info
 		}
-		static func update(info info0: ItemInfo?, forResult result: TestResult) -> (ItemInfo?, SRSUpdate) {
+		mutating func update(forResult result: TestResult) -> SRSUpdate {
 			let date = result.date ?? Date(timeIntervalSince1970: 0)
 			//print("updating \(String(describing: info0)) for result \(result)")
-			let info = updateIfStale(info: info0, date: date)
+			self.updateIfStale(date: date)
 			
-			if let info = info {
-				var newInfo = info
-				newInfo.lastSeen = date
-				let sinceLast = date.timeIntervalSince(info.lastSeen)
-				//print("sinceLast=\(sinceLast)")
-				if sinceLast < 60*60*6 {
-					return (newInfo, .lockedOut)
-				}
-				switch result.outcome {
-				case .mu:
-					return (newInfo, .noChangeOther)
-				case .right:
-					newInfo.points += max(sinceLast / (60*60*24), 1.0)
-					newInfo.urgentRetest = false
-					if newInfo.points >= 60 {
-						return (nil, .burned)
-					}
-				case .wrong:
-					newInfo.points /= 2
-					newInfo.urgentRetest = true
-				}
-				//print("outcome=\(result.outcome) newInfo.points = \(newInfo.points)")
-				return (newInfo, .nextDays(newInfo.nextTestDays))
-			} else {
-				if result.outcome == .wrong {
-					let newInfo = ItemInfo(lastSeen: date, points: 0, urgentRetest: false)
-					return (newInfo, .nextDays(newInfo.nextTestDays))
-				}
-				return (nil, .noChangeOther)
+			switch self {
+			    case .active(var info):
+				    let sinceLast = date.timeIntervalSince(info.lastSeen)
+				    info.lastSeen = date
+				    //print("sinceLast=\(sinceLast)")
+				    var update: SRSUpdate? = nil
+				    if sinceLast < 60*60*6 {
+					    update = .lockedOut
+				    } else {
+				        switch result.outcome {
+				        case .mu:
+					        update = .noChangeOther
+				        case .right:
+					        info.points += max(sinceLast / (60*60*24), 1.0)
+					        info.urgentRetest = false
+					        if info.points >= 60 {
+					            update = .burned
+					        }
+				        case .wrong:
+					        info.points /= 2
+					        info.urgentRetest = true
+				        }
+				    }
+				    //print("outcome=\(result.outcome) newInfo.points = \(newInfo.points)")
+				    self = .active(info)
+				    return update ?? .nextDays(self.nextTestDays!)
+				case .burned:
+				    if result.outcome == .wrong {
+					    self = .active((lastSeen: date, points: 0, urgentRetest: false))
+					    return .nextDays(self.nextTestDays!)
+				    }
+				    return .noChangeOther
 			}
 		}
 
@@ -1065,15 +1079,16 @@ class SRS {
     private var itemInfo: [Item: ItemInfo] = [:]
     private var backup: (Item, ItemInfo?)? = nil
     func update(forResult result: TestResult) -> SRSUpdate {
-		let info = itemInfo[result.item]
+        var info = self.info(item: result.item)
         self.backup = (result.item, info)
-        let (res, srsUpdate) = ItemInfo.update(info: info, forResult: result)
-        itemInfo[result.item] = res
+        let srsUpdate = info.update(forResult: result)
+        itemInfo[result.item] = info
         return srsUpdate
     }
     func updateStales(date: Date) {
-		for (item, info) in itemInfo {
-			itemInfo[item] = ItemInfo.updateIfStale(info: info, date: date)
+		for (item, var info) in itemInfo {
+			info.updateIfStale(date: date)
+			itemInfo[item] = info
 		}
 	}
     func revert(forItem item: Item) {
@@ -1082,29 +1097,34 @@ class SRS {
         self.itemInfo[backup.0] = backup.1
         self.backup = nil
     }
-    func info(item: Item) -> ItemInfo? {
-		return self.itemInfo[item]
+    func info(item: Item) -> ItemInfo {
+		if let info = self.itemInfo[item] {
+		    return info
+		}
+		if item is Confusion && false {
+		    // XXX this is totally wrong
+		    return .active((lastSeen: Date(timeIntervalSince1970: 0), points: 0, urgentRetest: false))
+		} else {
+		    return .burned
+		}
 	}
 }
 
 func testSRS() {
 	let item = Item(name: "test")
-	var info: SRS.ItemInfo =
-		SRS.ItemInfo.update(info: nil,
-							forResult: TestResult(testKind: .confusion,
-												  item: item,
-												  date: Date(timeIntervalSince1970: 0),
-												  outcome: .wrong)).0!
+	var info: SRS.ItemInfo = .burned
+	let _ = info.update(
+	    forResult: TestResult(testKind: .confusion,
+							  item: item,
+							  date: Date(timeIntervalSince1970: 0),
+							  outcome: .wrong))
 	for i in 0... {
-		let (next, srsUpdate) =
-			SRS.ItemInfo.update(info: info,
-								forResult: TestResult(testKind: .confusion,
-													  item: item,
-													  date: info.nextTestDate,
-													  outcome: .right))
-		guard let next = next else { break }
-		print("\(i). \(next)\(srsUpdate.cliLabel)")
-		info = next
+		let srsUpdate = info.update(
+			forResult: TestResult(testKind: .confusion,
+								  item: item,
+								  date: info.nextTestDate,
+								  outcome: .right))
+		print("\(i). \(info)\(srsUpdate.cliLabel)")
 	}
 	
 }
@@ -1179,86 +1199,114 @@ struct WeightedList<T> {
     }
 }
 
-func main() {
-    let _ = Subete()
-    //testSRS(); return
-    //print(Subete.instance.allByKind(.word).findByMeaning(String(normalizeMeaning("to narrow"))))
-    //return
-    let argv = CommandLine.arguments
-    if argv.count > 2 {
-        fatalError("too many CLI arguments")
-    }
-    let mode = argv.count > 1 ? argv[1] : "all"
-    
-    var remainingItems: Set<Item> = Set()
-    
-	let useSRS = true, useRandom = true, minItems = 50, maxItems = 75, minRandomItems = 25
-	
-    if useSRS {
-		let srs = Subete.instance.srs!
-		let now = Date()
-		var srsItems: [(nextTestDate: Date, item: Item)] = Subete.instance.allItems.compactMap { (item) in
-			guard let nextTestDate = srs.info(item: item)?.nextTestDate else { return nil }
-			return nextTestDate <= now ? (nextTestDate: nextTestDate, item: item) : nil
-		}
-		print("got \(srsItems.count) SRS items")
-		let maxSRSItems = maxItems - minRandomItems
-		if srsItems.count > maxSRSItems {
-			srsItems.sort { $0.nextTestDate > $1.nextTestDate}
-			srsItems = Array(srsItems[0..<maxSRSItems])
-			print("...but limiting to \(maxSRSItems)")
-		}
-	
-		for (_, item) in srsItems { remainingItems.insert(item) }
-		
-	}
-	
-	if useRandom {
-		var items: [(Item, Double)] = []
-		switch mode {
-			case "all":
-				items += (Subete.instance.allWords.items + Subete.instance.allKanji.items).map { ($0, 1.0) }
-				items += Subete.instance.allConfusion.items.map { ($0, 10.0) }
-			case "confusion":
-				items += Subete.instance.allConfusion.items.map { ($0, 1.0) }
-			default:
-				fatalError("unknown mode \(mode)")
-		}
-		var lottery: WeightedList<Item> = WeightedList(items: items)
-		var count = 0
-		while (remainingItems.count < minItems || count < minRandomItems) && !lottery.isEmpty {
-			remainingItems.insert(lottery.takeRandomElement()!)
-			count += 1
-		}
-	}
-    
-    //print("w \(Subete.instance.allItems.count) \(Subete.instance.allConfusion.items.count)")
+enum RandomMode: String, CaseIterable, ExpressibleByArgument {
+    case all
+    case confusion
+}
 
-    
-    
+struct Rerere: ParsableCommand {
+    @Option() var minItems: Int?
+    @Option() var maxItems: Int?
+    @Option() var minRandomItemsFraction: Double = 0.33
+    @Option() var randomMode: RandomMode = .all
 
-    //let items: [Item] 
-    //let items: [Item] = Subete.instance.allConfusion.items.filter { $0.isWord }
-    
-    var numDone = 0
-    do {
-        while let item = remainingItems.randomElement() {
-            let testKind = item.availableTests.randomElement()!
-            let test = Test(kind: testKind, item: item)
-            print("[\(numDone) | \(remainingItems.count)]")
-            try test.cliGo()
-            numDone += 1
-            if test.result!.outcome == .right {
-                remainingItems.remove(item)
-            }
-            
+    func validate() throws {
+        guard minRandomItemsFraction >= 0 && minRandomItemsFraction <= 1 else {
+            throw ValidationError("min-random-items-fraction should be in [0,1]")
         }
-    } catch is ExitStatusError {
-        return
-    } catch let e {
-        try! { throw e }() // TODO
+        guard minItems == nil || maxItems == nil || minItems! < maxItems! else {
+            throw ValidationError("min-items should < max-items")
+        }
+    }
+
+    func run() {
+        let _ = Subete()
+        //testSRS(); return
+        //print(Subete.instance.allByKind(.word).findByMeaning(String(normalizeMeaning("to narrow"))))
+        //return
+        let defaultMinItems = 50
+        let defaultMaxItems = 75
+        let minItems: Int, maxItems: Int
+        switch (self.minItems, self.maxItems) {
+            case (nil, nil):
+                (minItems, maxItems) = (defaultMinItems, defaultMaxItems)
+            case (.some(let _minItems), nil):
+                (minItems, maxItems) = (_minItems, max(defaultMaxItems, _minItems))
+            case (nil, .some(let _maxItems)):
+                (minItems, maxItems) = (min(defaultMinItems, _maxItems), _maxItems)
+            case (.some(let _minItems), .some(let _maxItems)):
+                (minItems, maxItems) = (_minItems, _maxItems)
+        }
+        
+        var remainingItems: Set<Item> = Set()
+
+	    let srs = Subete.instance.srs!
+	    let now = Date()
+	    var srsItems: [(nextTestDate: Date, item: Item)] = Subete.instance.allItems.compactMap { (item) in
+		    guard let nextTestDate = srs.info(item: item).nextTestDate else { return nil }
+		    return nextTestDate <= now ? (nextTestDate: nextTestDate, item: item) : nil
+	    }
+	    print("got \(srsItems.count) SRS items")
+
+	    let numRandomItems: Int
+	    let numSRSItems: Int
+	    if self.minRandomItemsFraction >= 1.0 {
+	        numRandomItems = minItems
+	        numSRSItems = 0
+	    } else {
+	        var numItemsX: Double = Double(srsItems.count) / (1.0 - self.minRandomItemsFraction)
+	        numItemsX = max(numItemsX, Double(minItems))
+	        numItemsX = min(numItemsX, Double(maxItems))
+	        let numItems = Int(numItemsX)
+	        numSRSItems = min(srsItems.count, Int(numItemsX * (1.0 - self.minRandomItemsFraction)))
+	        numRandomItems = numItems - numSRSItems
+	    }
+
+	    if numSRSItems < srsItems.count {
+		    srsItems.sort { $0.nextTestDate > $1.nextTestDate}
+		    srsItems = Array(srsItems[0..<numSRSItems])
+		    print("...but limiting to \(numSRSItems)")
+	    }
+
+	    for (_, item) in srsItems { remainingItems.insert(item) }
+
+        do {
+		    var availRandomItems: [(Item, Double)] = []
+		    switch self.randomMode {
+			    case .all:
+				    availRandomItems += (Subete.instance.allWords.items + Subete.instance.allKanji.items).map { ($0, 1.0) }
+				    availRandomItems += Subete.instance.allConfusion.items.map { ($0, 10.0) }
+			    case .confusion:
+				    availRandomItems += Subete.instance.allConfusion.items.map { ($0, 1.0) }
+		    }
+		    var lottery: WeightedList<Item> = WeightedList(items: availRandomItems)
+		    var count = 0
+		    while count < numRandomItems && !lottery.isEmpty {
+			    remainingItems.insert(lottery.takeRandomElement()!)
+			    count += 1
+		    }
+	    }
+
+        var numDone = 0
+        do {
+            while let item = remainingItems.randomElement() {
+                let testKind = item.availableTests.randomElement()!
+                let test = Test(kind: testKind, item: item)
+                print("[\(numDone) | \(remainingItems.count)]")
+                try test.cliGo()
+                numDone += 1
+                if test.result!.outcome == .right {
+                    remainingItems.remove(item)
+                }
+                
+            }
+        } catch is ExitStatusError {
+            return
+        } catch let e {
+            try! { throw e }() // TODO
+        }
     }
 }
 Levenshtein.test()
 //print("   :xsamdfa: b  :  c:   ".splut(separator: 58, includingSpaces: true, map: { $0 }))
-main()
+Rerere.main()
