@@ -39,10 +39,10 @@ func isSpace(_ c: UTF8.CodeUnit) -> Bool {
 func trim(_ s: String) -> String {
     let a = s.utf8
     guard let start = a.firstIndex(where: { !isSpace($0) }) else {
-        return s
+        return ""
     }
     let end = a.lastIndex(where: { !isSpace($0) })!
-    if start == a.startIndex && end == a.endIndex {
+    if start == a.startIndex && a.index(after: end) == a.endIndex {
         return s
     } else {
 		return String(a[start...end])!
@@ -77,6 +77,11 @@ func loadJSONAndExtraYAML<T: JSONInit>(basePath: String, stem: String, class: T.
     let extra = (loadYAML(path: "\(basePath)/extra-\(stem).yaml") as! [NSDictionary]).map { T(json: $0, relaxed: true) }
     return base + extra
 }
+
+let startupDate: Date = Date()
+let myDateFormatter: DateFormatter = DateFormatter()
+myDateFormatter.locale = Locale(identifier: "en_US_POSIX")
+myDateFormatter.dateFormat = "yyyy-MM-dd"
 
 #if false
 func runAndGetOutput(_ args: [String]) throws -> String {
@@ -217,8 +222,10 @@ class Subete {
 		for result in results {
 			guard let date = result.date else { continue }
 			if date < srsEpoch { continue }
-			
 			let _ = srs.update(forResult: result)
+		}
+		for item in self.allItems {
+		    let _ = srs.info(item: item) // allow items with no results to stale
 		}
 		srs.updateStales(date: Date())
 		return srs
@@ -262,9 +269,11 @@ enum ItemKind: String {
 }
 class Item: Hashable, Equatable, Comparable {
     let name: String
+    let birthday: Date?
     let id: Int
-    init(name: String) {
+    init(name: String, birthday: Date? = nil) {
         self.name = name
+        self.birthday = birthday
         self.id = Subete.instance.nextItemID
         Subete.instance.nextItemID = self.id + 1
     }
@@ -569,12 +578,19 @@ class Confusion: Item, CustomStringConvertible {
     let isWord: Bool
     init(line: String, isWord: Bool) {
         let allXs: ItemListProtocol
+        let bits = trim(line).split(separator: " ")
+        if bits.count > 2 { fatalError("too many spaces in '\(line)'") }
+        let spec = bits[0]
         if isWord {
-            self.characters = line.split(separator: "/").map { trim($0) }
+            self.characters = spec.split(separator: "/").map { trim($0) }
             allXs = Subete.instance.allWords
         } else {
-            self.characters = trim(line).map { String($0) }
+            self.characters = spec.map { String($0) }
             allXs = Subete.instance.allKanji
+        }
+        var birthday: Date? = nil
+        if bits.count > 1 {
+            birthday = myDateFormatter.date(from: String(bits[1]))
         }
         self.items = self.characters.map {
 			let item = allXs.findByName($0)
@@ -582,7 +598,7 @@ class Confusion: Item, CustomStringConvertible {
             return item!
         }
         self.isWord = isWord
-        super.init(name: self.characters[0])
+        super.init(name: self.characters[0], birthday: birthday)
     }
     var description: String {
         return "<Confusion \(self.items)>"
@@ -1101,9 +1117,13 @@ class SRS {
 		if let info = self.itemInfo[item] {
 		    return info
 		}
-		if item is Confusion && false {
-		    // XXX this is totally wrong
-		    return .active((lastSeen: Date(timeIntervalSince1970: 0), points: 0, urgentRetest: false))
+		let info = self.defaultInfo(item: item)
+		self.itemInfo[item] = info
+		return info
+	}
+	private func defaultInfo(item: Item) -> ItemInfo {
+		if let birthday = item.birthday {
+		    return .active((lastSeen: min(birthday, startupDate), points: 0, urgentRetest: false))
 		} else {
 		    return .burned
 		}
