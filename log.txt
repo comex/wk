@@ -59847,7 +59847,6 @@ r2m:word:慰謝:wrong
 1617597716:kc:confusion:糾:right
 1617597722:m2r:word:平壌:right
 1617597730:kc:confusion:由:right
-1617597738:kc:confusion:昆:right
 1617597740:m2r:word:周囲:right
 1617597759:c2:word:変装:right
 1617597824:kc:confusion:健:right
@@ -59947,7 +59946,6 @@ r2m:word:慰謝:wrong
 1617684101:kc:confusion:授:wrong
 1617770429:c2:word:中古:right
 1617770432:r2m:word:焦がす:right
-1617770445:kc:confusion:昆:right
 1617770447:m2r:word:積極:wrong
 1617770491:m2r:kanji:援:right
 1617770513:kc:confusion:授:wrong
@@ -60401,7 +60399,6 @@ r2m:word:慰謝:wrong
 1618285996:r2m:word:役目:right
 1618286016:c2:word:積極:right
 1618286019:c2:word:家政婦:right
-1618286031:kc:confusion:昆:right
 1618286038:m2r:word:欠乏:wrong
 1618286049:r2m:word:傍ら:wrong
 1618286054:c2:word:別:right
