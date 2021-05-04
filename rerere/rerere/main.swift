@@ -1,3 +1,11 @@
+// TODO: mark items (newborns) as needing intensive SRS
+/*
+TODO
+got 53 SRS items
+...but limiting to 50
+[0 | 74]
+*/
+// TODO the test ended when I did !wrong at the beginning of the last item, then solved it
 // TODO FIX BANGS ON CONFUSION
 // TODO why didn't I get a reading match for 挟む
 // TODO mu overwrites a later wrong?
@@ -271,7 +279,7 @@ class Item: Hashable, Equatable, Comparable {
     let name: String
     let birthday: Date?
     let id: Int
-    init(name: String, birthday: Date? = nil) {
+    init(name: String, birthday: Date?) {
         self.name = name
         self.birthday = birthday
         self.id = Subete.instance.nextItemID
@@ -386,7 +394,8 @@ class NormalItem: Item, JSONInit {
             meanings += (auxiliaryMeanings as! [Any]).map { Ing(auxiliaryMeaningWithJSON: $0) }
         }
         self.meanings = meanings
-        super.init(name: self.character)
+        super.init(name: self.character,
+            birthday: data["birth"].map { $0 as! Date })
     }
     func readingAlternatives(reading: String) -> [Item] {
         let normalizedReading = normalizeReadingTrimmed(trim(reading))
@@ -1131,7 +1140,7 @@ class SRS {
 }
 
 func testSRS() {
-	let item = Item(name: "test")
+	let item = Item(name: "test", birthday: nil)
 	var info: SRS.ItemInfo = .burned
 	let _ = info.update(
 	    forResult: TestResult(testKind: .confusion,
@@ -1224,11 +1233,38 @@ enum RandomMode: String, CaseIterable, ExpressibleByArgument {
     case confusion
 }
 
+struct Forecast: ParsableCommand {
+    func run() {
+        let _ = Subete()
+	    let srs = Subete.instance.srs!
+	    let now = Date()
+	    let srsItems: [(nextTestDate: Date, item: Item)] = Subete.instance.allItems.compactMap { (item) in
+		    guard let nextTestDate = srs.info(item: item).nextTestDate else { return nil }
+		    return (nextTestDate: nextTestDate, item: item)
+		}
+		let maxDays = 20
+		let byDay: [(key: Int, value: [(nextTestDate: Date, item: Item)])] =
+		    Dictionary(grouping: srsItems, by: {
+		        min(maxDays, max(0, Int(ceil($0.nextTestDate.timeIntervalSince(now) / (60 * 60 * 24)))))
+		    }).sorted { $0.key < $1.key }
+		var total = 0
+		for (days, items) in byDay {
+		    let keyStr = days == maxDays ? "later" : String(days)
+		    print("\(keyStr): \(items.count)")
+		    total += items.count
+		}
+		print(" * total: \(total)")
+    }
+}
 struct Rerere: ParsableCommand {
     @Option() var minItems: Int?
     @Option() var maxItems: Int?
     @Option() var minRandomItemsFraction: Double = 0.33
     @Option() var randomMode: RandomMode = .all
+
+    static let configuration = CommandConfiguration(
+            //abstract: "Randomness utilities.",
+            subcommands: [Forecast.self])
 
     func validate() throws {
         guard minRandomItemsFraction >= 0 && minRandomItemsFraction <= 1 else {
