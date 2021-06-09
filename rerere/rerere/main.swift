@@ -731,8 +731,14 @@ struct TestResult {
         return components.joined(separator: ":")
     }
     static let retiredInfo: NSDictionary = loadYAML(path: "\(Subete.instance.basePath)/retired.yaml") as! NSDictionary
-    static let retired: Set<String> = Set(retiredInfo["retired"] as! [String])
-    static let replace: [String: String] = retiredInfo["replace"] as! [String: String]
+    static let retired: [ItemKind: Set<String>] = Dictionary(uniqueKeysWithValues:
+        (retiredInfo["retired"] as! [String: [String]]).map {
+            (ItemKind(rawValue: $0.key)!, Set($0.value))
+        })
+    static let replace: [ItemKind: [String: String]] = Dictionary(uniqueKeysWithValues:
+        (retiredInfo["replace"] as! [String: [String: String]]).map {
+            (ItemKind(rawValue: $0.key)!, $0.value)
+        })
 	static func parse(line: String) throws -> TestResult? {
         var components: [String] = line.splut(separator: 58 /* ':' */, includingSpaces: true, map: { $0 })
         var date: Date? = nil
@@ -753,9 +759,9 @@ struct TestResult {
         let itemKind = try unwrapOrThrow(ItemKind(rawValue: String(components[1])),
                                      err: MyError("invalid item kind \(components[1])"))
         var name = String(components[2])
-        if retired.contains(name) {
+        if retired[itemKind]?.contains(name) == .some(true) {
 			return nil
-		} else if let newName = replace[name] {
+		} else if let newName = replace[itemKind]?[name] {
 			name = newName
 		}
 
