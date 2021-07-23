@@ -910,9 +910,10 @@ class Test {
             print(cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate))
             item.cliPrint(colorful: true)
             item.cliPrintAlternatives(alternatives, isReading: false)
-            if outcome != .right {
+            //if outcome != .right {
                 item.cliPrintSameReadingIfFew()
-            } else {
+            //}
+            if outcome == .right {
 				break
 			}
         }
