@@ -569,7 +569,7 @@
         "id": 5,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/5",
-        "data_updated_at": "2021-07-19T16:15:17.349625Z",
+        "data_updated_at": "2021-07-29T18:00:59.564778Z",
         "data": {
             "created_at": "2012-02-27T18:14:26.000000Z",
             "level": 1,
@@ -696,7 +696,8 @@
                 2178,
                 2423,
                 2424,
-                2449
+                2449,
+                8992
             ],
             "meaning_mnemonic": "Close your eyes and imagine you're a kid again. Now open them and... look! It's a <radical>slide</radical>! Imagine little you sliding down this slide over and over, having a great time. Imagination + emotion makes for good memorization!",
             "lesson_position": 3,
@@ -4530,7 +4531,7 @@
         "id": 34,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/34",
-        "data_updated_at": "2021-07-19T16:15:18.828447Z",
+        "data_updated_at": "2021-07-26T23:04:21.663426Z",
         "data": {
             "created_at": "2012-02-28T21:11:20.000000Z",
             "level": 2,
@@ -4652,7 +4653,7 @@
         "id": 35,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/35",
-        "data_updated_at": "2021-07-19T16:15:22.506214Z",
+        "data_updated_at": "2021-07-29T18:00:59.158967Z",
         "data": {
             "created_at": "2012-02-28T21:12:20.000000Z",
             "level": 2,
@@ -4762,7 +4763,8 @@
                 2302,
                 2388,
                 2404,
-                2455
+                2455,
+                8992
             ],
             "meaning_mnemonic": "You have fins and you have a barb. A fish that you can stick an entire barb through like this would have to be really <radical>small</radical>, since it's sticking through the whole fish body (which you can imagine by basing the body off the size of the fins compared to the already small barb.)",
             "lesson_position": 11,
@@ -11697,7 +11699,7 @@
         "id": 90,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/90",
-        "data_updated_at": "2021-07-19T16:15:32.129115Z",
+        "data_updated_at": "2021-07-30T19:10:30.916241Z",
         "data": {
             "created_at": "2012-03-01T21:37:50.000000Z",
             "level": 4,
@@ -11856,7 +11858,8 @@
                 2436,
                 2440,
                 2462,
-                8963
+                8963,
+                8990
             ],
             "meaning_mnemonic": "See the little things sticking out of the ground? Those little things are pretty little <radical>flowers</radical>. You know they're flowers and not, say, grass, because they're spaced out. You'll learn grass later, and it will be less spaced out, but somewhat similar to this, so keep that in mind!",
             "lesson_position": 0,
@@ -14600,7 +14603,7 @@
         "id": 113,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/113",
-        "data_updated_at": "2021-07-19T16:15:41.277205Z",
+        "data_updated_at": "2021-07-30T19:10:30.916241Z",
         "data": {
             "created_at": "2012-03-03T04:07:41.000000Z",
             "level": 5,
@@ -14702,7 +14705,8 @@
                 1049,
                 1195,
                 1306,
-                2255
+                2255,
+                8990
             ],
             "meaning_mnemonic": "There's something hooked going into a mouth. Rather than a hook, though, it's a <radical>lip ring</radical>. They used to use fish hooks and nails in the old days. (Glad we don't live in those times anymore!)",
             "lesson_position": 10,
@@ -17824,7 +17828,7 @@
         "id": 139,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/139",
-        "data_updated_at": "2021-07-19T16:15:45.729395Z",
+        "data_updated_at": "2021-07-29T18:01:02.503474Z",
         "data": {
             "created_at": "2012-03-07T00:24:11.000000Z",
             "level": 6,
@@ -17929,7 +17933,8 @@
                 2021,
                 2022,
                 2316,
-                8840
+                8840,
+                8993
             ],
             "meaning_mnemonic": "You put on your hat and go outside to kick something white. It's a big white goose and you killed it with your kick. That's because you're going to cook and <radical>eat</radical> it. Yum!",
             "lesson_position": 0,
@@ -18887,7 +18892,7 @@
         "id": 148,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/148",
-        "data_updated_at": "2021-07-19T16:15:07.657627Z",
+        "data_updated_at": "2021-07-30T13:27:41.579999Z",
         "data": {
             "created_at": "2012-03-22T00:54:40.000000Z",
             "level": 7,
@@ -18993,7 +18998,7 @@
                 1907,
                 1982
             ],
-            "meaning_mnemonic": "Your mama has been impaled on something! You run toward her and see that she's been impaled on a <radical>spear</radical>. Mama, no!",
+            "meaning_mnemonic": "Your mama is carrying some kind of elaborate weapon. You look closely and see that it's a <radical>spear</radical>. The pointy end is to the right, and there are some decorations hanging off it. It's a very fancy spear, and you wonder where your mama got it.",
             "lesson_position": 3,
             "spaced_repetition_system_id": 1
         }
@@ -21512,7 +21517,7 @@
         "id": 171,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/171",
-        "data_updated_at": "2021-07-19T16:15:40.470004Z",
+        "data_updated_at": "2021-07-29T18:01:01.670053Z",
         "data": {
             "created_at": "2012-04-05T18:56:42.000000Z",
             "level": 5,
@@ -21616,7 +21621,8 @@
                 1647,
                 1686,
                 1989,
-                2128
+                2128,
+                8993
             ],
             "meaning_mnemonic": "Think of an old-style <radical>lantern</radical>. It's on top of a few legs (you can only see two from this angle) and it's in a box shaped holder at the top. You can imagine these lining the streets before electricity, right? That's why this radical is a lantern.",
             "lesson_position": 23,
@@ -24196,7 +24202,7 @@
         "id": 194,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/194",
-        "data_updated_at": "2021-07-19T16:16:03.899204Z",
+        "data_updated_at": "2021-07-29T18:00:59.577782Z",
         "data": {
             "created_at": "2012-04-26T05:20:00.000000Z",
             "level": 11,
@@ -24318,7 +24324,8 @@
                 2335,
                 2361,
                 2370,
-                2424
+                2424,
+                8992
             ],
             "meaning_mnemonic": "This is a ceremony radical with a slide radical. Why would someone be sliding on the floor at a ceremony? If they're a <radical>drunkard</radical>, that's why! People love to drink at ceremonies. And there's always at least one drunkard who takes it too far and slides across the floor doing the worm.",
             "lesson_position": 4,
@@ -38969,7 +38976,7 @@
         "id": 325,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/325",
-        "data_updated_at": "2021-07-19T16:16:36.046158Z",
+        "data_updated_at": "2021-07-29T18:00:59.115680Z",
         "data": {
             "created_at": "2013-01-24T19:07:10.044359Z",
             "level": 29,
@@ -39069,7 +39076,8 @@
                 2298,
                 2388,
                 2402,
-                2404
+                2404,
+                8992
             ],
             "meaning_mnemonic": "This radical is the same as the kanji. It means <radical>above</radical>.",
             "lesson_position": 5,
@@ -52147,7 +52155,7 @@
         "id": 8767,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/8767",
-        "data_updated_at": "2021-07-19T16:15:33.131103Z",
+        "data_updated_at": "2021-07-29T18:01:01.695307Z",
         "data": {
             "created_at": "2012-03-01T21:31:08.000000Z",
             "level": 4,
@@ -52273,7 +52281,8 @@
                 2296,
                 2340,
                 8858,
-                8880
+                8880,
+                8993
             ],
             "meaning_mnemonic": "Can you see the <radical>horns</radical>? You could put these horns on anything. Donkeys, people, monkeys, and so on. That's exactly what we'll be doing when we learn kanji that have horns too.",
             "lesson_position": 0,
