@@ -96,7 +96,7 @@ function subst() {
         #setopt re_match_pcre
         regexp-replace text '[mnrbphgk]y[aiueo]' '${MATCH[1]}ixy${MATCH[3]}'
         regexp-replace text '(sh|ch|j)[aueo]' '${MATCH[1,$#MATCH-1]}ixy${MATCH[$#MATCH]}'
-        regexp-replace text 'kk|ss|tt|ff|bb|pp' 'xtsu${MATCH[2]}'
+        regexp-replace text 'kk|ss|cc|tt|ff|bb|pp' 'xtsu${MATCH[2]}'
         regexp-replace text "$rx" '${kana[$MATCH]}'
         #regexp-replace text "ku" "ik"
     fi
