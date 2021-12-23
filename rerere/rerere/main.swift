@@ -1,3 +1,10 @@
+/* TODO
+会話
+meaning> episode
+NOPE +0.5d
+conversation >> dialogue
+*/
+
 // TODO: mark items (newborns) as needing intensive SRS
 /*
 TODO
