@@ -1,10 +1,3 @@
-/* TODO
-会話
-meaning> episode
-NOPE +0.5d
-conversation >> dialogue
-*/
-
 // TODO: mark items (newborns) as needing intensive SRS
 /*
 TODO
@@ -23,7 +16,6 @@ import ArgumentParser
 // TODO(fixed?): ~ is broken
 // TODO: !wrong doesn't act as expected when halfway through a k2rm
 // TODO: don't let you mu more than once
-// TODO: reading alternatives for words
 
 func time<T>(block: () -> T) {
 	let a = CFAbsoluteTimeGetCurrent()
@@ -279,7 +271,7 @@ class Subete {
     }
 }
 
-enum ItemKind: String {
+enum ItemKind: String, ExpressibleByArgument {
     case word, kanji, confusion
 }
 class Item: Hashable, Equatable, Comparable {
@@ -419,7 +411,8 @@ class NormalItem: Item, JSONInit {
             return other != self && (other as! NormalItem).meaningMatches(normalizedInput: normalizedMeaning, levenshtein: &levenshtein)
         }
         */
-        return Subete.instance.allByKind(self.kind).findByMeaning(normalizedMeaning).filter { $0 != self }
+        let ret = Subete.instance.allByKind(self.kind).findByMeaning(normalizedMeaning).filter { $0 != self }
+        return ret
     }
     func cliPrintAlternatives(_ items: [Item], isReading: Bool) {
         if items.isEmpty { return }
@@ -432,13 +425,6 @@ class NormalItem: Item, JSONInit {
             for item in items {
                 item.cliPrint(colorful: false)
             }
-        }
-    }
-    func cliPrintMeaningAlternatives(_ items: [Item]) {
-        if items.isEmpty { return }
-        print(" Entered meaning matches:")
-        for item in items {
-            item.cliPrint(colorful: false)
         }
     }
     func similarMeaning() -> [Item] {
@@ -492,7 +478,6 @@ class NormalItem: Item, JSONInit {
         }
         return bestQual
     }
-
     func evaluateReadingAnswerInner(normalizedInput: String) -> Int {
         var bestQual: Int = 0
         for reading in self.readings {
@@ -504,13 +489,13 @@ class NormalItem: Item, JSONInit {
         return bestQual
     }
 
-    func evaluateReadingAnswer(input: String, withAlternatives: Bool) -> (outcome: TestOutcome, qual: Int, alternatives: [Item]) {
+    func evaluateReadingAnswer(input: String, allowAlternatives: Bool) -> (outcome: TestOutcome, qual: Int, alternatives: [Item]) {
         // TODO this sucks
         let normalizedInput = normalizeReadingTrimmed(trim(input))
         let qual = evaluateReadingAnswerInner(normalizedInput: normalizedInput)
         var outcome: TestOutcome = qual > 0 ? .right : .wrong
-        let alternatives = withAlternatives ? readingAlternatives(reading: normalizedInput) : []
-        if outcome == .wrong && alternatives.contains(where: { (alternative: Item) in
+        let alternatives = readingAlternatives(reading: normalizedInput)
+        if outcome == .wrong && allowAlternatives && alternatives.contains(where: { (alternative: Item) in
             (alternative as! NormalItem).meanings.contains(where: { (meaning: Ing) in
                 meaning.acceptedAnswerForMe && self.meanings.contains(where: { (meaning2: Ing) in
                     meaning2.acceptedAnswerForMe && meaning.text == meaning2.text
@@ -522,13 +507,13 @@ class NormalItem: Item, JSONInit {
         return (outcome, qual, alternatives)
 
     }
-    func evaluateMeaningAnswer(input: String, withAlternatives: Bool) -> (outcome: TestOutcome, qual: Int, alternatives: [Item]) {
+    func evaluateMeaningAnswer(input: String, allowAlternatives: Bool) -> (outcome: TestOutcome, qual: Int, alternatives: [Item]) {
         let normalizedInput = normalizeMeaningTrimmed(trim(input))
         var levenshtein = Levenshtein()
         let qual = evaluateMeaningAnswerInner(normalizedInput: normalizedInput, levenshtein: &levenshtein)
         var outcome: TestOutcome = qual > 0 ? .right : .wrong
-        let alternatives = withAlternatives ? meaningAlternatives(meaning: normalizedInput) : []
-        if outcome == .wrong && alternatives.contains(where: { (alternative: Item) in
+        let alternatives = meaningAlternatives(meaning: normalizedInput)
+        if outcome == .wrong && allowAlternatives && alternatives.contains(where: { (alternative: Item) in
             (alternative as! NormalItem).readings.contains(where: { (reading: Ing) in
                 reading.acceptedAnswerForMe && self.readings.contains(where: { (reading2: Ing) in
                     reading2.acceptedAnswerForMe && reading.text == reading2.text
@@ -546,7 +531,7 @@ class NormalItem: Item, JSONInit {
             if ing.type != .whitelist {
                 let separator = prev == nil ? "" :
                                 prev!.type == ing.type ? ", " :
-                                " >> ";
+                                " >> "
                 var colored = ing.text
                 if colorful { colored = (ing.type == .primary ? ANSI.red : ANSI.dred)(colored) }
                 out += separator + colored
@@ -674,17 +659,19 @@ class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
     }
 }
 
-enum TestKind: String {
+enum TestKind: String, ExpressibleByArgument {
     case meaningToReading = "m2r"
     case readingToMeaning = "r2m"
     case characterToRM = "c2"
     case confusion = "kc"
 }
+
 enum TestOutcome: String {
     case right
     case wrong
     case mu
 }
+
 extension String {
 	func splut(separator: UTF8.CodeUnit, includingSpaces: Bool = false, map: (String) -> String) -> [String] {
 		var res: [String] = []
@@ -893,7 +880,7 @@ class Test {
         }
         while true {
             let k = try cliRead(prompt: prompt, kana: true)
-            let (outcome, qual, alternatives) = item.evaluateReadingAnswer(input: k, withAlternatives: true)
+            let (outcome, qual, alternatives) = item.evaluateReadingAnswer(input: k, allowAlternatives: true)
 			let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: true)
             var out: String = cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate)
             out += " " + item.cliName + " " + item.cliReadings(colorful: false)
@@ -912,7 +899,7 @@ class Test {
         }
         while true {
             let k: String = try cliRead(prompt: prompt, kana: false)
-            let (outcome, qual, alternatives) = item.evaluateMeaningAnswer(input: k, withAlternatives: true)
+            let (outcome, qual, alternatives) = item.evaluateMeaningAnswer(input: k, allowAlternatives: true)
 			let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: true)
             print(cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate))
             item.cliPrint(colorful: true)
@@ -927,7 +914,6 @@ class Test {
     }
     func doCLICharacterToRM(item: NormalItem, final: Bool) throws {
         let prompt = item.cliName
-        
         enum Mode { case reading, meaning }
         for (modeIdx, mode) in [Mode.reading, Mode.meaning].shuffled().enumerated() {
             while true {
@@ -936,19 +922,18 @@ class Test {
                 let qual: Int
                 let alternatives: [Item]
                 if mode == .meaning {
-                    (outcome, qual, alternatives) = item.evaluateMeaningAnswer(input: k, withAlternatives: false)
+                    (outcome, qual, alternatives) = item.evaluateMeaningAnswer(input: k, allowAlternatives: true)
 					let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: final && modeIdx == 1)
                     print(cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate))
                     print(item.cliMeanings(colorful: true))
-                    item.cliPrintMeaningAlternatives(alternatives)
+                    item.cliPrintAlternatives(alternatives, isReading: false)
                 } else {
-                    (outcome, qual, _) = item.evaluateReadingAnswer(input: k, withAlternatives: false)
+                    (outcome, qual, alternatives) = item.evaluateReadingAnswer(input: k, allowAlternatives: true)
 					let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: final && modeIdx == 1)
                     print(cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate))
                     print(item.cliReadings(colorful: true))
+                    item.cliPrintAlternatives(alternatives, isReading: true)
                 }
-                
-               
                 if outcome == .right { break }
             }
         }
@@ -1247,7 +1232,9 @@ enum RandomMode: String, CaseIterable, ExpressibleByArgument {
     case confusion
 }
 
-struct Forecast: ParsableCommand {
+struct ForecastCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "forecast")
     func run() {
         let _ = Subete()
 	    let srs = Subete.instance.srs!
@@ -1270,6 +1257,28 @@ struct Forecast: ParsableCommand {
 		print(" * total: \(total)")
     }
 }
+
+struct TestOneCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "test-one")
+    @Argument()
+    var testKind: TestKind
+    @Argument()
+    var itemKind: ItemKind
+    @Argument()
+    var name: String
+    func run() {
+        try! runImpl()
+    }
+    func runImpl() throws {
+        let _ = Subete()
+        let item = try unwrapOrThrow(Subete.instance.allByKind(itemKind).findByName(name),
+                                     err: MyError("no such item kind \(itemKind) name \(name)"))
+        let test = Test(kind: testKind, item: item)
+        try test.cliGo()
+    }
+}
+
 struct Rerere: ParsableCommand {
     @Option() var minItems: Int?
     @Option() var maxItems: Int?
@@ -1278,7 +1287,7 @@ struct Rerere: ParsableCommand {
 
     static let configuration = CommandConfiguration(
             //abstract: "Randomness utilities.",
-            subcommands: [Forecast.self])
+            subcommands: [ForecastCommand.self, TestOneCommand.self])
 
     func validate() throws {
         guard minRandomItemsFraction >= 0 && minRandomItemsFraction <= 1 else {
