@@ -81189,3 +81189,5 @@ r2m:word:慰謝:wrong
 1640538324:kc:confusion:跳:wrong
 1640538338:kc:confusion:跳:right
 1640538339:m2r:word:宅:right
+1640646393:c2:word:蓮根:wrong
+1640646398:r2m:word:蓮根:right

@@ -960,6 +960,7 @@ class Test {
     static let meaningPrompt: String = ANSI.blue("meaning> ")
 
     func cliRead(prompt: String, kana: Bool) throws -> String {
+        self.testSession.save()
         while true {
             print(prompt)
             let args: [String]
@@ -990,13 +991,7 @@ class Test {
 		}
 	}
     func markResult(outcome: TestOutcome?) throws -> SRSUpdate {
-        let isRight = outcome == .some(.right)
-        let wasRight = self.result?.outcome == .some(.right)
-        if isRight && !wasRight {
-            self.testSession.removePulledItem(self.item)
-        } else if !isRight && wasRight {
-            self.testSession.addPulledItem(self.item)
-        }
+        self.testSession.setItemCompleteness(item: self.item, complete: outcome == .some(.right))
 
         if self.result != nil {
             try self.removeFromLog()
@@ -1304,34 +1299,13 @@ struct TestOneCommand: ParsableCommand {
         let item = try unwrapOrThrow(Subete.instance.allByKind(itemKind).findByName(name),
                                      err: MyError("no such item kind \(itemKind) name \(name)"))
         let testSession = TestSession(base: SerializableTestSession(
-            completedItems: [],
-            pulledItems: [ItemRef(item)],
+            pulledCompleteItems: IndexableSet([ItemRef(item)]),
             randomMode: .all
         ))
         let test = Test(kind: testKind, item: item, testSession: testSession)
         try test.cliGo()
     }
 }
-        /*
-
-struct TestDesc {
-    let minItems: Int?
-    let maxItems: Int?
-    let minRandomItemsFraction: Double
-    let randomMode: RandomMode
-    func asdf() {
-        var remainingItems: Set<Item> = Set()
-		var count = 0
-		while count < numRandomItems && !lottery.isEmpty {
-			remainingItems.insert(lottery.takeRandomElement()!)
-			count += 1
-		}
-	    for (, item) in srsItems { remainingItems.insert(item) }
-
-
-    }
-}
-		*/
 
 struct ItemRef: Codable, Hashable, Equatable {
     let item: Item
@@ -1357,15 +1331,84 @@ struct ItemRef: Codable, Hashable, Equatable {
     }
 }
 
+struct IndexableSet<Element>: Codable, Sequence where Element: Hashable & Equatable & Codable {
+    typealias Iterator = Array<Element>.Iterator
+    typealias Element = Element
+    var values: [Element]
+    var valueToIndex: [Element: Int]
+    init() {
+        self.values = []
+        self.valueToIndex = [:]
+    }
+    init<S>(_ sequence: S) where S : Sequence, S.Element == Element {
+        self.init()
+        for value in sequence {
+            self.update(with: value)
+        }
+    }
+    init(from decoder: Decoder) throws {
+        self.values = try Array(from: decoder)
+        self.valueToIndex = [:]
+        for (i, value) in self.values.enumerated() {
+            if let _ = self.valueToIndex[value] {
+                throw MyError("duplicate element \(value)")
+            }
+            self.valueToIndex[value] = i
+        }
+    }
+    func encode(to encoder: Encoder) throws {
+        try self.values.encode(to: encoder)
+    }
+    func makeIterator() -> Self.Iterator {
+        return self.values.makeIterator()
+    }
+    @discardableResult mutating func update(with newMember: Element) -> Element? {
+        if let index = self.valueToIndex[newMember] {
+            let old = self.values[index]
+            self.values[index] = newMember
+            return old
+        } else {
+            let index = self.values.count
+            self.values.append(newMember)
+            self.valueToIndex[newMember] = index
+            return nil
+        }
+    }
+    @discardableResult mutating func remove(_ member: Element) -> Element? {
+        if let index = self.valueToIndex[member] {
+            let old = self.values[index]
+            self.valueToIndex[old] = nil
+            let lastIndex = self.values.count - 1
+            let last = self.values.removeLast()
+            if lastIndex != index {
+                self.values[index] = last
+                self.valueToIndex[last] = index
+            }
+            return old
+        } else {
+            return nil
+        }
+    }
+    var count: Int {
+        self.values.count
+    }
+    subscript(index: Int) -> Element {
+        get {
+            return self.values[index]
+        }
+    }
+}
+
 struct SerializableTestSession: Codable {
-    var completedItems: [ItemRef] = []
-    var pulledItems: [ItemRef] = []
+    var pulledIncompleteItems: IndexableSet<ItemRef> = IndexableSet()
+    var pulledCompleteItems: IndexableSet<ItemRef> = IndexableSet()
+    var numCompletedItems: Int = 0 // first n elements of pulledItems are completed
     var numUnpulledRandomItems: Int = 0
     var numDone: Int = 0
     let randomMode: RandomMode
 
     func numRemainingItems() -> Int {
-        pulledItems.count + numUnpulledRandomItems
+        self.pulledIncompleteItems.count + self.numUnpulledRandomItems
     }
 
     func serialize() -> Data {
@@ -1383,7 +1426,7 @@ struct BenchSTS: ParsableCommand {
     func run() {
         let _ = Subete()
         let sts = SerializableTestSession(
-	        pulledItems: Subete.instance.allItems[..<500].map { ItemRef($0) },
+	        pulledIncompleteItems: IndexableSet(Subete.instance.allItems[..<500].map { ItemRef($0) }),
             randomMode: .all
 	    )
 	    if self.deser {
@@ -1409,10 +1452,7 @@ class TestSession {
         self.base = base
         self.saveURL = saveURL
         self.lottery = TestSession.makeLottery(randomMode: base.randomMode,
-                                               excluding: Set(base.completedItems + base.pulledItems))
-        for (index, itemRef) in base.pulledItems.enumerated() {
-            self.pulledItemToIndex[itemRef.item] = index
-        }
+                                               excluding: Set(base.pulledCompleteItems).union(Set(base.pulledIncompleteItems)))
     }
     convenience init(fromSaveURL url: URL) throws {
         let data = try Data(contentsOf: url)
@@ -1441,35 +1481,29 @@ class TestSession {
 	}
 
 	func randomItem() -> Item? {
-	    let numPulled = self.base.pulledItems.count,
+	    let numPulled = self.base.pulledIncompleteItems.count,
 	        numUnpulled = self.base.numUnpulledRandomItems
         if numPulled + numUnpulled == 0 {
             return nil
         }
         let rawIndex = Int.random(in: 0..<(numPulled + numUnpulled))
         if rawIndex < numPulled {
-            return self.base.pulledItems[rawIndex].item
+            return self.base.pulledIncompleteItems[rawIndex].item
         } else {
 	        let item = self.lottery.takeRandomElement()!
 	        self.base.numUnpulledRandomItems -= 1
-	        self.addPulledItem(item)
+	        self.base.pulledIncompleteItems.update(with: ItemRef(item))
 	        return item
 	    }
 	}
 
-	func addPulledItem(_ item: Item) {
-	    ensure(self.pulledItemToIndex[item] == nil)
-	    self.base.pulledItems.append(ItemRef(item))
-	    self.pulledItemToIndex[item] = self.base.pulledItems.count - 1
-	}
-
-	func removePulledItem(_ item: Item) {
-	    let index = self.pulledItemToIndex[item]!
-	    let isLast = index == self.base.pulledItems.count - 1
-	    let last = self.base.pulledItems.removeLast()
-	    if !isLast {
-	        self.base.pulledItems[index] = last
-	        self.pulledItemToIndex[last.item] = index
+	func setItemCompleteness(item: Item, complete: Bool) {
+	    if complete {
+	        self.base.pulledIncompleteItems.remove(ItemRef(item))
+	        self.base.pulledCompleteItems.update(with: ItemRef(item))
+	    } else {
+	        self.base.pulledCompleteItems.remove(ItemRef(item))
+	        self.base.pulledIncompleteItems.update(with: ItemRef(item))
 	    }
 	}
 
@@ -1483,6 +1517,23 @@ class TestSession {
         try test.cliGo()
         self.base.numDone += 1
         return true
+	}
+
+	func save() {
+	    guard let saveURL = self.saveURL else { return }
+	    do {
+	        try self.base.serialize().write(to: saveURL)
+	    } catch let e {
+	        print("!Failed to save! \(e)")
+	    }
+	}
+	func trashSave() {
+	    guard let saveURL = self.saveURL else { return }
+	    do {
+	        try FileManager.default.trashItem(at: saveURL, resultingItemURL: nil)
+	    } catch let e {
+	        print("!Failed to trash save! \(e)")
+	    }
 	}
 }
 
@@ -1552,8 +1603,7 @@ struct Rerere: ParsableCommand {
 		    srsItems = Array(srsItems[0..<numSRSItems])
 	    }
 	    return SerializableTestSession(
-	        completedItems: [],
-	        pulledItems: srsItems.map { ItemRef($0.item) },
+	        pulledIncompleteItems: IndexableSet(srsItems.map { ItemRef($0.item) }),
 	        numUnpulledRandomItems: numRandomItems,
 	        randomMode: randomMode
 	    )
@@ -1565,13 +1615,17 @@ struct Rerere: ParsableCommand {
         let sess: TestSession
         do {
             sess = try TestSession(fromSaveURL: url)
+            print("Loaded existing session \(url)")
         } catch let e as NSError where e.domain == NSCocoaErrorDomain &&
                                        e.code == NSFileReadNoSuchFileError {
+            print("Starting new session \(url)")
             let ser = makeSerializableSession()
-            sess = TestSession(base: ser)
+            sess = TestSession(base: ser, saveURL: url)
         }
         runOrExit {
+            sess.save()
             while try sess.cliGoOne() {}
+            sess.trashSave()
         }
     }
 }
