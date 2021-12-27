@@ -1,0 +1,6 @@
+module rerere_c {
+    header "rerere-c.h"
+    export *
+}
+
+
