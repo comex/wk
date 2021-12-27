@@ -9,19 +9,28 @@ got 53 SRS items
 // TODO FIX BANGS ON CONFUSION
 // TODO why didn't I get a reading match for 挟む
 // TODO mu overwrites a later wrong?
+import rerere_c
 import Foundation
 import Yams
 import ArgumentParser
+import XCTest
 
 // TODO(fixed?): ~ is broken
 // TODO: !wrong doesn't act as expected when halfway through a k2rm
 // TODO: don't let you mu more than once
 
-func time<T>(block: () -> T) {
+func time<T>(count: Int, block: () -> T) {
 	let a = CFAbsoluteTimeGetCurrent()
-	let _ = block()
+	for _ in 0..<count {
+	    blackBox(block())
+	}
 	let b = CFAbsoluteTimeGetCurrent()
-	print(b - a)
+	print((b - a) / Double(count))
+}
+func blackBox<T>(_ t: T) {
+    withUnsafePointer(to: t) { (ptr) in
+        blackBoxImpl(ptr)
+    }
 }
 func warn(_ s: String) {
     print(s)
@@ -271,9 +280,10 @@ class Subete {
     }
 }
 
-enum ItemKind: String, ExpressibleByArgument {
+enum ItemKind: String, ExpressibleByArgument, Codable {
     case word, kanji, confusion
 }
+
 class Item: Hashable, Equatable, Comparable {
     let name: String
     let birthday: Date?
@@ -800,12 +810,14 @@ struct ANSI {
 class Test {
     let testKind: TestKind
     let item: Item
+    let testSession: TestSession
     var result: TestResult? = nil
     var appendedStuff: Data? = nil
     var didCliRead: Bool = false
-    init(kind: TestKind, item: Item) {
+    init(kind: TestKind, item: Item, testSession: TestSession) {
         self.testKind = kind
         self.item = item
+        self.testSession = testSession
     }
 
     func removeFromLog() throws {
@@ -978,6 +990,14 @@ class Test {
 		}
 	}
     func markResult(outcome: TestOutcome?) throws -> SRSUpdate {
+        let isRight = outcome == .some(.right)
+        let wasRight = self.result?.outcome == .some(.right)
+        if isRight && !wasRight {
+            self.testSession.removePulledItem(self.item)
+        } else if !isRight && wasRight {
+            self.testSession.addPulledItem(self.item)
+        }
+
         if self.result != nil {
             try self.removeFromLog()
             Subete.instance.srs?.revert(forItem: self.item)
@@ -1154,7 +1174,6 @@ func testSRS() {
 								  outcome: .right))
 		print("\(i). \(info)\(srsUpdate.cliLabel)")
 	}
-	
 }
 
 struct WeightedList<T> {
@@ -1227,7 +1246,7 @@ struct WeightedList<T> {
     }
 }
 
-enum RandomMode: String, CaseIterable, ExpressibleByArgument {
+enum RandomMode: String, CaseIterable, ExpressibleByArgument, Codable {
     case all
     case confusion
 }
@@ -1258,6 +1277,16 @@ struct ForecastCommand: ParsableCommand {
     }
 }
 
+func runOrExit(_ f: () throws -> Void) {
+    do {
+        try f()
+    } catch let es as ExitStatusError {
+        exit(Int32(es.exitStatus))
+    } catch let e {
+        try! { throw e }()
+    }
+}
+
 struct TestOneCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "test-one")
@@ -1268,15 +1297,193 @@ struct TestOneCommand: ParsableCommand {
     @Argument()
     var name: String
     func run() {
-        try! runImpl()
+        runOrExit { try runImpl() }
     }
     func runImpl() throws {
         let _ = Subete()
         let item = try unwrapOrThrow(Subete.instance.allByKind(itemKind).findByName(name),
                                      err: MyError("no such item kind \(itemKind) name \(name)"))
-        let test = Test(kind: testKind, item: item)
+        let testSession = TestSession(base: SerializableTestSession(
+            completedItems: [],
+            pulledItems: [ItemRef(item)],
+            randomMode: .all
+        ))
+        let test = Test(kind: testKind, item: item, testSession: testSession)
         try test.cliGo()
     }
+}
+        /*
+
+struct TestDesc {
+    let minItems: Int?
+    let maxItems: Int?
+    let minRandomItemsFraction: Double
+    let randomMode: RandomMode
+    func asdf() {
+        var remainingItems: Set<Item> = Set()
+		var count = 0
+		while count < numRandomItems && !lottery.isEmpty {
+			remainingItems.insert(lottery.takeRandomElement()!)
+			count += 1
+		}
+	    for (, item) in srsItems { remainingItems.insert(item) }
+
+
+    }
+}
+		*/
+
+struct ItemRef: Codable, Hashable, Equatable {
+    let item: Item
+    enum CodingKeys: String, CodingKey {
+        case kind
+        case name
+    }
+
+    init(_ item: Item) {
+        self.item = item
+    }
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let kind = try container.decode(ItemKind.self, forKey: .kind)
+        let name = try container.decode(String.self, forKey: .name)
+        item = try unwrapOrThrow(Subete.instance.allByKind(kind).findByName(name),
+                                 err: MyError("no such item kind \(kind) name \(name)"))
+    }
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(item.kind, forKey: .kind)
+        try container.encode(item.name, forKey: .name)
+    }
+}
+
+struct SerializableTestSession: Codable {
+    var completedItems: [ItemRef] = []
+    var pulledItems: [ItemRef] = []
+    var numUnpulledRandomItems: Int = 0
+    var numDone: Int = 0
+    let randomMode: RandomMode
+
+    func numRemainingItems() -> Int {
+        pulledItems.count + numUnpulledRandomItems
+    }
+
+    func serialize() -> Data {
+        return try! JSONEncoder().encode(self)
+    }
+    static func deserialize(_ data: Data) throws -> SerializableTestSession {
+        return try JSONDecoder().decode(SerializableTestSession.self, from: data)
+    }
+}
+
+struct BenchSTS: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "bench-sts")
+    @Flag() var deser: Bool = false
+    func run() {
+        let _ = Subete()
+        let sts = SerializableTestSession(
+	        pulledItems: Subete.instance.allItems[..<500].map { ItemRef($0) },
+            randomMode: .all
+	    )
+	    if self.deser {
+	        let serialized: Data = sts.serialize()
+	        time(count: 1000) {
+	            return try! SerializableTestSession.deserialize(serialized)
+	        }
+	    } else {
+	        time(count: 1000) {
+	            return sts.serialize()
+	        }
+	    }
+    }
+}
+
+
+class TestSession {
+    var base: SerializableTestSession
+    var lottery: WeightedList<Item>
+    var pulledItemToIndex: [Item: Int] = [:]
+    var saveURL: URL? = nil
+    init(base: SerializableTestSession, saveURL: URL? = nil) {
+        self.base = base
+        self.saveURL = saveURL
+        self.lottery = TestSession.makeLottery(randomMode: base.randomMode,
+                                               excluding: Set(base.completedItems + base.pulledItems))
+        for (index, itemRef) in base.pulledItems.enumerated() {
+            self.pulledItemToIndex[itemRef.item] = index
+        }
+    }
+    convenience init(fromSaveURL url: URL) throws {
+        let data = try Data(contentsOf: url)
+        self.init(
+            base: try SerializableTestSession.deserialize(data),
+            saveURL: url
+        )
+    }
+    static func makeLottery(randomMode: RandomMode, excluding excl: Set<ItemRef>) -> WeightedList<Item> {
+		var availRandomItems: [(item: Item, weight: Double)] = []
+		switch randomMode {
+			case .all:
+				availRandomItems += (Subete.instance.allWords.items + Subete.instance.allKanji.items).map {
+				    (item: $0, weight: 1.0)
+				}
+				availRandomItems += Subete.instance.allConfusion.items.map {
+				    (item: $0, weight: 10.0)
+				}
+			case .confusion:
+				availRandomItems += Subete.instance.allConfusion.items.map {
+				    (item: $0, weight: 1.0)
+				}
+		}
+		let filteredRandomItems = availRandomItems.filter { !excl.contains(ItemRef($0.0)) }
+		return WeightedList(items: filteredRandomItems)
+	}
+
+	func randomItem() -> Item? {
+	    let numPulled = self.base.pulledItems.count,
+	        numUnpulled = self.base.numUnpulledRandomItems
+        if numPulled + numUnpulled == 0 {
+            return nil
+        }
+        let rawIndex = Int.random(in: 0..<(numPulled + numUnpulled))
+        if rawIndex < numPulled {
+            return self.base.pulledItems[rawIndex].item
+        } else {
+	        let item = self.lottery.takeRandomElement()!
+	        self.base.numUnpulledRandomItems -= 1
+	        self.addPulledItem(item)
+	        return item
+	    }
+	}
+
+	func addPulledItem(_ item: Item) {
+	    ensure(self.pulledItemToIndex[item] == nil)
+	    self.base.pulledItems.append(ItemRef(item))
+	    self.pulledItemToIndex[item] = self.base.pulledItems.count - 1
+	}
+
+	func removePulledItem(_ item: Item) {
+	    let index = self.pulledItemToIndex[item]!
+	    let isLast = index == self.base.pulledItems.count - 1
+	    let last = self.base.pulledItems.removeLast()
+	    if !isLast {
+	        self.base.pulledItems[index] = last
+	        self.pulledItemToIndex[last.item] = index
+	    }
+	}
+
+	func cliGoOne() throws -> Bool {
+	    guard let item = self.randomItem() else {
+	        return false
+	    }
+        print("[\(self.base.numDone) | \(self.base.numRemainingItems())]")
+        let testKind = item.availableTests.randomElement()!
+        let test = Test(kind: testKind, item: item, testSession: self)
+        try test.cliGo()
+        self.base.numDone += 1
+        return true
+	}
 }
 
 struct Rerere: ParsableCommand {
@@ -1287,7 +1494,7 @@ struct Rerere: ParsableCommand {
 
     static let configuration = CommandConfiguration(
             //abstract: "Randomness utilities.",
-            subcommands: [ForecastCommand.self, TestOneCommand.self])
+            subcommands: [ForecastCommand.self, TestOneCommand.self, BenchSTS.self])
 
     func validate() throws {
         guard minRandomItemsFraction >= 0 && minRandomItemsFraction <= 1 else {
@@ -1297,92 +1504,74 @@ struct Rerere: ParsableCommand {
             throw ValidationError("min-items should < max-items")
         }
     }
-
-    func run() {
-        let _ = Subete()
-        //testSRS(); return
-        //print(Subete.instance.allByKind(.word).findByMeaning(String(normalizeMeaning("to narrow"))))
-        //return
+	func resolveMinMax() -> (minItems: Int, maxItems: Int) {
         let defaultMinItems = 50
         let defaultMaxItems = 75
-        let minItems: Int, maxItems: Int
         switch (self.minItems, self.maxItems) {
             case (nil, nil):
-                (minItems, maxItems) = (defaultMinItems, defaultMaxItems)
+                return (minItems: defaultMinItems, maxItems: defaultMaxItems)
             case (.some(let _minItems), nil):
-                (minItems, maxItems) = (_minItems, max(defaultMaxItems, _minItems))
+                return (minItems: _minItems, maxItems: max(defaultMaxItems, _minItems))
             case (nil, .some(let _maxItems)):
-                (minItems, maxItems) = (min(defaultMinItems, _maxItems), _maxItems)
+                return (minItems: min(defaultMinItems, _maxItems), maxItems: _maxItems)
             case (.some(let _minItems), .some(let _maxItems)):
-                (minItems, maxItems) = (_minItems, _maxItems)
+                return (minItems: _minItems, maxItems: _maxItems)
         }
-        
-        var remainingItems: Set<Item> = Set()
-
-	    let srs = Subete.instance.srs!
+	}
+	func gatherSRSItems() -> [(nextTestDate: Date, item: Item)] {
 	    let now = Date()
-	    var srsItems: [(nextTestDate: Date, item: Item)] = Subete.instance.allItems.compactMap { (item) in
+	    let srs = Subete.instance.srs!
+	    return Subete.instance.allItems.compactMap { (item) in
 		    guard let nextTestDate = srs.info(item: item).nextTestDate else { return nil }
 		    return nextTestDate <= now ? (nextTestDate: nextTestDate, item: item) : nil
 	    }
-	    print("got \(srsItems.count) SRS items")
-
-	    let numRandomItems: Int
-	    let numSRSItems: Int
+	}
+	func calcItemSplit(minItems: Int, maxItems: Int, availSRSItems: Int) -> (numSRSItems: Int, numRandomItems: Int) {
 	    if self.minRandomItemsFraction >= 1.0 {
-	        numRandomItems = minItems
-	        numSRSItems = 0
+	        return (numSRSItems: 0, numRandomItems: minItems)
 	    } else {
-	        var numItemsX: Double = Double(srsItems.count) / (1.0 - self.minRandomItemsFraction)
+	        var numItemsX: Double = Double(availSRSItems) / (1.0 - self.minRandomItemsFraction)
 	        numItemsX = max(numItemsX, Double(minItems))
 	        numItemsX = min(numItemsX, Double(maxItems))
 	        let numItems = Int(numItemsX)
-	        numSRSItems = min(srsItems.count, Int(numItemsX * (1.0 - self.minRandomItemsFraction)))
-	        numRandomItems = numItems - numSRSItems
+	        let numSRSItems = min(availSRSItems, Int(numItemsX * (1.0 - self.minRandomItemsFraction)))
+	        return (
+	            numSRSItems: numSRSItems,
+	            numRandomItems: numItems - numSRSItems
+	        )
 	    }
-
+	}
+	func makeSerializableSession() -> SerializableTestSession {
+        let (minItems, maxItems) = resolveMinMax()
+	    var srsItems = gatherSRSItems()
+	    let (numSRSItems, numRandomItems) = calcItemSplit(minItems: minItems, maxItems: maxItems, availSRSItems: srsItems.count)
+	    print("got \(srsItems.count) SRS items")
 	    if numSRSItems < srsItems.count {
+		    print("...but limiting to \(numSRSItems)")
 		    srsItems.sort { $0.nextTestDate > $1.nextTestDate}
 		    srsItems = Array(srsItems[0..<numSRSItems])
-		    print("...but limiting to \(numSRSItems)")
 	    }
+	    return SerializableTestSession(
+	        completedItems: [],
+	        pulledItems: srsItems.map { ItemRef($0.item) },
+	        numUnpulledRandomItems: numRandomItems,
+	        randomMode: randomMode
+	    )
+	}
 
-	    for (_, item) in srsItems { remainingItems.insert(item) }
-
+    func run() throws {
+        let _ = Subete()
+        let url = URL(fileURLWithPath: "\(Subete.instance.basePath)/sess.json")
+        let sess: TestSession
         do {
-		    var availRandomItems: [(Item, Double)] = []
-		    switch self.randomMode {
-			    case .all:
-				    availRandomItems += (Subete.instance.allWords.items + Subete.instance.allKanji.items).map { ($0, 1.0) }
-				    availRandomItems += Subete.instance.allConfusion.items.map { ($0, 10.0) }
-			    case .confusion:
-				    availRandomItems += Subete.instance.allConfusion.items.map { ($0, 1.0) }
-		    }
-		    var lottery: WeightedList<Item> = WeightedList(items: availRandomItems)
-		    var count = 0
-		    while count < numRandomItems && !lottery.isEmpty {
-			    remainingItems.insert(lottery.takeRandomElement()!)
-			    count += 1
-		    }
-	    }
-
-        var numDone = 0
-        do {
-            while let item = remainingItems.randomElement() {
-                let testKind = item.availableTests.randomElement()!
-                let test = Test(kind: testKind, item: item)
-                print("[\(numDone) | \(remainingItems.count)]")
-                try test.cliGo()
-                numDone += 1
-                if test.result!.outcome == .right {
-                    remainingItems.remove(item)
-                }
-                
-            }
-        } catch is ExitStatusError {
-            return
-        } catch let e {
-            try! { throw e }() // TODO
+            sess = try TestSession(fromSaveURL: url)
+        } catch let e as NSError where e.domain == NSCocoaErrorDomain &&
+                                       e.code == NSFileReadNoSuchFileError {
+            let ser = makeSerializableSession()
+            sess = TestSession(base: ser)
+        }
+        runOrExit {
+            while try sess.cliGoOne() {}
         }
     }
 }
