@@ -934,17 +934,24 @@ class Test {
                 let qual: Int
                 let alternatives: [Item]
                 if mode == .meaning {
-                    (outcome, qual, alternatives) = item.evaluateMeaningAnswer(input: k, allowAlternatives: true)
+                    (outcome, qual, alternatives) = item.evaluateMeaningAnswer(input: k, allowAlternatives: false)
 					let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: final && modeIdx == 1)
                     print(cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate))
                     print(item.cliMeanings(colorful: true))
-                    item.cliPrintAlternatives(alternatives, isReading: false)
+                    // Only print alternatives if wrong, to avoid spoilers both
+                    // for later in the c2 and later in a confusion this might
+                    // be part of
+                    if outcome == .wrong {
+                        item.cliPrintAlternatives(alternatives, isReading: false)
+                    }
                 } else {
-                    (outcome, qual, alternatives) = item.evaluateReadingAnswer(input: k, allowAlternatives: true)
+                    (outcome, qual, alternatives) = item.evaluateReadingAnswer(input: k, allowAlternatives: false)
 					let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: final && modeIdx == 1)
                     print(cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate))
                     print(item.cliReadings(colorful: true))
-                    item.cliPrintAlternatives(alternatives, isReading: true)
+                    if outcome == .wrong { // See above
+                        item.cliPrintAlternatives(alternatives, isReading: true)
+                    }
                 }
                 if outcome == .right { break }
             }
@@ -953,7 +960,7 @@ class Test {
     func doCLIConfusion(item: Confusion) throws {
 		let items = item.items.shuffled()
         for (i, subitem) in items.enumerated() {
-            try doCLICharacterToRM(item: subitem as! NormalItem, final: i == items.count - 1 )
+            try doCLICharacterToRM(item: subitem as! NormalItem, final: i == items.count - 1)
         }
     }
     static let readingPrompt: String = ANSI.red("reading> ")
