@@ -15,7 +15,7 @@ import Yams
 import ArgumentParser
 import XCTest
 
-// TODO(fixed?): ~ is broken
+// TODO: ~ is broken for r2m
 // TODO: !wrong doesn't act as expected when halfway through a k2rm
 // TODO: don't let you mu more than once
 
@@ -590,26 +590,39 @@ class Confusion: Item, CustomStringConvertible {
     init(line: String, isWord: Bool) {
         let allXs: ItemListProtocol
         let bits = trim(line).split(separator: " ")
-        if bits.count > 2 { fatalError("too many spaces in '\(line)'") }
-        let spec = bits[0]
+        if bits.count > 3 { fatalError("too many spaces in '\(line)'") }
+        var bitsIdx = 0
+        var nameOpt: String?
+        if bits.count == 3 {
+            let name = String(bits[0])
+            if !name.starts(with: "@") {
+                fatalError("explicit name should start with @ in '\(line)'")
+            }
+            nameOpt = name
+            bitsIdx = 1
+        }
+        let spec = bits[bitsIdx]
+        let characters: [String]
         if isWord {
-            self.characters = spec.split(separator: "/").map { trim($0) }
+            characters = spec.split(separator: "/").map { trim($0) }
             allXs = Subete.instance.allWords
         } else {
-            self.characters = spec.map { String($0) }
+            characters = spec.map { String($0) }
             allXs = Subete.instance.allKanji
         }
         var birthday: Date? = nil
-        if bits.count > 1 {
-            birthday = myDateFormatter.date(from: String(bits[1]))
+        if bits.count > bitsIdx + 1 {
+            birthday = myDateFormatter.date(from: String(bits[bitsIdx + 1]))
         }
-        self.items = self.characters.map {
+        self.items = characters.map {
 			let item = allXs.findByName($0)
             if item == nil { fatalError("invalid item '\($0)' in confusion") }
             return item!
         }
         self.isWord = isWord
-        super.init(name: self.characters[0], birthday: birthday)
+        let name = nameOpt ?? characters[0]
+        self.characters = characters
+        super.init(name: name, birthday: birthday)
     }
     var description: String {
         return "<Confusion \(self.items)>"
