@@ -17,7 +17,7 @@
 -
     characters: 打付ける
     readings: [ぶつける]
-    meanings: [to hit (e.g. one's head), to strike, to crash into]
+    meanings: [to hit, to strike, to crash into]
 -
     characters: 実る
     readings: [みのる]
@@ -116,3 +116,8 @@
     readings: [おしこむ]
     meanings: [to push into, to cram into, to stuff into, to crowd into]
     birth: 2022-03-21
+-
+    characters: 濯ぐ
+    readings: [すすぐ]
+    meanings: [to rinse, to wash out]
+    birth: 2023-06-02
