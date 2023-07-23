@@ -278,8 +278,8 @@ class Subete {
 			print(srsUpdate.cliLabel)
 		}
     }
-    var allSRSItems: [Item] {
-        return allItems.flatMap { $0.availableSRSItems }
+    var allTestSubjects: [TestSubject] {
+        return allItems.flatMap { $0.myTestSubjects }
     }
 }
 
@@ -314,14 +314,14 @@ class Item: Hashable, Equatable, Comparable {
         fatalError("TODO")
     }
 
-    // this is separate in case I want to make SRSItem more than just (Item,
-    // TestKind) in the future
-    var availableSRSItems: [SRSItem] {
-        return availableTests.map { SRSItem(item: self, testKind: $0) }
+    // this is separate in case I want to make TestSubject more than just
+    // (Item, TestKind) in the future
+    var myTestSubjects: [TestSubject] {
+        return availableTests.map { TestSubject(item: self, testKind: $0) }
     }
 }
 
-struct SRSItem: Codable, Hashable, Equatable {
+struct TestSubject: Codable, Hashable, Equatable {
     let item: Item
     let testKind: TestKind
 }
@@ -693,6 +693,9 @@ class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
     }
     var vagueItems: [Item] {
         return self.items
+    }
+    var testSubjects: [TestSubject] {
+        return items.flatMap { $0.myTestSubjects }
     }
 }
 
@@ -1149,14 +1152,14 @@ class SRS {
 		}
 
     }
-    private var itemInfo: [SRSItem: ItemInfo] = [:]
-    private var backup: (SRSItem, ItemInfo?)? = nil
+    private var itemInfo: [TestSubject: ItemInfo] = [:]
+    private var backup: (TestSubject, ItemInfo?)? = nil
     func update(forResult result: TestResult) -> SRSUpdate {
-        let srsItem = SRSItem(item: result.item, kind: result.testKind)
-        var info = self.info(srsItem: srsItem)
-        self.backup = (srsItem, info)
+        let testSubject = TestSubject(item: result.item, kind: result.testKind)
+        var info = self.info(testSubject: testSubject)
+        self.backup = (testSubject, info)
         let srsUpdate = info.update(forResult: result)
-        itemInfo[srsItem] = info
+        itemInfo[testSubject] = info
         return srsUpdate
     }
     func updateStales(date: Date) {
@@ -1165,21 +1168,21 @@ class SRS {
 			itemInfo[item] = info
 		}
 	}
-    func revert(forSRSItem item: SRSItem) {
+    func revert(forSRSItem item: TestSubject) {
         let backup = self.backup!
         ensure(backup.0 == item)
         self.itemInfo[backup.0] = backup.1
         self.backup = nil
     }
-    func info(srsItem: SRSItem) -> ItemInfo {
-		if let info = self.itemInfo[srsItem] {
+    func info(testSubject: TestSubject) -> ItemInfo {
+		if let info = self.itemInfo[testSubject] {
 		    return info
 		}
-		let info = self.defaultInfo(srsItem: srsItem)
-		self.itemInfo[srsItem] = info
+		let info = self.defaultInfo(testSubject: testSubject)
+		self.itemInfo[testSubject] = info
 		return info
 	}
-	private func defaultInfo(srsItem: SRSItem) -> ItemInfo {
+	private func defaultInfo(testSubject: TestSubject) -> ItemInfo {
 		if let birthday = item.birthday {
 		    return .active((lastSeen: min(birthday, startupDate), points: 0, urgentRetest: false))
 		} else {
@@ -1190,7 +1193,7 @@ class SRS {
 
 func testSRS() {
 	let item = Item(name: "test", birthday: nil)
-	let srsItem = SRSItem(item: item, testKind: .confusion)
+	let testSubject = TestSubject(item: item, testKind: .confusion)
 	var info: SRS.ItemInfo = .burned
 	let _ = info.update(
 	    forResult: TestResult(testKind: .confusion,
@@ -1289,9 +1292,9 @@ struct ForecastCommand: ParsableCommand {
         let _ = Subete()
 	    let srs = Subete.instance.srs!
 	    let now = Date()
-	    let srsItems: [(nextTestDate: Date, srsItem: SRSItem)] = Subete.instance.allSRSItems.compactMap { (srsItem) in
-		    guard let nextTestDate = srs.info(srsItem: srsItem).nextTestDate else { return nil }
-		    return (nextTestDate: nextTestDate, srsItem: srsItem)
+	    let srsItems: [(nextTestDate: Date, testSubject: TestSubject)] = Subete.instance.allSRSItems.compactMap { (testSubject) in
+		    guard let nextTestDate = srs.info(testSubject: testSubject).nextTestDate else { return nil }
+		    return (nextTestDate: nextTestDate, testSubject: testSubject)
 		}
 		let maxDays = 20
 		let byDay: [(key: Int, value: [(nextTestDate: Date, item: Item)])] =
@@ -1436,15 +1439,15 @@ struct IndexableSet<Element>: Codable, Sequence where Element: Hashable & Equata
 }
 
 struct SerializableTestSession: Codable {
-    var pulledIncompleteItems: IndexableSet<ItemRef> = IndexableSet()
-    var pulledCompleteItems: IndexableSet<ItemRef> = IndexableSet()
-    var numCompletedItems: Int = 0 // first n elements of pulledItems are completed
-    var numUnpulledRandomItems: Int = 0
+    var pulledIncompleteSubjects: IndexableSet<TestSubject> = IndexableSet()
+    var pulledCompleteSubjects: IndexableSet<TestSubject> = IndexableSet()
+    var numCompletedSubjects: Int = 0 // first n elements of pulledSubjects are completed
+    var numUnpulledRandomSubjects: Int = 0
     var numDone: Int = 0
     let randomMode: RandomMode
 
-    func numRemainingItems() -> Int {
-        self.pulledIncompleteItems.count + self.numUnpulledRandomItems
+    func numRemainingSubjects() -> Int {
+        self.pulledIncompleteSubjects.count + self.numUnpulledRandomSubjects
     }
 
     func serialize() -> Data {
@@ -1462,7 +1465,7 @@ struct BenchSTS: ParsableCommand {
     func run() {
         let _ = Subete()
         let sts = SerializableTestSession(
-	        pulledIncompleteItems: IndexableSet(Subete.instance.allItems[..<500].map { ItemRef($0) }),
+	        pulledIncompleteSubjects: IndexableSet(Subete.instance.allTestSubjects[..<500].map),
             randomMode: .all
 	    )
 	    if self.deser {
@@ -1481,14 +1484,14 @@ struct BenchSTS: ParsableCommand {
 
 class TestSession {
     var base: SerializableTestSession
-    var lottery: WeightedList<Item>
-    var pulledItemToIndex: [Item: Int] = [:]
+    var lottery: WeightedList<TestSubject>
+    var pulledSubjectToIndex: [TestSubject: Int] = [:]
     var saveURL: URL? = nil
     init(base: SerializableTestSession, saveURL: URL? = nil) {
         self.base = base
         self.saveURL = saveURL
         self.lottery = TestSession.makeLottery(randomMode: base.randomMode,
-                                               excluding: Set(base.pulledCompleteItems).union(Set(base.pulledIncompleteItems)))
+                                               excluding: Set(base.pulledCompleteSubjects).union(Set(base.pulledIncompleteSubjects)))
     }
     convenience init(fromSaveURL url: URL) throws {
         let data = try Data(contentsOf: url)
@@ -1497,59 +1500,59 @@ class TestSession {
             saveURL: url
         )
     }
-    static func makeLottery(randomMode: RandomMode, excluding excl: Set<ItemRef>) -> WeightedList<Item> {
-		var availRandomItems: [(item: Item, weight: Double)] = []
+    static func makeLottery(randomMode: RandomMode, excluding excl: Set<TestSubject>) -> WeightedList<TestSubject> {
+		var availRandomSubjects: [(subject: TestSubject, weight: Double)] = []
 		switch randomMode {
 			case .all:
-				availRandomItems += (Subete.instance.allWords.items + Subete.instance.allKanji.items).map {
-				    (item: $0, weight: 1.0)
+				availRandomSubjects += (Subete.instance.allWords.testSubjects + Subete.instance.allKanji.testSubjects).map {
+				    (subject: $0, weight: 1.0)
 				}
-				availRandomItems += Subete.instance.allConfusion.items.map {
-				    (item: $0, weight: 10.0)
+				availRandomSubjects += Subete.instance.allConfusion.subjects.map {
+				    (subject: $0, weight: 10.0)
 				}
 			case .confusion:
-				availRandomItems += Subete.instance.allConfusion.items.map {
-				    (item: $0, weight: 1.0)
+				availRandomSubjects += Subete.instance.allConfusion.subjects.map {
+				    (subject: $0, weight: 1.0)
 				}
 		}
-		let filteredRandomItems = availRandomItems.filter { !excl.contains(ItemRef($0.0)) }
-		return WeightedList(items: filteredRandomItems)
+		let filteredRandomSubjects = availRandomSubjects.filter { !excl.contains($0.subject) }
+		return WeightedList(subjects: filteredRandomSubjects)
 	}
 
-	func randomItem() -> Item? {
-	    let numPulled = self.base.pulledIncompleteItems.count,
-	        numUnpulled = self.base.numUnpulledRandomItems
+	func randomSubject() -> TestSubject? {
+	    let numPulled = self.base.pulledIncompleteSubjects.count,
+	        numUnpulled = self.base.numUnpulledRandomSubjects
         if numPulled + numUnpulled == 0 {
             return nil
         }
         let rawIndex = Int.random(in: 0..<(numPulled + numUnpulled))
         if rawIndex < numPulled {
-            return self.base.pulledIncompleteItems[rawIndex].item
+            return self.base.pulledIncompleteSubjects[rawIndex]
         } else {
-	        let item = self.lottery.takeRandomElement()!
-	        self.base.numUnpulledRandomItems -= 1
-	        self.base.pulledIncompleteItems.update(with: ItemRef(item))
-	        return item
+	        let subject = self.lottery.takeRandomElement()!
+	        self.base.numUnpulledRandomSubjects -= 1
+	        self.base.pulledIncompleteSubjects.update(with: subject)
+	        return subject
 	    }
 	}
 
-	func setItemCompleteness(item: Item, complete: Bool) {
+	func setSubjectCompleteness(subject: TestSubject, complete: Bool) {
 	    if complete {
-	        self.base.pulledIncompleteItems.remove(ItemRef(item))
-	        self.base.pulledCompleteItems.update(with: ItemRef(item))
+	        self.base.pulledIncompleteSubjects.remove(subject)
+	        self.base.pulledCompleteSubjects.update(with: subject)
 	    } else {
-	        self.base.pulledCompleteItems.remove(ItemRef(item))
-	        self.base.pulledIncompleteItems.update(with: ItemRef(item))
+	        self.base.pulledCompleteSubjects.remove(subject)
+	        self.base.pulledIncompleteSubjects.update(with: subject)
 	    }
 	}
 
 	func cliGoOne() throws -> Bool {
-	    guard let item = self.randomItem() else {
+	    guard let subject = self.randomSubject() else {
 	        return false
 	    }
-        print("[\(self.base.numDone) | \(self.base.numRemainingItems())]")
-        let testKind = item.availableTests.randomElement()!
-        let test = Test(kind: testKind, item: item, testSession: self)
+        print("[\(self.base.numDone) | \(self.base.numRemainingSubjects())]")
+        //let testKind = item.availableTests.randomElement()!
+        let test = Test(kind: subject.testKind, item: subject.item, testSession: self)
         try test.cliGo()
         self.base.numDone += 1
         return true
@@ -1605,11 +1608,11 @@ struct Rerere: ParsableCommand {
                 return (minItems: _minItems, maxItems: _maxItems)
         }
 	}
-	func gatherSRSItems() -> [(nextTestDate: Date, srsItem: SRSItem)] {
+	func gatherSRSItems() -> [(nextTestDate: Date, testSubject: TestSubject)] {
 	    let now = Date()
 	    let srs = Subete.instance.srs!
-	    return Subete.instance.allSRSItems.compactMap { (srsItem) in
-		    guard let nextTestDate = srs.info(srsItem: srsItem).nextTestDate else { return nil }
+	    return Subete.instance.allSRSItems.compactMap { (testSubject) in
+		    guard let nextTestDate = srs.info(testSubject: testSubject).nextTestDate else { return nil }
 		    return nextTestDate <= now ? (nextTestDate: nextTestDate, item: item) : nil
 	    }
 	}
