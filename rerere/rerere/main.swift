@@ -278,6 +278,9 @@ class Subete {
 			print(srsUpdate.cliLabel)
 		}
     }
+    var allSRSItems: [Item] {
+        return allItems.flatMap { $0.availableSRSItems }
+    }
 }
 
 enum ItemKind: String, ExpressibleByArgument, Codable {
@@ -311,7 +314,18 @@ class Item: Hashable, Equatable, Comparable {
         fatalError("TODO")
     }
 
+    // this is separate in case I want to make SRSItem more than just (Item,
+    // TestKind) in the future
+    var availableSRSItems: [SRSItem] {
+        return availableTests.map { SRSItem(item: self, testKind: $0) }
+    }
 }
+
+struct SRSItem: Codable, Hashable, Equatable {
+    let item: Item
+    let testKind: TestKind
+}
+
 func normalizeMeaningTrimmed(_ meaning: String) -> String {
     return meaning
 }
@@ -1135,13 +1149,14 @@ class SRS {
 		}
 
     }
-    private var itemInfo: [Item: ItemInfo] = [:]
-    private var backup: (Item, ItemInfo?)? = nil
+    private var itemInfo: [SRSItem: ItemInfo] = [:]
+    private var backup: (SRSItem, ItemInfo?)? = nil
     func update(forResult result: TestResult) -> SRSUpdate {
-        var info = self.info(item: result.item)
-        self.backup = (result.item, info)
+        let srsItem = SRSItem(item: result.item, kind: result.testKind)
+        var info = self.info(srsItem: srsItem)
+        self.backup = (srsItem, info)
         let srsUpdate = info.update(forResult: result)
-        itemInfo[result.item] = info
+        itemInfo[srsItem] = info
         return srsUpdate
     }
     func updateStales(date: Date) {
@@ -1150,21 +1165,21 @@ class SRS {
 			itemInfo[item] = info
 		}
 	}
-    func revert(forItem item: Item) {
+    func revert(forSRSItem item: SRSItem) {
         let backup = self.backup!
         ensure(backup.0 == item)
         self.itemInfo[backup.0] = backup.1
         self.backup = nil
     }
-    func info(item: Item) -> ItemInfo {
-		if let info = self.itemInfo[item] {
+    func info(srsItem: SRSItem) -> ItemInfo {
+		if let info = self.itemInfo[srsItem] {
 		    return info
 		}
-		let info = self.defaultInfo(item: item)
-		self.itemInfo[item] = info
+		let info = self.defaultInfo(srsItem: srsItem)
+		self.itemInfo[srsItem] = info
 		return info
 	}
-	private func defaultInfo(item: Item) -> ItemInfo {
+	private func defaultInfo(srsItem: SRSItem) -> ItemInfo {
 		if let birthday = item.birthday {
 		    return .active((lastSeen: min(birthday, startupDate), points: 0, urgentRetest: false))
 		} else {
@@ -1175,6 +1190,7 @@ class SRS {
 
 func testSRS() {
 	let item = Item(name: "test", birthday: nil)
+	let srsItem = SRSItem(item: item, testKind: .confusion)
 	var info: SRS.ItemInfo = .burned
 	let _ = info.update(
 	    forResult: TestResult(testKind: .confusion,
@@ -1273,9 +1289,9 @@ struct ForecastCommand: ParsableCommand {
         let _ = Subete()
 	    let srs = Subete.instance.srs!
 	    let now = Date()
-	    let srsItems: [(nextTestDate: Date, item: Item)] = Subete.instance.allItems.compactMap { (item) in
-		    guard let nextTestDate = srs.info(item: item).nextTestDate else { return nil }
-		    return (nextTestDate: nextTestDate, item: item)
+	    let srsItems: [(nextTestDate: Date, srsItem: SRSItem)] = Subete.instance.allSRSItems.compactMap { (srsItem) in
+		    guard let nextTestDate = srs.info(srsItem: srsItem).nextTestDate else { return nil }
+		    return (nextTestDate: nextTestDate, srsItem: srsItem)
 		}
 		let maxDays = 20
 		let byDay: [(key: Int, value: [(nextTestDate: Date, item: Item)])] =
@@ -1589,11 +1605,11 @@ struct Rerere: ParsableCommand {
                 return (minItems: _minItems, maxItems: _maxItems)
         }
 	}
-	func gatherSRSItems() -> [(nextTestDate: Date, item: Item)] {
+	func gatherSRSItems() -> [(nextTestDate: Date, srsItem: SRSItem)] {
 	    let now = Date()
 	    let srs = Subete.instance.srs!
-	    return Subete.instance.allItems.compactMap { (item) in
-		    guard let nextTestDate = srs.info(item: item).nextTestDate else { return nil }
+	    return Subete.instance.allSRSItems.compactMap { (srsItem) in
+		    guard let nextTestDate = srs.info(srsItem: srsItem).nextTestDate else { return nil }
 		    return nextTestDate <= now ? (nextTestDate: nextTestDate, item: item) : nil
 	    }
 	}
