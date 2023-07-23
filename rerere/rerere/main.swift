@@ -278,8 +278,8 @@ class Subete {
 			print(srsUpdate.cliLabel)
 		}
     }
-    var allTestSubjects: [TestSubject] {
-        return allItems.flatMap { $0.myTestSubjects }
+    var allQuestions: [Question] {
+        return allItems.flatMap { $0.myQuestions }
     }
 }
 
@@ -314,16 +314,28 @@ class Item: Hashable, Equatable, Comparable {
         fatalError("TODO")
     }
 
-    // this is separate in case I want to make TestSubject more than just
+    // this is separate in case I want to make Question more than just
     // (Item, TestKind) in the future
-    var myTestSubjects: [TestSubject] {
-        return availableTests.map { TestSubject(item: self, testKind: $0) }
+    var myQuestions: [Question] {
+        return availableTests.map { Question(item: self, testKind: $0) }
     }
 }
 
-struct TestSubject: Codable, Hashable, Equatable {
+struct Question: Codable, Hashable, Equatable {
     let item: Item
     let testKind: TestKind
+
+    typealias CodedQuestion = (item: ItemRef, testKind: TestKind)
+
+    init(from decoder: Decoder) throws {
+        let cq = CodedQuestion(from: decoder)
+        item = cq.item.item
+        testKind = cq.testKind
+    }
+    func encode(to encoder: Encoder) throws {
+        let cq = CodedQuestion(item: ItemRef(item), testKind: testKind)
+        try cq.encode(to: encoder)
+    }
 }
 
 func normalizeMeaningTrimmed(_ meaning: String) -> String {
@@ -694,8 +706,8 @@ class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
     var vagueItems: [Item] {
         return self.items
     }
-    var testSubjects: [TestSubject] {
-        return items.flatMap { $0.myTestSubjects }
+    var questions: [Question] {
+        return items.flatMap { $0.myQuestions }
     }
 }
 
@@ -1152,14 +1164,14 @@ class SRS {
 		}
 
     }
-    private var itemInfo: [TestSubject: ItemInfo] = [:]
-    private var backup: (TestSubject, ItemInfo?)? = nil
+    private var itemInfo: [Question: ItemInfo] = [:]
+    private var backup: (Question, ItemInfo?)? = nil
     func update(forResult result: TestResult) -> SRSUpdate {
-        let testSubject = TestSubject(item: result.item, kind: result.testKind)
-        var info = self.info(testSubject: testSubject)
-        self.backup = (testSubject, info)
+        let question = Question(item: result.item, kind: result.testKind)
+        var info = self.info(question: question)
+        self.backup = (question, info)
         let srsUpdate = info.update(forResult: result)
-        itemInfo[testSubject] = info
+        itemInfo[question] = info
         return srsUpdate
     }
     func updateStales(date: Date) {
@@ -1168,21 +1180,21 @@ class SRS {
 			itemInfo[item] = info
 		}
 	}
-    func revert(forSRSItem item: TestSubject) {
+    func revert(forSRSItem item: Question) {
         let backup = self.backup!
         ensure(backup.0 == item)
         self.itemInfo[backup.0] = backup.1
         self.backup = nil
     }
-    func info(testSubject: TestSubject) -> ItemInfo {
-		if let info = self.itemInfo[testSubject] {
+    func info(question: Question) -> ItemInfo {
+		if let info = self.itemInfo[question] {
 		    return info
 		}
-		let info = self.defaultInfo(testSubject: testSubject)
-		self.itemInfo[testSubject] = info
+		let info = self.defaultInfo(question: question)
+		self.itemInfo[question] = info
 		return info
 	}
-	private func defaultInfo(testSubject: TestSubject) -> ItemInfo {
+	private func defaultInfo(question: Question) -> ItemInfo {
 		if let birthday = item.birthday {
 		    return .active((lastSeen: min(birthday, startupDate), points: 0, urgentRetest: false))
 		} else {
@@ -1193,7 +1205,7 @@ class SRS {
 
 func testSRS() {
 	let item = Item(name: "test", birthday: nil)
-	let testSubject = TestSubject(item: item, testKind: .confusion)
+	let question = Question(item: item, testKind: .confusion)
 	var info: SRS.ItemInfo = .burned
 	let _ = info.update(
 	    forResult: TestResult(testKind: .confusion,
@@ -1292,9 +1304,9 @@ struct ForecastCommand: ParsableCommand {
         let _ = Subete()
 	    let srs = Subete.instance.srs!
 	    let now = Date()
-	    let srsItems: [(nextTestDate: Date, testSubject: TestSubject)] = Subete.instance.allSRSItems.compactMap { (testSubject) in
-		    guard let nextTestDate = srs.info(testSubject: testSubject).nextTestDate else { return nil }
-		    return (nextTestDate: nextTestDate, testSubject: testSubject)
+	    let srsItems: [(nextTestDate: Date, question: Question)] = Subete.instance.allSRSItems.compactMap { (question) in
+		    guard let nextTestDate = srs.info(question: question).nextTestDate else { return nil }
+		    return (nextTestDate: nextTestDate, question: question)
 		}
 		let maxDays = 20
 		let byDay: [(key: Int, value: [(nextTestDate: Date, item: Item)])] =
@@ -1338,7 +1350,7 @@ struct TestOneCommand: ParsableCommand {
         let item = try unwrapOrThrow(Subete.instance.allByKind(itemKind).findByName(name),
                                      err: MyError("no such item kind \(itemKind) name \(name)"))
         let testSession = TestSession(base: SerializableTestSession(
-            pulledCompleteItems: IndexableSet([ItemRef(item)]),
+            pulledCompleteQuestions: IndexableSet([Question(item: item, testKind: testKind)]),
             randomMode: .all
         ))
         let test = Test(kind: testKind, item: item, testSession: testSession)
@@ -1439,15 +1451,15 @@ struct IndexableSet<Element>: Codable, Sequence where Element: Hashable & Equata
 }
 
 struct SerializableTestSession: Codable {
-    var pulledIncompleteSubjects: IndexableSet<TestSubject> = IndexableSet()
-    var pulledCompleteSubjects: IndexableSet<TestSubject> = IndexableSet()
-    var numCompletedSubjects: Int = 0 // first n elements of pulledSubjects are completed
-    var numUnpulledRandomSubjects: Int = 0
+    var pulledIncompleteQuestions: IndexableSet<Question> = IndexableSet()
+    var pulledCompleteQuestions: IndexableSet<Question> = IndexableSet()
+    var numCompletedQuestions: Int = 0 // first n elements of pulledQuestions are completed
+    var numUnpulledRandomQuestions: Int = 0
     var numDone: Int = 0
     let randomMode: RandomMode
 
-    func numRemainingSubjects() -> Int {
-        self.pulledIncompleteSubjects.count + self.numUnpulledRandomSubjects
+    func numRemainingQuestions() -> Int {
+        self.pulledIncompleteQuestions.count + self.numUnpulledRandomQuestions
     }
 
     func serialize() -> Data {
@@ -1465,7 +1477,7 @@ struct BenchSTS: ParsableCommand {
     func run() {
         let _ = Subete()
         let sts = SerializableTestSession(
-	        pulledIncompleteSubjects: IndexableSet(Subete.instance.allTestSubjects[..<500].map),
+	        pulledIncompleteQuestions: IndexableSet(Subete.instance.allQuestions[..<500].map),
             randomMode: .all
 	    )
 	    if self.deser {
@@ -1484,14 +1496,14 @@ struct BenchSTS: ParsableCommand {
 
 class TestSession {
     var base: SerializableTestSession
-    var lottery: WeightedList<TestSubject>
-    var pulledSubjectToIndex: [TestSubject: Int] = [:]
+    var lottery: WeightedList<Question>
+    var pulledQuestionToIndex: [Question: Int] = [:]
     var saveURL: URL? = nil
     init(base: SerializableTestSession, saveURL: URL? = nil) {
         self.base = base
         self.saveURL = saveURL
         self.lottery = TestSession.makeLottery(randomMode: base.randomMode,
-                                               excluding: Set(base.pulledCompleteSubjects).union(Set(base.pulledIncompleteSubjects)))
+                                               excluding: Set(base.pulledCompleteQuestions).union(Set(base.pulledIncompleteQuestions)))
     }
     convenience init(fromSaveURL url: URL) throws {
         let data = try Data(contentsOf: url)
@@ -1500,59 +1512,59 @@ class TestSession {
             saveURL: url
         )
     }
-    static func makeLottery(randomMode: RandomMode, excluding excl: Set<TestSubject>) -> WeightedList<TestSubject> {
-		var availRandomSubjects: [(subject: TestSubject, weight: Double)] = []
+    static func makeLottery(randomMode: RandomMode, excluding excl: Set<Question>) -> WeightedList<Question> {
+		var availRandomQuestions: [(question: Question, weight: Double)] = []
 		switch randomMode {
 			case .all:
-				availRandomSubjects += (Subete.instance.allWords.testSubjects + Subete.instance.allKanji.testSubjects).map {
-				    (subject: $0, weight: 1.0)
+				availRandomQuestions += (Subete.instance.allWords.questions + Subete.instance.allKanji.questions).map {
+				    (question: $0, weight: 1.0)
 				}
-				availRandomSubjects += Subete.instance.allConfusion.subjects.map {
-				    (subject: $0, weight: 10.0)
+				availRandomQuestions += Subete.instance.allConfusion.questions.map {
+				    (question: $0, weight: 10.0)
 				}
 			case .confusion:
-				availRandomSubjects += Subete.instance.allConfusion.subjects.map {
-				    (subject: $0, weight: 1.0)
+				availRandomQuestions += Subete.instance.allConfusion.questions.map {
+				    (question: $0, weight: 1.0)
 				}
 		}
-		let filteredRandomSubjects = availRandomSubjects.filter { !excl.contains($0.subject) }
-		return WeightedList(subjects: filteredRandomSubjects)
+		let filteredRandomQuestions = availRandomQuestions.filter { !excl.contains($0.question) }
+		return WeightedList(questions: filteredRandomQuestions)
 	}
 
-	func randomSubject() -> TestSubject? {
-	    let numPulled = self.base.pulledIncompleteSubjects.count,
-	        numUnpulled = self.base.numUnpulledRandomSubjects
+	func randomQuestion() -> Question? {
+	    let numPulled = self.base.pulledIncompleteQuestions.count,
+	        numUnpulled = self.base.numUnpulledRandomQuestions
         if numPulled + numUnpulled == 0 {
             return nil
         }
         let rawIndex = Int.random(in: 0..<(numPulled + numUnpulled))
         if rawIndex < numPulled {
-            return self.base.pulledIncompleteSubjects[rawIndex]
+            return self.base.pulledIncompleteQuestions[rawIndex]
         } else {
-	        let subject = self.lottery.takeRandomElement()!
-	        self.base.numUnpulledRandomSubjects -= 1
-	        self.base.pulledIncompleteSubjects.update(with: subject)
-	        return subject
+	        let question = self.lottery.takeRandomElement()!
+	        self.base.numUnpulledRandomQuestions -= 1
+	        self.base.pulledIncompleteQuestions.update(with: question)
+	        return question
 	    }
 	}
 
-	func setSubjectCompleteness(subject: TestSubject, complete: Bool) {
+	func setQuestionCompleteness(question: Question, complete: Bool) {
 	    if complete {
-	        self.base.pulledIncompleteSubjects.remove(subject)
-	        self.base.pulledCompleteSubjects.update(with: subject)
+	        self.base.pulledIncompleteQuestions.remove(question)
+	        self.base.pulledCompleteQuestions.update(with: question)
 	    } else {
-	        self.base.pulledCompleteSubjects.remove(subject)
-	        self.base.pulledIncompleteSubjects.update(with: subject)
+	        self.base.pulledCompleteQuestions.remove(question)
+	        self.base.pulledIncompleteQuestions.update(with: question)
 	    }
 	}
 
 	func cliGoOne() throws -> Bool {
-	    guard let subject = self.randomSubject() else {
+	    guard let question = self.randomQuestion() else {
 	        return false
 	    }
-        print("[\(self.base.numDone) | \(self.base.numRemainingSubjects())]")
+        print("[\(self.base.numDone) | \(self.base.numRemainingQuestions())]")
         //let testKind = item.availableTests.randomElement()!
-        let test = Test(kind: subject.testKind, item: subject.item, testSession: self)
+        let test = Test(kind: question.testKind, item: question.item, testSession: self)
         try test.cliGo()
         self.base.numDone += 1
         return true
@@ -1577,9 +1589,9 @@ class TestSession {
 }
 
 struct Rerere: ParsableCommand {
-    @Option() var minItems: Int?
-    @Option() var maxItems: Int?
-    @Option() var minRandomItemsFraction: Double = 0.33
+    @Option() var minQuestions: Int?
+    @Option() var maxQuestions: Int?
+    @Option() var minRandomQuestionsFraction: Double = 0.33
     @Option() var randomMode: RandomMode = .all
 
     static let configuration = CommandConfiguration(
@@ -1587,63 +1599,63 @@ struct Rerere: ParsableCommand {
             subcommands: [ForecastCommand.self, TestOneCommand.self, BenchSTS.self])
 
     func validate() throws {
-        guard minRandomItemsFraction >= 0 && minRandomItemsFraction <= 1 else {
-            throw ValidationError("min-random-items-fraction should be in [0,1]")
+        guard minRandomQuestionsFraction >= 0 && minRandomQuestionsFraction <= 1 else {
+            throw ValidationError("min-random-questions-fraction should be in [0,1]")
         }
-        guard minItems == nil || maxItems == nil || minItems! < maxItems! else {
-            throw ValidationError("min-items should < max-items")
+        guard minQuestions == nil || maxQuestions == nil || minQuestions! < maxQuestions! else {
+            throw ValidationError("min-questions should < max-questions")
         }
     }
-	func resolveMinMax() -> (minItems: Int, maxItems: Int) {
-        let defaultMinItems = 50
-        let defaultMaxItems = 75
-        switch (self.minItems, self.maxItems) {
+	func resolveMinMax() -> (minQuestions: Int, maxQuestions: Int) {
+        let defaultMinQuestions = 50
+        let defaultMaxQuestions = 75
+        switch (self.minQuestions, self.maxQuestions) {
             case (nil, nil):
-                return (minItems: defaultMinItems, maxItems: defaultMaxItems)
-            case (.some(let _minItems), nil):
-                return (minItems: _minItems, maxItems: max(defaultMaxItems, _minItems))
-            case (nil, .some(let _maxItems)):
-                return (minItems: min(defaultMinItems, _maxItems), maxItems: _maxItems)
-            case (.some(let _minItems), .some(let _maxItems)):
-                return (minItems: _minItems, maxItems: _maxItems)
+                return (minQuestions: defaultMinQuestions, maxQuestions: defaultMaxQuestions)
+            case (.some(let _minQuestions), nil):
+                return (minQuestions: _minQuestions, maxQuestions: max(defaultMaxQuestions, _minQuestions))
+            case (nil, .some(let _maxQuestions)):
+                return (minQuestions: min(defaultMinQuestions, _maxQuestions), maxQuestions: _maxQuestions)
+            case (.some(let _minQuestions), .some(let _maxQuestions)):
+                return (minQuestions: _minQuestions, maxQuestions: _maxQuestions)
         }
 	}
-	func gatherSRSItems() -> [(nextTestDate: Date, testSubject: TestSubject)] {
+	func gatherSRSQuestions() -> [(nextTestDate: Date, question: Question)] {
 	    let now = Date()
 	    let srs = Subete.instance.srs!
-	    return Subete.instance.allSRSItems.compactMap { (testSubject) in
-		    guard let nextTestDate = srs.info(testSubject: testSubject).nextTestDate else { return nil }
-		    return nextTestDate <= now ? (nextTestDate: nextTestDate, item: item) : nil
+	    return Subete.instance.allSRSQuestions.compactMap { (question) in
+		    guard let nextTestDate = srs.info(question: question).nextTestDate else { return nil }
+		    return nextTestDate <= now ? (nextTestDate: nextTestDate, question: question) : nil
 	    }
 	}
-	func calcItemSplit(minItems: Int, maxItems: Int, availSRSItems: Int) -> (numSRSItems: Int, numRandomItems: Int) {
-	    if self.minRandomItemsFraction >= 1.0 {
-	        return (numSRSItems: 0, numRandomItems: minItems)
+	func calcQuestionSplit(minQuestions: Int, maxQuestions: Int, availSRSQuestions: Int) -> (numSRSQuestions: Int, numRandomQuestions: Int) {
+	    if self.minRandomQuestionsFraction >= 1.0 {
+	        return (numSRSQuestions: 0, numRandomQuestions: minQuestions)
 	    } else {
-	        var numItemsX: Double = Double(availSRSItems) / (1.0 - self.minRandomItemsFraction)
-	        numItemsX = max(numItemsX, Double(minItems))
-	        numItemsX = min(numItemsX, Double(maxItems))
-	        let numItems = Int(numItemsX)
-	        let numSRSItems = min(availSRSItems, Int(numItemsX * (1.0 - self.minRandomItemsFraction)))
+	        var numQuestionsX: Double = Double(availSRSQuestions) / (1.0 - self.minRandomQuestionsFraction)
+	        numQuestionsX = max(numQuestionsX, Double(minQuestions))
+	        numQuestionsX = min(numQuestionsX, Double(maxQuestions))
+	        let numQuestions = Int(numQuestionsX)
+	        let numSRSQuestions = min(availSRSQuestions, Int(numQuestionsX * (1.0 - self.minRandomQuestionsFraction)))
 	        return (
-	            numSRSItems: numSRSItems,
-	            numRandomItems: numItems - numSRSItems
+	            numSRSQuestions: numSRSQuestions,
+	            numRandomQuestions: numQuestions - numSRSQuestions
 	        )
 	    }
 	}
 	func makeSerializableSession() -> SerializableTestSession {
-        let (minItems, maxItems) = resolveMinMax()
-	    var srsItems = gatherSRSItems()
-	    let (numSRSItems, numRandomItems) = calcItemSplit(minItems: minItems, maxItems: maxItems, availSRSItems: srsItems.count)
-	    print("got \(srsItems.count) SRS items")
-	    if numSRSItems < srsItems.count {
-		    print("...but limiting to \(numSRSItems)")
-		    srsItems.sort { $0.nextTestDate > $1.nextTestDate}
-		    srsItems = Array(srsItems[0..<numSRSItems])
+        let (minQuestions, maxQuestions) = resolveMinMax()
+	    var srsQuestions = gatherSRSQuestions()
+	    let (numSRSQuestions, numRandomQuestions) = calcQuestionSplit(minQuestions: minQuestions, maxQuestions: maxQuestions, availSRSQuestions: srsQuestions.count)
+	    print("got \(srsQuestions.count) SRS questions")
+	    if numSRSQuestions < srsQuestions.count {
+		    print("...but limiting to \(numSRSQuestions)")
+		    srsQuestions.sort { $0.nextTestDate > $1.nextTestDate}
+		    srsQuestions = Array(srsQuestions[0..<numSRSQuestions])
 	    }
 	    return SerializableTestSession(
-	        pulledIncompleteItems: IndexableSet(srsItems.map { ItemRef($0.item) }),
-	        numUnpulledRandomItems: numRandomItems,
+	        pulledIncompleteQuestions: IndexableSet(srsQuestions.map { QuestionRef($0.question) }),
+	        numUnpulledRandomQuestions: numRandomQuestions,
 	        randomMode: randomMode
 	    )
 	}
