@@ -13,7 +13,10 @@ while url:
 by_kind = {}
 for item in data:
     by_kind.setdefault(item['object'], []).append(item)
-assert set(by_kind.keys()) == {'radical', 'kanji', 'vocabulary'}
+
+#open('tmp.json', 'w').write(json.dumps(by_kind))
+
+assert set(by_kind.keys()) == {'radical', 'kanji', 'vocabulary', 'kana_vocabulary'}
 for kind, items in by_kind.items():
     with open(f'{kind}.json', 'w') as fp:
         json.dump(items, fp, indent='    ')
