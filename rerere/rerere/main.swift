@@ -181,7 +181,7 @@ class Subete {
     
     var lastAppendedTest: Test?
     
-    let basePath = "/Users/comex/c/wk/"
+    let basePath = "/Users/comex/c/wk"
 
     var nextItemID = 0
 
@@ -191,8 +191,8 @@ class Subete {
         self.allWords = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "vocabulary", class: Word.self))
         self.allKanji = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "kanji", class: Kanji.self))
         print("loading confusion")
-        let allKanjiConfusion = loadConfusion(path: basePath + "confusion.txt", isWord: false)
-        let allWordConfusion = loadConfusion(path: basePath + "confusion-vocab.txt", isWord: true)
+        let allKanjiConfusion = loadConfusion(path: basePath + "/confusion.txt", isWord: false)
+        let allWordConfusion = loadConfusion(path: basePath + "/confusion-vocab.txt", isWord: true)
         self.allConfusion = ItemList(allKanjiConfusion + allWordConfusion)
         self.allItems = self.allWords.items + self.allKanji.items + self.allConfusion.items
         print("loading srs")
@@ -215,7 +215,7 @@ class Subete {
     }
     func openLogTxt<R>(write: Bool, cb: (FileHandle) throws -> R) throws -> R {
         // todo: clowd!
-        let url = URL(fileURLWithPath: basePath + "log.txt")
+        let url = URL(fileURLWithPath: basePath + "/log.txt")
         let fh: FileHandle
         if write {
             fh = try FileHandle(forUpdating: url)
@@ -1071,6 +1071,7 @@ enum SRSUpdate {
 	case burned
 	case lockedOut
 	case noChangeOther
+	case anachronism // ignore update before birthday (which I can use to force an item to be re-tested)
 	
 	var isNoChangeOther: Bool {
 		if case .noChangeOther = self {
@@ -1089,6 +1090,8 @@ enum SRSUpdate {
 				return " ⟳"
 			case .noChangeOther:
 				return ""
+			case .anachronism:
+				return " [anachronism]"
 		}
 	}
 }
@@ -1134,8 +1137,12 @@ class SRS {
 		}
 		mutating func update(forResult result: TestResult) -> SRSUpdate {
 			let date = result.date ?? Date(timeIntervalSince1970: 0)
-			//print("updating \(String(describing: info0)) for result \(result)")
+
+			if let birthday = result.question.item.birthday, date < birthday {
+			    return .anachronism
+			}
 			self.updateIfStale(date: date)
+			//print("updating \(String(describing: self)) for result \(result) at date \(date) birthday=\(String(describing: result.question.item.birthday))")
 			
 			switch self {
 			    case .active(var info):
@@ -1670,14 +1677,15 @@ struct Rerere: ParsableCommand {
 
     func run() throws {
         let _ = Subete()
-        let url = URL(fileURLWithPath: "\(Subete.instance.basePath)/sess.json")
+        let path = "\(Subete.instance.basePath)/sess.json"
+        let url = URL(fileURLWithPath: path)
         let sess: TestSession
         do {
             sess = try TestSession(fromSaveURL: url)
-            print("Loaded existing session \(url)")
+            print("Loaded existing session \(path)")
         } catch let e as NSError where e.domain == NSCocoaErrorDomain &&
                                        e.code == NSFileReadNoSuchFileError {
-            print("Starting new session \(url)")
+            print("Starting new session \(path)")
             let ser = makeSerializableSession()
             sess = TestSession(base: ser, saveURL: url)
         }
