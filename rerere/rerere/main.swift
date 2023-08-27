@@ -19,12 +19,12 @@ import XCTest
 // TODO: don't let you mu more than once
 
 func time<T>(count: Int, block: () -> T) {
-	let a = CFAbsoluteTimeGetCurrent()
-	for _ in 0..<count {
-	    blackBox(block())
-	}
-	let b = CFAbsoluteTimeGetCurrent()
-	print((b - a) / Double(count))
+    let a = CFAbsoluteTimeGetCurrent()
+    for _ in 0..<count {
+        blackBox(block())
+    }
+    let b = CFAbsoluteTimeGetCurrent()
+    print((b - a) / Double(count))
 }
 func blackBox<T>(_ t: T) {
     withUnsafePointer(to: t) { (ptr) in
@@ -60,7 +60,7 @@ func trim(_ s: String) -> String {
     if start == a.startIndex && a.index(after: end) == a.endIndex {
         return s
     } else {
-		return String(a[start...end])!
+        return String(a[start...end])!
     }
 }
 func trim(_ s: Substring) -> String {
@@ -234,16 +234,16 @@ class Subete {
         let results = try! TestResult.readAllFromLog()
         let srs = SRS()
         let srsEpoch = Date(timeIntervalSince1970: 1611966197)
-		for result in results {
-			guard let date = result.date else { continue }
-			if date < srsEpoch { continue }
-			let _ = srs.update(forResult: result)
-		}
-		for question in self.allQuestions {
-		    let _ = srs.info(question: question) // allow items with no results to stale
-		}
-		srs.updateStales(date: Date())
-		return srs
+        for result in results {
+            guard let date = result.date else { continue }
+            if date < srsEpoch { continue }
+            let _ = srs.update(forResult: result)
+        }
+        for question in self.allQuestions {
+            let _ = srs.info(question: question) // allow items with no results to stale
+        }
+        srs.updateStales(date: Date())
+        return srs
     }
     func handleBang(_ input: String, curTest: Test) {
         switch input {
@@ -274,8 +274,8 @@ class Subete {
         }
         let srsUpdate = try! test.markResult(outcome: outcome)
         if !srsUpdate.isNoChangeOther {
-			print(srsUpdate.cliLabel)
-		}
+            print(srsUpdate.cliLabel)
+        }
     }
     var allQuestions: [Question] {
         return allItems.flatMap { $0.myQuestions }
@@ -516,7 +516,7 @@ class NormalItem: Item, JSONInit {
             let thisQual: Int
             if normalizedInput == meaning.text {
                 thisQual = 2
-			} else if levenshtein.distance(between: normalizedInput, and: meaning.text) <= okDist {
+            } else if levenshtein.distance(between: normalizedInput, and: meaning.text) <= okDist {
                 thisQual = 1
             } else {
                 continue
@@ -654,7 +654,7 @@ class Confusion: Item, CustomStringConvertible {
             birthday = myDateFormatter.date(from: String(bits[bitsIdx + 1]))
         }
         self.items = characters.map {
-			let item = allXs.findByName($0)
+            let item = allXs.findByName($0)
             if item == nil { fatalError("invalid item '\($0)' in confusion") }
             return item!
         }
@@ -738,41 +738,41 @@ enum TestOutcome: String {
 }
 
 extension String {
-	func splut(separator: UTF8.CodeUnit, includingSpaces: Bool = false, map: (String) -> String) -> [String] {
-		var res: [String] = []
-		let utf = self.utf8
-		let start = utf.startIndex
-		let end = utf.endIndex
-		var i = start
-		var lastStart = i
-		while true {
-			if i == end || utf[i] == separator {
-				var lastEnd = i
-				if includingSpaces {
-					while true {
-						if lastEnd == lastStart { break }
-						let prev = utf.index(before: lastEnd)
-						if !isSpace(utf[prev]) { break }
-						lastEnd = prev
-					}
-					if i != end {
-						while true {
-							let next = utf.index(after: i)
-							if next == end { break }
-							if !isSpace(utf[next]) { break }
-							i = next
-						}
-					}
-				}
-				res.append(map(String(utf[lastStart..<lastEnd])!))
-				if i == end { return res }
-				lastStart = utf.index(after: i)
-			}
-			i = utf.index(after: i)
-		}
-		return res
-	}
-	
+    func splut(separator: UTF8.CodeUnit, includingSpaces: Bool = false, map: (String) -> String) -> [String] {
+        var res: [String] = []
+        let utf = self.utf8
+        let start = utf.startIndex
+        let end = utf.endIndex
+        var i = start
+        var lastStart = i
+        while true {
+            if i == end || utf[i] == separator {
+                var lastEnd = i
+                if includingSpaces {
+                    while true {
+                        if lastEnd == lastStart { break }
+                        let prev = utf.index(before: lastEnd)
+                        if !isSpace(utf[prev]) { break }
+                        lastEnd = prev
+                    }
+                    if i != end {
+                        while true {
+                            let next = utf.index(after: i)
+                            if next == end { break }
+                            if !isSpace(utf[next]) { break }
+                            i = next
+                        }
+                    }
+                }
+                res.append(map(String(utf[lastStart..<lastEnd])!))
+                if i == end { return res }
+                lastStart = utf.index(after: i)
+            }
+            i = utf.index(after: i)
+        }
+        return res
+    }
+    
 }
 struct TestResult {
     let question: Question
@@ -797,7 +797,7 @@ struct TestResult {
         (retiredInfo["replace"] as! [String: [String: String]]).map {
             (ItemKind(rawValue: $0.key)!, $0.value)
         })
-	static func parse(line: String) throws -> TestResult? {
+    static func parse(line: String) throws -> TestResult? {
         var components: [String] = line.splut(separator: 58 /* ':' */, includingSpaces: true, map: { $0 })
         var date: Date? = nil
         if components.count > 4 {
@@ -818,10 +818,10 @@ struct TestResult {
                                      err: MyError("invalid item kind \(components[1])"))
         var name = String(components[2])
         if retired[itemKind]?.contains(name) == .some(true) {
-			return nil
-		} else if let newName = replace[itemKind]?[name] {
-			name = newName
-		}
+            return nil
+        } else if let newName = replace[itemKind]?[name] {
+            name = newName
+        }
 
         let question = Question(
             item: try unwrapOrThrow(Subete.instance.allByKind(itemKind).findByName(name),
@@ -840,13 +840,13 @@ struct TestResult {
         let data = try Subete.instance.openLogTxt(write: false) { (fh: FileHandle) in fh.readDataToEndOfFile() }
         let text = String(decoding: data, as: UTF8.self)
         return text.split(separator: "\n").compactMap {
-			do {
-				return try TestResult.parse(line: String($0))
-			} catch let e {
-				warn("error parsing log line: \(e)")
-				return nil
-			}
-		}
+            do {
+                return try TestResult.parse(line: String($0))
+            } catch let e {
+                warn("error parsing log line: \(e)")
+                return nil
+            }
+        }
     }
 }
 
@@ -949,7 +949,7 @@ class Test {
         while true {
             let k = try cliRead(prompt: prompt, kana: true)
             let (outcome, qual, alternatives) = item.evaluateReadingAnswer(input: k, allowAlternatives: true)
-			let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: true)
+            let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: true)
             var out: String = cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate)
             out += " " + item.cliName + " " + item.cliReadings(colorful: false)
             print(out)
@@ -968,7 +968,7 @@ class Test {
         while true {
             let k: String = try cliRead(prompt: prompt, kana: false)
             let (outcome, qual, alternatives) = item.evaluateMeaningAnswer(input: k, allowAlternatives: true)
-			let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: true)
+            let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: true)
             print(cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate))
             item.cliPrint(colorful: true)
             item.cliPrintAlternatives(alternatives, isReading: false)
@@ -976,8 +976,8 @@ class Test {
                 item.cliPrintSameReadingIfFew()
             //}
             if outcome == .right {
-				break
-			}
+                break
+            }
         }
     }
     func doCLICharacterToRM(item: NormalItem, final: Bool) throws {
@@ -991,7 +991,7 @@ class Test {
                 let alternatives: [Item]
                 if mode == .meaning {
                     (outcome, qual, alternatives) = item.evaluateMeaningAnswer(input: k, allowAlternatives: false)
-					let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: final && modeIdx == 1)
+                    let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: final && modeIdx == 1)
                     print(cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate))
                     print(item.cliMeanings(colorful: true))
                     // Only print alternatives if wrong, to avoid spoilers both
@@ -1002,7 +1002,7 @@ class Test {
                     }
                 } else {
                     (outcome, qual, alternatives) = item.evaluateReadingAnswer(input: k, allowAlternatives: false)
-					let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: final && modeIdx == 1)
+                    let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: final && modeIdx == 1)
                     print(cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate))
                     print(item.cliReadings(colorful: true))
                     if outcome == .wrong { // See above
@@ -1014,7 +1014,7 @@ class Test {
         }
     }
     func doCLIConfusion(item: Confusion) throws {
-		let items = item.items.shuffled()
+        let items = item.items.shuffled()
         for (i, subitem) in items.enumerated() {
             try doCLICharacterToRM(item: subitem as! NormalItem, final: i == items.count - 1)
         }
@@ -1046,13 +1046,13 @@ class Test {
             return output
         }
     }
-	func maybeMarkResult(outcome: TestOutcome, final: Bool) throws -> SRSUpdate {
-		if outcome == .wrong || (self.result == nil && final) {
-			return try self.markResult(outcome: outcome)
-		} else {
-			return .noChangeOther
-		}
-	}
+    func maybeMarkResult(outcome: TestOutcome, final: Bool) throws -> SRSUpdate {
+        if outcome == .wrong || (self.result == nil && final) {
+            return try self.markResult(outcome: outcome)
+        } else {
+            return .noChangeOther
+        }
+    }
     func markResult(outcome: TestOutcome?) throws -> SRSUpdate {
         self.testSession.setQuestionCompleteness(question: self.question, complete: outcome == .some(.right))
 
@@ -1063,7 +1063,7 @@ class Test {
         if let outcome = outcome {
             self.result = TestResult(question: self.question, date: Date(), outcome: outcome)
             try self.addToLog()
-			return Subete.instance.srs!.update(forResult: self.result!)
+            return Subete.instance.srs!.update(forResult: self.result!)
         } else {
             self.result = nil
             return .noChangeOther
@@ -1072,33 +1072,33 @@ class Test {
 }
 
 enum SRSUpdate {
-	case nextDays(Double)
-	case burned
-	case lockedOut
-	case noChangeOther
-	case anachronism // ignore update before birthday (which I can use to force an item to be re-tested)
-	
-	var isNoChangeOther: Bool {
-		if case .noChangeOther = self {
-			return true
-		} else {
-			return false
-		}
-	}
-	var cliLabel: String {
-		switch self {
-			case .nextDays(let days):
-				return String(format: " +%.1fd", days)
-			case .burned:
-				return " 🔥"
-			case .lockedOut:
-				return " ⟳"
-			case .noChangeOther:
-				return ""
-			case .anachronism:
-				return " [anachronism]"
-		}
-	}
+    case nextDays(Double)
+    case burned
+    case lockedOut
+    case noChangeOther
+    case anachronism // ignore update before birthday (which I can use to force an item to be re-tested)
+    
+    var isNoChangeOther: Bool {
+        if case .noChangeOther = self {
+            return true
+        } else {
+            return false
+        }
+    }
+    var cliLabel: String {
+        switch self {
+            case .nextDays(let days):
+                return String(format: " +%.1fd", days)
+            case .burned:
+                return " 🔥"
+            case .lockedOut:
+                return " ⟳"
+            case .noChangeOther:
+                return ""
+            case .anachronism:
+                return " [anachronism]"
+        }
+    }
 }
 
 class SRS {
@@ -1109,17 +1109,17 @@ class SRS {
         var nextTestDays: Double? {
             switch self {
                 case .active(let info):
-			        if info.urgentRetest || info.points == 0 {
-				        return 0.5
-			        } else {
-				        return pow(2.5, log2(info.points + 0.5))
-			        }
-			    case .burned:
-			        return nil
-			}
-		}
+                    if info.urgentRetest || info.points == 0 {
+                        return 0.5
+                    } else {
+                        return pow(2.5, log2(info.points + 0.5))
+                    }
+                case .burned:
+                    return nil
+            }
+        }
         var nextTestDate: Date? {
-			//print("points=\(self.points) nextTestDays=\(self.nextTestDays)")
+            //print("points=\(self.points) nextTestDays=\(self.nextTestDays)")
             switch self {
                 case let .active(info):
                     return info.lastSeen + self.nextTestDays! * 60 * 60 * 24
@@ -1128,61 +1128,61 @@ class SRS {
             }
         }
         var timePastDue: TimeInterval? {
-			guard let next = self.nextTestDate else { return nil }
-			let now = Date()
-			return now >= next ? now.timeIntervalSince(next) : nil
-		}
-		mutating func updateIfStale(date: Date) {
-		    if case let .active(info) = self {
-			    if date.timeIntervalSince(info.lastSeen) > 60 * 60 * 24 * 60 {
-				    //print("staling \(self)")
-				    self = .burned
-			    }
-			}
-		}
-		mutating func update(forResult result: TestResult) -> SRSUpdate {
-			let date = result.date ?? Date(timeIntervalSince1970: 0)
+            guard let next = self.nextTestDate else { return nil }
+            let now = Date()
+            return now >= next ? now.timeIntervalSince(next) : nil
+        }
+        mutating func updateIfStale(date: Date) {
+            if case let .active(info) = self {
+                if date.timeIntervalSince(info.lastSeen) > 60 * 60 * 24 * 60 {
+                    //print("staling \(self)")
+                    self = .burned
+                }
+            }
+        }
+        mutating func update(forResult result: TestResult) -> SRSUpdate {
+            let date = result.date ?? Date(timeIntervalSince1970: 0)
 
-			if let birthday = result.question.item.birthday, date < birthday {
-			    return .anachronism
-			}
-			self.updateIfStale(date: date)
-			//print("updating \(String(describing: self)) for result \(result) at date \(date) birthday=\(String(describing: result.question.item.birthday))")
-			
-			switch self {
-			    case .active(var info):
-				    let sinceLast = date.timeIntervalSince(info.lastSeen)
-				    info.lastSeen = date
-				    //print("sinceLast=\(sinceLast)")
-				    var update: SRSUpdate? = nil
-				    if sinceLast < 60*60*6 {
-					    update = .lockedOut
-				    } else {
-				        switch result.outcome {
-				        case .mu:
-					        update = .noChangeOther
-				        case .right:
-					        info.points += max(sinceLast / (60*60*24), 1.0)
-					        info.urgentRetest = false
-					        if info.points >= 60 {
-					            update = .burned
-					        }
-				        case .wrong:
-					        info.points /= 2
-					        info.urgentRetest = true
-				        }
-				    }
-				    //print("outcome=\(result.outcome) newInfo.points = \(newInfo.points)")
-				    self = .active(info)
-				    return update ?? .nextDays(self.nextTestDays!)
-				case .burned:
-				    if result.outcome == .wrong {
-					    self = .active((lastSeen: date, points: 0, urgentRetest: false))
-					    return .nextDays(self.nextTestDays!)
-				    }
-				    return .noChangeOther
-			}
-		}
+            if let birthday = result.question.item.birthday, date < birthday {
+                return .anachronism
+            }
+            self.updateIfStale(date: date)
+            //print("updating \(String(describing: self)) for result \(result) at date \(date) birthday=\(String(describing: result.question.item.birthday))")
+            
+            switch self {
+                case .active(var info):
+                    let sinceLast = date.timeIntervalSince(info.lastSeen)
+                    info.lastSeen = date
+                    //print("sinceLast=\(sinceLast)")
+                    var update: SRSUpdate? = nil
+                    if sinceLast < 60*60*6 {
+                        update = .lockedOut
+                    } else {
+                        switch result.outcome {
+                        case .mu:
+                            update = .noChangeOther
+                        case .right:
+                            info.points += max(sinceLast / (60*60*24), 1.0)
+                            info.urgentRetest = false
+                            if info.points >= 60 {
+                                update = .burned
+                            }
+                        case .wrong:
+                            info.points /= 2
+                            info.urgentRetest = true
+                        }
+                    }
+                    //print("outcome=\(result.outcome) newInfo.points = \(newInfo.points)")
+                    self = .active(info)
+                    return update ?? .nextDays(self.nextTestDays!)
+                case .burned:
+                    if result.outcome == .wrong {
+                        self = .active((lastSeen: date, points: 0, urgentRetest: false))
+                        return .nextDays(self.nextTestDays!)
+                    }
+                    return .noChangeOther
+            }
+        }
 
     }
     private var itemInfo: [Question: ItemInfo] = [:]
@@ -1195,11 +1195,11 @@ class SRS {
         return srsUpdate
     }
     func updateStales(date: Date) {
-		for (item, var info) in itemInfo {
-			info.updateIfStale(date: date)
-			itemInfo[item] = info
-		}
-	}
+        for (item, var info) in itemInfo {
+            info.updateIfStale(date: date)
+            itemInfo[item] = info
+        }
+    }
     func revert(forQuestion question: Question) {
         let backup = self.backup!
         ensure(backup.0 == question)
@@ -1207,37 +1207,37 @@ class SRS {
         self.backup = nil
     }
     func info(question: Question) -> ItemInfo {
-		if let info = self.itemInfo[question] {
-		    return info
-		}
-		let info = self.defaultInfo(question: question)
-		self.itemInfo[question] = info
-		return info
-	}
-	private func defaultInfo(question: Question) -> ItemInfo {
-		if let birthday = question.item.birthday {
-		    return .active((lastSeen: min(birthday, startupDate), points: 0, urgentRetest: false))
-		} else {
-		    return .burned
-		}
-	}
+        if let info = self.itemInfo[question] {
+            return info
+        }
+        let info = self.defaultInfo(question: question)
+        self.itemInfo[question] = info
+        return info
+    }
+    private func defaultInfo(question: Question) -> ItemInfo {
+        if let birthday = question.item.birthday {
+            return .active((lastSeen: min(birthday, startupDate), points: 0, urgentRetest: false))
+        } else {
+            return .burned
+        }
+    }
 }
 
 func testSRS() {
-	let item = Item(name: "test", birthday: nil)
-	let question = Question(item: item, testKind: .confusion)
-	var info: SRS.ItemInfo = .burned
-	let _ = info.update(
-	    forResult: TestResult(question: question,
-							  date: Date(timeIntervalSince1970: 0),
-							  outcome: .wrong))
-	for i in 0... {
-		let srsUpdate = info.update(
-			forResult: TestResult(question: question,
-								  date: info.nextTestDate,
-								  outcome: .right))
-		print("\(i). \(info)\(srsUpdate.cliLabel)")
-	}
+    let item = Item(name: "test", birthday: nil)
+    let question = Question(item: item, testKind: .confusion)
+    var info: SRS.ItemInfo = .burned
+    let _ = info.update(
+        forResult: TestResult(question: question,
+                              date: Date(timeIntervalSince1970: 0),
+                              outcome: .wrong))
+    for i in 0... {
+        let srsUpdate = info.update(
+            forResult: TestResult(question: question,
+                                  date: info.nextTestDate,
+                                  outcome: .right))
+        print("\(i). \(info)\(srsUpdate.cliLabel)")
+    }
 }
 
 struct WeightedList<T> {
@@ -1252,9 +1252,9 @@ struct WeightedList<T> {
 
     init() {}
     init(_ values: [(T, Double)]) {
-		for (value, weight) in values {
-			self.add(value, weight: weight)
-		}
+        for (value, weight) in values {
+            self.add(value, weight: weight)
+        }
     }
 
     var totalWeight: Double {
@@ -1296,7 +1296,7 @@ struct WeightedList<T> {
     mutating func takeRandomElement() -> T? {
         if isEmpty { return nil }
         var i: Int = -1
-		while true {
+        while true {
             i = indexOfRandomElement()
             if !entries[i].taken { break }
         }
@@ -1320,25 +1320,25 @@ struct ForecastCommand: ParsableCommand {
         commandName: "forecast")
     func run() {
         let _ = Subete()
-	    let srs = Subete.instance.srs!
-	    let now = Date()
-	    let srsItems: [(nextTestDate: Date, question: Question)] = Subete.instance.allQuestions.compactMap { (question) in
-		    guard let nextTestDate = srs.info(question: question).nextTestDate else { return nil }
-		    return (nextTestDate: nextTestDate, question: question)
-		}
-		let maxDays = 20
-		let secondsPerDay: Double = 60 * 60 * 24
-		let byDay: [(key: Int, value: [(nextTestDate: Date, question: Question)])] =
-		    Dictionary(grouping: srsItems, by: { (val: (nextTestDate: Date, question: Question)) -> Int in
-		        min(maxDays, max(0, Int(ceil(val.nextTestDate.timeIntervalSince(now) / secondsPerDay))))
-		    }).sorted { $0.key < $1.key }
-		var total = 0
-		for (days, items) in byDay {
-		    let keyStr = days == maxDays ? "later" : String(days)
-		    print("\(keyStr): \(items.count)")
-		    total += items.count
-		}
-		print(" * total: \(total)")
+        let srs = Subete.instance.srs!
+        let now = Date()
+        let srsItems: [(nextTestDate: Date, question: Question)] = Subete.instance.allQuestions.compactMap { (question) in
+            guard let nextTestDate = srs.info(question: question).nextTestDate else { return nil }
+            return (nextTestDate: nextTestDate, question: question)
+        }
+        let maxDays = 20
+        let secondsPerDay: Double = 60 * 60 * 24
+        let byDay: [(key: Int, value: [(nextTestDate: Date, question: Question)])] =
+            Dictionary(grouping: srsItems, by: { (val: (nextTestDate: Date, question: Question)) -> Int in
+                min(maxDays, max(0, Int(ceil(val.nextTestDate.timeIntervalSince(now) / secondsPerDay))))
+            }).sorted { $0.key < $1.key }
+        var total = 0
+        for (days, items) in byDay {
+            let keyStr = days == maxDays ? "later" : String(days)
+            print("\(keyStr): \(items.count)")
+            total += items.count
+        }
+        print(" * total: \(total)")
     }
 }
 
@@ -1493,19 +1493,19 @@ struct BenchSTS: ParsableCommand {
     func run() {
         let _ = Subete()
         let sts = SerializableTestSession(
-	        pulledIncompleteQuestions: IndexableSet(Subete.instance.allQuestions[..<500]),
+            pulledIncompleteQuestions: IndexableSet(Subete.instance.allQuestions[..<500]),
             randomMode: .all
-	    )
-	    if self.deser {
-	        let serialized: Data = sts.serialize()
-	        time(count: 1000) {
-	            return try! SerializableTestSession.deserialize(serialized)
-	        }
-	    } else {
-	        time(count: 1000) {
-	            return sts.serialize()
-	        }
-	    }
+        )
+        if self.deser {
+            let serialized: Data = sts.serialize()
+            time(count: 1000) {
+                return try! SerializableTestSession.deserialize(serialized)
+            }
+        } else {
+            time(count: 1000) {
+                return sts.serialize()
+            }
+        }
     }
 }
 
@@ -1529,27 +1529,27 @@ class TestSession {
         )
     }
     static func makeLottery(randomMode: RandomMode, excluding excl: Set<Question>) -> WeightedList<Question> {
-		var availRandomQuestions: [(question: Question, weight: Double)] = []
-		switch randomMode {
-			case .all:
-				availRandomQuestions += (Subete.instance.allWords.questions + Subete.instance.allKanji.questions).map {
-				    (question: $0, weight: 1.0)
-				}
-				availRandomQuestions += Subete.instance.allConfusion.questions.map {
-				    (question: $0, weight: 10.0)
-				}
-			case .confusion:
-				availRandomQuestions += Subete.instance.allConfusion.questions.map {
-				    (question: $0, weight: 1.0)
-				}
-		}
-		let filteredRandomQuestions = availRandomQuestions.filter { !excl.contains($0.question) }
-		return WeightedList(filteredRandomQuestions)
-	}
+        var availRandomQuestions: [(question: Question, weight: Double)] = []
+        switch randomMode {
+            case .all:
+                availRandomQuestions += (Subete.instance.allWords.questions + Subete.instance.allKanji.questions).map {
+                    (question: $0, weight: 1.0)
+                }
+                availRandomQuestions += Subete.instance.allConfusion.questions.map {
+                    (question: $0, weight: 10.0)
+                }
+            case .confusion:
+                availRandomQuestions += Subete.instance.allConfusion.questions.map {
+                    (question: $0, weight: 1.0)
+                }
+        }
+        let filteredRandomQuestions = availRandomQuestions.filter { !excl.contains($0.question) }
+        return WeightedList(filteredRandomQuestions)
+    }
 
-	func randomQuestion() -> Question? {
-	    let numPulled = self.base.pulledIncompleteQuestions.count,
-	        numUnpulled = self.base.numUnpulledRandomQuestions
+    func randomQuestion() -> Question? {
+        let numPulled = self.base.pulledIncompleteQuestions.count,
+            numUnpulled = self.base.numUnpulledRandomQuestions
         if numPulled + numUnpulled == 0 {
             return nil
         }
@@ -1557,59 +1557,59 @@ class TestSession {
         if rawIndex < numPulled {
             return self.base.pulledIncompleteQuestions[rawIndex]
         } else {
-	        let question = self.lottery.takeRandomElement()!
-	        self.base.numUnpulledRandomQuestions -= 1
-	        self.base.pulledIncompleteQuestions.update(with: question)
-	        return question
-	    }
-	}
+            let question = self.lottery.takeRandomElement()!
+            self.base.numUnpulledRandomQuestions -= 1
+            self.base.pulledIncompleteQuestions.update(with: question)
+            return question
+        }
+    }
 
     func numRemainingQuestions() -> Int {
         self.base.pulledIncompleteQuestions.count + self.base.numUnpulledRandomQuestions
     }
     func numCompleteQuestions() -> Int {
-	    self.base.pulledCompleteQuestions.count
+        self.base.pulledCompleteQuestions.count
     }
 
 
-	func setQuestionCompleteness(question: Question, complete: Bool) {
-	    if complete {
-	        self.base.pulledIncompleteQuestions.remove(question)
-	        self.base.pulledCompleteQuestions.update(with: question)
-	    } else {
-	        self.base.pulledCompleteQuestions.remove(question)
-	        self.base.pulledIncompleteQuestions.update(with: question)
-	    }
-	}
+    func setQuestionCompleteness(question: Question, complete: Bool) {
+        if complete {
+            self.base.pulledIncompleteQuestions.remove(question)
+            self.base.pulledCompleteQuestions.update(with: question)
+        } else {
+            self.base.pulledCompleteQuestions.remove(question)
+            self.base.pulledIncompleteQuestions.update(with: question)
+        }
+    }
 
-	func cliGoOne() throws -> Bool {
-	    guard let question = self.randomQuestion() else {
-	        return false
-	    }
+    func cliGoOne() throws -> Bool {
+        guard let question = self.randomQuestion() else {
+            return false
+        }
         print("[\(self.base.numDone) | \(self.numRemainingQuestions())]")
         //let testKind = item.availableTests.randomElement()!
         let test = Test(question: question, testSession: self)
         try test.cliGo()
         self.base.numDone += 1
         return true
-	}
+    }
 
-	func save() {
-	    guard let saveURL = self.saveURL else { return }
-	    do {
-	        try self.base.serialize().write(to: saveURL)
-	    } catch let e {
-	        print("!Failed to save! \(e)")
-	    }
-	}
-	func trashSave() {
-	    guard let saveURL = self.saveURL else { return }
-	    do {
-	        try FileManager.default.trashItem(at: saveURL, resultingItemURL: nil)
-	    } catch let e {
-	        print("!Failed to trash save! \(e)")
-	    }
-	}
+    func save() {
+        guard let saveURL = self.saveURL else { return }
+        do {
+            try self.base.serialize().write(to: saveURL)
+        } catch let e {
+            print("!Failed to save! \(e)")
+        }
+    }
+    func trashSave() {
+        guard let saveURL = self.saveURL else { return }
+        do {
+            try FileManager.default.trashItem(at: saveURL, resultingItemURL: nil)
+        } catch let e {
+            print("!Failed to trash save! \(e)")
+        }
+    }
 }
 
 struct Rerere: ParsableCommand {
@@ -1630,7 +1630,7 @@ struct Rerere: ParsableCommand {
             throw ValidationError("min-questions should < max-questions")
         }
     }
-	func resolveMinMax() -> (minQuestions: Int, maxQuestions: Int) {
+    func resolveMinMax() -> (minQuestions: Int, maxQuestions: Int) {
         let defaultMinQuestions = 50
         let defaultMaxQuestions = 75
         switch (self.minQuestions, self.maxQuestions) {
@@ -1643,46 +1643,46 @@ struct Rerere: ParsableCommand {
             case (.some(let _minQuestions), .some(let _maxQuestions)):
                 return (minQuestions: _minQuestions, maxQuestions: _maxQuestions)
         }
-	}
-	func gatherSRSQuestions() -> [(nextTestDate: Date, question: Question)] {
-	    let now = Date()
-	    let srs = Subete.instance.srs!
-	    return Subete.instance.allQuestions.compactMap { (question) in
-		    guard let nextTestDate = srs.info(question: question).nextTestDate else { return nil }
-		    return nextTestDate <= now ? (nextTestDate: nextTestDate, question: question) : nil
-	    }
-	}
-	func calcQuestionSplit(minQuestions: Int, maxQuestions: Int, availSRSQuestions: Int) -> (numSRSQuestions: Int, numRandomQuestions: Int) {
-	    if self.minRandomQuestionsFraction >= 1.0 {
-	        return (numSRSQuestions: 0, numRandomQuestions: minQuestions)
-	    } else {
-	        var numQuestionsX: Double = Double(availSRSQuestions) / (1.0 - self.minRandomQuestionsFraction)
-	        numQuestionsX = max(numQuestionsX, Double(minQuestions))
-	        numQuestionsX = min(numQuestionsX, Double(maxQuestions))
-	        let numQuestions = Int(numQuestionsX)
-	        let numSRSQuestions = min(availSRSQuestions, Int(numQuestionsX * (1.0 - self.minRandomQuestionsFraction)))
-	        return (
-	            numSRSQuestions: numSRSQuestions,
-	            numRandomQuestions: numQuestions - numSRSQuestions
-	        )
-	    }
-	}
-	func makeSerializableSession() -> SerializableTestSession {
+    }
+    func gatherSRSQuestions() -> [(nextTestDate: Date, question: Question)] {
+        let now = Date()
+        let srs = Subete.instance.srs!
+        return Subete.instance.allQuestions.compactMap { (question) in
+            guard let nextTestDate = srs.info(question: question).nextTestDate else { return nil }
+            return nextTestDate <= now ? (nextTestDate: nextTestDate, question: question) : nil
+        }
+    }
+    func calcQuestionSplit(minQuestions: Int, maxQuestions: Int, availSRSQuestions: Int) -> (numSRSQuestions: Int, numRandomQuestions: Int) {
+        if self.minRandomQuestionsFraction >= 1.0 {
+            return (numSRSQuestions: 0, numRandomQuestions: minQuestions)
+        } else {
+            var numQuestionsX: Double = Double(availSRSQuestions) / (1.0 - self.minRandomQuestionsFraction)
+            numQuestionsX = max(numQuestionsX, Double(minQuestions))
+            numQuestionsX = min(numQuestionsX, Double(maxQuestions))
+            let numQuestions = Int(numQuestionsX)
+            let numSRSQuestions = min(availSRSQuestions, Int(numQuestionsX * (1.0 - self.minRandomQuestionsFraction)))
+            return (
+                numSRSQuestions: numSRSQuestions,
+                numRandomQuestions: numQuestions - numSRSQuestions
+            )
+        }
+    }
+    func makeSerializableSession() -> SerializableTestSession {
         let (minQuestions, maxQuestions) = resolveMinMax()
-	    var srsQuestions = gatherSRSQuestions()
-	    let (numSRSQuestions, numRandomQuestions) = calcQuestionSplit(minQuestions: minQuestions, maxQuestions: maxQuestions, availSRSQuestions: srsQuestions.count)
-	    print("got \(srsQuestions.count) SRS questions")
-	    if numSRSQuestions < srsQuestions.count {
-		    print("...but limiting to \(numSRSQuestions)")
-		    srsQuestions.sort { $0.nextTestDate > $1.nextTestDate}
-		    srsQuestions = Array(srsQuestions[0..<numSRSQuestions])
-	    }
-	    return SerializableTestSession(
-	        pulledIncompleteQuestions: IndexableSet(srsQuestions.map { $0.question }),
-	        numUnpulledRandomQuestions: numRandomQuestions,
-	        randomMode: randomMode
-	    )
-	}
+        var srsQuestions = gatherSRSQuestions()
+        let (numSRSQuestions, numRandomQuestions) = calcQuestionSplit(minQuestions: minQuestions, maxQuestions: maxQuestions, availSRSQuestions: srsQuestions.count)
+        print("got \(srsQuestions.count) SRS questions")
+        if numSRSQuestions < srsQuestions.count {
+            print("...but limiting to \(numSRSQuestions)")
+            srsQuestions.sort { $0.nextTestDate > $1.nextTestDate}
+            srsQuestions = Array(srsQuestions[0..<numSRSQuestions])
+        }
+        return SerializableTestSession(
+            pulledIncompleteQuestions: IndexableSet(srsQuestions.map { $0.question }),
+            numUnpulledRandomQuestions: numRandomQuestions,
+            randomMode: randomMode
+        )
+    }
 
     func run() throws {
         let _ = Subete()
