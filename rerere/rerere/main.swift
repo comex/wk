@@ -287,7 +287,13 @@ enum ItemKind: String, ExpressibleByArgument, Codable {
     case word, kanji, confusion
 }
 
-class Item: Hashable, Equatable, Comparable {
+protocol ItemMustOverride {
+    var kind: ItemKind { get }
+    var availableTests: [TestKind] { get }
+    func cliPrint(colorful: Bool)
+}
+
+class ItemBase: Hashable {
     let name: String
     let birthday: Date?
     let id: Int
@@ -297,21 +303,14 @@ class Item: Hashable, Equatable, Comparable {
         self.id = Subete.instance.nextItemID
         Subete.instance.nextItemID = self.id + 1
     }
-    var kind: ItemKind { fatalError("?") }
     func hash(into hasher: inout Hasher) {
         hasher.combine(self.name)
     }
-    static func == (lhs: Item, rhs: Item) -> Bool {
+    static func == (lhs: ItemBase, rhs: ItemBase) -> Bool {
         return lhs === rhs
     }
-    static func < (lhs: Item, rhs: Item) -> Bool {
+    static func < (lhs: ItemBase, rhs: ItemBase) -> Bool {
         return lhs.id < rhs.id
-    }
-    func cliPrint(colorful: Bool) {
-        fatalError("?")
-    }
-    var availableTests: [TestKind] {
-        fatalError("TODO")
     }
 
     // this is separate in case I want to make Question more than just
@@ -321,6 +320,15 @@ class Item: Hashable, Equatable, Comparable {
     }
 }
 
+typealias ItemProtocol = ItemBase & ItemMustOverride & Hashable
+
+typealias Item = any ItemProtocol
+func == (lhs: Item, rhs: Item) -> Bool {
+    return lhs === rhs
+}
+func < (lhs: Item, rhs: Item) -> Bool {
+    return lhs.id < rhs.id
+}
 
 struct Question: Codable, Hashable, Equatable {
     let item: Item
@@ -414,7 +422,7 @@ protocol JSONInit {
     init(json: NSDictionary, relaxed: Bool)
 }
 
-class NormalItem: Item, JSONInit {
+class NormalItem: ItemBase, ItemMustOverride, JSONInit {
     let meanings: [Ing]
     let readings: [Ing]
     let character: String
@@ -617,7 +625,7 @@ class Kanji : NormalItem, CustomStringConvertible {
     override var kind: ItemKind { return .kanji }
     override var cliName: String { return ANSI.purple(String(self.name) + " /k") }
 }
-class Confusion: Item, CustomStringConvertible {
+class Confusion: ItemBase, ItemMustOverride, CustomStringConvertible {
     let characters: [String]
     let items: [Item]
     let isWord: Bool
@@ -671,7 +679,7 @@ protocol ItemListProtocol {
     func findByMeaning(_ meaning: String) -> [Item]
     var vagueItems: [Item] { get }
 }
-class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
+class ItemList<X: ItemProtocol>: CustomStringConvertible, ItemListProtocol {
     let items: [X]
     let byName: [String: X]
     let byReading: [String: [X]]
