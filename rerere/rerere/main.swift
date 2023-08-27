@@ -8,7 +8,6 @@ got 53 SRS items
 // TODO the test ended when I did !wrong at the beginning of the last item, then solved it
 // TODO FIX BANGS ON CONFUSION
 // TODO why didn't I get a reading match for 挟む
-// TODO mu overwrites a later wrong?
 import rerere_c
 import Foundation
 import Yams
@@ -287,13 +286,7 @@ enum ItemKind: String, ExpressibleByArgument, Codable {
     case word, kanji, confusion
 }
 
-protocol ItemMustOverride {
-    var kind: ItemKind { get }
-    var availableTests: [TestKind] { get }
-    func cliPrint(colorful: Bool)
-}
-
-class ItemBase: Hashable {
+class Item: Hashable, Equatable, Comparable {
     let name: String
     let birthday: Date?
     let id: Int
@@ -306,11 +299,22 @@ class ItemBase: Hashable {
     func hash(into hasher: inout Hasher) {
         hasher.combine(self.name)
     }
-    static func == (lhs: ItemBase, rhs: ItemBase) -> Bool {
+    static func == (lhs: Item, rhs: Item) -> Bool {
         return lhs === rhs
     }
-    static func < (lhs: ItemBase, rhs: ItemBase) -> Bool {
+    static func < (lhs: Item, rhs: Item) -> Bool {
         return lhs.id < rhs.id
+    }
+
+    // trying to turn this into a protocol has issues
+    var kind: ItemKind {
+        fatalError("must override kind on \(self)")
+    }
+    func cliPrint(colorful: Bool) {
+        fatalError("must override cliPrint on \(self)")
+    }
+    var availableTests: [TestKind] {
+        fatalError("must override availableTests on \(self)")
     }
 
     // this is separate in case I want to make Question more than just
@@ -320,15 +324,6 @@ class ItemBase: Hashable {
     }
 }
 
-typealias ItemProtocol = ItemBase & ItemMustOverride & Hashable
-
-typealias Item = any ItemProtocol
-func == (lhs: Item, rhs: Item) -> Bool {
-    return lhs === rhs
-}
-func < (lhs: Item, rhs: Item) -> Bool {
-    return lhs.id < rhs.id
-}
 
 struct Question: Codable, Hashable, Equatable {
     let item: Item
@@ -422,7 +417,7 @@ protocol JSONInit {
     init(json: NSDictionary, relaxed: Bool)
 }
 
-class NormalItem: ItemBase, ItemMustOverride, JSONInit {
+class NormalItem: Item, JSONInit {
     let meanings: [Ing]
     let readings: [Ing]
     let character: String
@@ -608,8 +603,10 @@ class NormalItem: ItemBase, ItemMustOverride, JSONInit {
             return prompt
         }
     }
-    var cliName: String { fatalError("lol") } // TODO
     override var availableTests: [TestKind] { return [.characterToRM, .meaningToReading, .readingToMeaning] }
+    var cliName: String {
+        fatalError("must override cliName on \(self)")
+    }
 }
 class Word : NormalItem, CustomStringConvertible {
     var description: String {
@@ -625,7 +622,7 @@ class Kanji : NormalItem, CustomStringConvertible {
     override var kind: ItemKind { return .kanji }
     override var cliName: String { return ANSI.purple(String(self.name) + " /k") }
 }
-class Confusion: ItemBase, ItemMustOverride, CustomStringConvertible {
+class Confusion: Item, CustomStringConvertible {
     let characters: [String]
     let items: [Item]
     let isWord: Bool
@@ -679,7 +676,7 @@ protocol ItemListProtocol {
     func findByMeaning(_ meaning: String) -> [Item]
     var vagueItems: [Item] { get }
 }
-class ItemList<X: ItemProtocol>: CustomStringConvertible, ItemListProtocol {
+class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
     let items: [X]
     let byName: [String: X]
     let byReading: [String: [X]]
@@ -1050,7 +1047,7 @@ class Test {
         }
     }
 	func maybeMarkResult(outcome: TestOutcome, final: Bool) throws -> SRSUpdate {
-		if self.result == nil && (outcome == .wrong || final) {
+		if outcome == .wrong || (self.result == nil && final) {
 			return try self.markResult(outcome: outcome)
 		} else {
 			return .noChangeOther
@@ -1481,10 +1478,6 @@ struct SerializableTestSession: Codable {
     var numDone: Int = 0
     let randomMode: RandomMode
 
-    func numRemainingQuestions() -> Int {
-        self.pulledIncompleteQuestions.count + self.numUnpulledRandomQuestions
-    }
-
     func serialize() -> Data {
         return try! JSONEncoder().encode(self)
     }
@@ -1571,6 +1564,14 @@ class TestSession {
 	    }
 	}
 
+    func numRemainingQuestions() -> Int {
+        self.base.pulledIncompleteQuestions.count + self.base.numUnpulledRandomQuestions
+    }
+    func numCompleteQuestions() -> Int {
+	    self.base.pulledCompleteQuestions.count
+    }
+
+
 	func setQuestionCompleteness(question: Question, complete: Bool) {
 	    if complete {
 	        self.base.pulledIncompleteQuestions.remove(question)
@@ -1585,7 +1586,7 @@ class TestSession {
 	    guard let question = self.randomQuestion() else {
 	        return false
 	    }
-        print("[\(self.base.numDone) | \(self.base.numRemainingQuestions())]")
+        print("[\(self.base.numDone) | \(self.numRemainingQuestions())]")
         //let testKind = item.availableTests.randomElement()!
         let test = Test(question: question, testSession: self)
         try test.cliGo()
