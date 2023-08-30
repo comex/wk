@@ -181,7 +181,7 @@
         "id": 2,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/2",
-        "data_updated_at": "2023-08-08T19:05:12.997847Z",
+        "data_updated_at": "2023-08-23T13:56:09.421823Z",
         "data": {
             "created_at": "2012-02-27T18:11:07.000000Z",
             "level": 1,
@@ -576,7 +576,7 @@
         "id": 5,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/5",
-        "data_updated_at": "2023-06-14T15:52:17.279297Z",
+        "data_updated_at": "2023-08-25T10:15:15.204661Z",
         "data": {
             "created_at": "2012-02-27T18:14:26.000000Z",
             "level": 1,
@@ -1433,7 +1433,7 @@
         "id": 12,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/12",
-        "data_updated_at": "2022-11-24T09:21:20.635099Z",
+        "data_updated_at": "2023-08-25T10:15:15.204661Z",
         "data": {
             "created_at": "2012-02-27T18:24:26.000000Z",
             "level": 1,
@@ -1679,7 +1679,7 @@
         "id": 14,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/14",
-        "data_updated_at": "2023-05-23T08:45:02.333708Z",
+        "data_updated_at": "2023-08-25T10:13:37.868313Z",
         "data": {
             "created_at": "2012-02-27T18:40:12.000000Z",
             "level": 1,
@@ -2513,7 +2513,7 @@
         "id": 19,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/19",
-        "data_updated_at": "2023-07-11T16:01:35.356337Z",
+        "data_updated_at": "2023-08-28T08:26:23.823305Z",
         "data": {
             "created_at": "2012-02-27T18:43:53.000000Z",
             "level": 1,
@@ -2912,7 +2912,7 @@
         "id": 22,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/22",
-        "data_updated_at": "2023-07-31T20:05:10.781710Z",
+        "data_updated_at": "2023-08-25T10:13:37.868313Z",
         "data": {
             "created_at": "2012-02-27T18:45:52.000000Z",
             "level": 1,
@@ -6925,7 +6925,7 @@
         "id": 53,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/53",
-        "data_updated_at": "2023-08-14T14:03:42.202052Z",
+        "data_updated_at": "2023-08-21T12:50:04.379865Z",
         "data": {
             "created_at": "2012-02-28T21:22:47.000000Z",
             "level": 2,
@@ -7428,7 +7428,7 @@
         "id": 57,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/57",
-        "data_updated_at": "2023-04-08T12:34:52.926576Z",
+        "data_updated_at": "2023-08-25T10:13:37.868313Z",
         "data": {
             "created_at": "2012-03-01T01:50:35.000000Z",
             "level": 3,
@@ -7766,7 +7766,7 @@
         "id": 60,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/60",
-        "data_updated_at": "2023-08-16T20:37:09.924278Z",
+        "data_updated_at": "2023-08-23T08:20:30.583521Z",
         "data": {
             "created_at": "2012-03-01T01:54:32.000000Z",
             "level": 3,
@@ -8194,7 +8194,7 @@
         "id": 63,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/63",
-        "data_updated_at": "2023-08-14T13:58:02.730480Z",
+        "data_updated_at": "2023-08-30T14:58:38.094171Z",
         "data": {
             "created_at": "2012-03-01T01:56:23.000000Z",
             "level": 3,
@@ -8379,7 +8379,8 @@
                 8860,
                 8882,
                 8883,
-                8969
+                8969,
+                9251
             ],
             "meaning_mnemonic": "This looks like the hand (<ja>\u624b</ja>) radical, but smaller. That's because it's just the <radical>fingers</radical>. You don't always have room for a whole hand to be in a kanji, but there's always space for a few fingers.",
             "lesson_position": 4,
@@ -8659,7 +8660,7 @@
         "id": 66,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/66",
-        "data_updated_at": "2023-07-11T16:09:22.901491Z",
+        "data_updated_at": "2023-08-28T08:26:23.823305Z",
         "data": {
             "created_at": "2012-03-01T01:57:03.000000Z",
             "level": 3,
@@ -9735,7 +9736,7 @@
         "id": 75,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/75",
-        "data_updated_at": "2023-08-08T18:54:53.726638Z",
+        "data_updated_at": "2023-08-23T04:31:28.411899Z",
         "data": {
             "created_at": "2012-03-01T21:29:24.000000Z",
             "level": 4,
@@ -10184,7 +10185,7 @@
         "id": 78,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/78",
-        "data_updated_at": "2023-08-08T19:05:12.997847Z",
+        "data_updated_at": "2023-08-21T14:59:35.439185Z",
         "data": {
             "created_at": "2012-03-01T21:32:14.000000Z",
             "level": 4,
@@ -12122,7 +12123,7 @@
         "id": 93,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/93",
-        "data_updated_at": "2023-08-16T15:56:07.405846Z",
+        "data_updated_at": "2023-08-30T13:43:37.802365Z",
         "data": {
             "created_at": "2012-03-01T21:38:35.000000Z",
             "level": 4,
@@ -12763,7 +12764,7 @@
         "id": 98,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/98",
-        "data_updated_at": "2023-07-11T18:00:35.459915Z",
+        "data_updated_at": "2023-08-25T10:11:33.630825Z",
         "data": {
             "created_at": "2012-03-03T01:47:35.000000Z",
             "level": 4,
@@ -13377,7 +13378,7 @@
         "id": 103,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/103",
-        "data_updated_at": "2023-08-14T14:02:34.048247Z",
+        "data_updated_at": "2023-08-30T13:43:37.802365Z",
         "data": {
             "created_at": "2012-03-03T02:07:12.000000Z",
             "level": 5,
@@ -14408,7 +14409,7 @@
         "id": 111,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/111",
-        "data_updated_at": "2023-07-27T00:56:49.471498Z",
+        "data_updated_at": "2023-08-23T14:02:01.484287Z",
         "data": {
             "created_at": "2012-03-03T04:07:24.000000Z",
             "level": 5,
@@ -14742,7 +14743,7 @@
         "id": 114,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/114",
-        "data_updated_at": "2023-07-11T11:29:48.277406Z",
+        "data_updated_at": "2023-08-30T13:43:37.802365Z",
         "data": {
             "created_at": "2012-03-03T04:07:58.000000Z",
             "level": 5,
@@ -15949,7 +15950,7 @@
         "id": 123,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/123",
-        "data_updated_at": "2023-08-16T20:34:57.849247Z",
+        "data_updated_at": "2023-08-25T10:05:47.284473Z",
         "data": {
             "created_at": "2012-03-06T01:28:52.000000Z",
             "level": 5,
@@ -16305,7 +16306,7 @@
         "id": 126,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/126",
-        "data_updated_at": "2023-01-31T18:30:28.676859Z",
+        "data_updated_at": "2023-08-23T08:20:30.583521Z",
         "data": {
             "created_at": "2012-03-06T23:56:07.000000Z",
             "level": 2,
@@ -17976,7 +17977,7 @@
         "id": 140,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/140",
-        "data_updated_at": "2023-07-17T16:01:07.385572Z",
+        "data_updated_at": "2023-08-23T13:56:09.421823Z",
         "data": {
             "created_at": "2012-03-07T00:26:12.000000Z",
             "level": 2,
@@ -22124,7 +22125,7 @@
         "id": 176,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/176",
-        "data_updated_at": "2023-08-17T00:39:36.386438Z",
+        "data_updated_at": "2023-08-23T08:20:30.583521Z",
         "data": {
             "created_at": "2012-04-23T23:37:21.000000Z",
             "level": 9,
@@ -24728,7 +24729,7 @@
         "id": 198,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/198",
-        "data_updated_at": "2023-08-14T14:03:42.202052Z",
+        "data_updated_at": "2023-08-21T12:50:04.379865Z",
         "data": {
             "created_at": "2012-04-26T06:16:19.000000Z",
             "level": 11,
@@ -26107,7 +26108,7 @@
         "id": 210,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/210",
-        "data_updated_at": "2023-07-18T08:24:46.350401Z",
+        "data_updated_at": "2023-08-24T22:55:58.921080Z",
         "data": {
             "created_at": "2012-06-05T23:59:11.547907Z",
             "level": 3,
@@ -28650,7 +28651,7 @@
         "id": 232,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/232",
-        "data_updated_at": "2023-08-16T20:41:30.240160Z",
+        "data_updated_at": "2023-08-21T12:54:58.700415Z",
         "data": {
             "created_at": "2012-08-27T20:17:54.536468Z",
             "level": 13,
@@ -28789,7 +28790,7 @@
         "id": 233,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/233",
-        "data_updated_at": "2023-06-01T16:33:30.555294Z",
+        "data_updated_at": "2023-08-21T14:59:35.439185Z",
         "data": {
             "created_at": "2012-08-27T20:18:14.326026Z",
             "level": 7,
@@ -29585,7 +29586,7 @@
         "id": 240,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/240",
-        "data_updated_at": "2023-08-14T13:59:40.879246Z",
+        "data_updated_at": "2023-08-25T10:05:47.284473Z",
         "data": {
             "created_at": "2012-09-18T03:37:49.401957Z",
             "level": 10,
@@ -36068,7 +36069,7 @@
         "id": 298,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/298",
-        "data_updated_at": "2022-11-24T09:21:27.645323Z",
+        "data_updated_at": "2023-08-21T12:44:35.521024Z",
         "data": {
             "created_at": "2012-12-06T03:40:35.992288Z",
             "level": 24,
@@ -39744,7 +39745,7 @@
         "id": 331,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/331",
-        "data_updated_at": "2023-05-17T17:28:24.836799Z",
+        "data_updated_at": "2023-08-21T12:53:00.799324Z",
         "data": {
             "created_at": "2013-01-24T21:04:25.288990Z",
             "level": 27,
@@ -41433,7 +41434,7 @@
         "id": 345,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/345",
-        "data_updated_at": "2023-08-17T00:44:27.835742Z",
+        "data_updated_at": "2023-08-17T08:20:35.215827Z",
         "data": {
             "created_at": "2013-03-18T16:56:46.624811Z",
             "level": 33,
@@ -42519,7 +42520,7 @@
         "id": 355,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/355",
-        "data_updated_at": "2023-07-20T16:08:33.731795Z",
+        "data_updated_at": "2023-08-25T10:49:31.070555Z",
         "data": {
             "created_at": "2013-04-05T18:43:59.981707Z",
             "level": 35,
@@ -42616,7 +42617,7 @@
             "auxiliary_meanings": [
                 {
                     "type": "blacklist",
-                    "meaning": "fake"
+                    "meaning": "Fake"
                 }
             ],
             "amalgamation_subject_ids": [
@@ -48756,7 +48757,7 @@
         "id": 413,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/413",
-        "data_updated_at": "2022-11-24T09:21:30.218503Z",
+        "data_updated_at": "2023-08-21T12:54:58.700415Z",
         "data": {
             "created_at": "2013-08-22T22:18:33.731237Z",
             "level": 39,
@@ -52430,7 +52431,7 @@
         "id": 8767,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/8767",
-        "data_updated_at": "2023-08-14T14:13:21.675111Z",
+        "data_updated_at": "2023-08-30T16:31:01.094925Z",
         "data": {
             "created_at": "2012-03-01T21:31:08.000000Z",
             "level": 4,
@@ -52524,7 +52525,12 @@
                     "accepted_answer": true
                 }
             ],
-            "auxiliary_meanings": [],
+            "auxiliary_meanings": [
+                {
+                    "type": "blacklist",
+                    "meaning": "Thorns"
+                }
+            ],
             "amalgamation_subject_ids": [
                 535,
                 588,
@@ -52797,7 +52803,7 @@
         "id": 8770,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/8770",
-        "data_updated_at": "2023-05-02T20:00:31.676435Z",
+        "data_updated_at": "2023-08-24T22:55:58.921080Z",
         "data": {
             "created_at": "2012-03-05T19:15:25.000000Z",
             "level": 5,
@@ -56644,7 +56650,7 @@
         "id": 8833,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/8833",
-        "data_updated_at": "2022-11-24T09:25:28.986812Z",
+        "data_updated_at": "2023-08-25T10:45:04.852387Z",
         "data": {
             "created_at": "2019-04-27T00:23:14.025930Z",
             "level": 40,
@@ -57032,7 +57038,7 @@
         "id": 8908,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/8908",
-        "data_updated_at": "2023-07-28T04:25:12.509127Z",
+        "data_updated_at": "2023-08-30T14:58:38.035936Z",
         "data": {
             "created_at": "2020-06-16T14:18:55.378339Z",
             "level": 28,
@@ -57055,7 +57061,8 @@
                 }
             ],
             "amalgamation_subject_ids": [
-                8991
+                8991,
+                9251
             ],
             "meaning_mnemonic": "The meaning of this radical is the same as the alternative kanji meaning. It means <radical>before</radical>.",
             "lesson_position": 0,
