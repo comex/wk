@@ -70,8 +70,8 @@ func trim(_ s: Substring) -> String {
 func commaSplitNoTrim(_ s: String) -> [String] {
     return s.split(separator: ",").map { String($0) }
 }
-func ensure(_ condition: @autoclosure () -> Bool, _ message: @autoclosure () -> String = String(), file: StaticString = #file, line: UInt = #line) {
-    if !condition() {
+func ensure(_ condition: Bool, _ message: @autoclosure () -> String = String(), file: StaticString = #file, line: UInt = #line) {
+    if !condition {
         fatalError(message(), file: file, line: line)
     }
 }
@@ -168,8 +168,24 @@ func runAndGetOutput(_ args: [String]) throws -> String {
     queue.sync {}
     return try unwrapOrThrow(String(decoding: output!, as: UTF8.self), err: MyError("invalid utf8 in output"))
 
-
 }
+
+struct StudyMaterial {
+    let meaningSynonyms: [String]
+}
+func loadStudyMaterials(basePath: String) -> [Int: StudyMaterial] {
+    let json = loadJSON(path: "\(basePath)/study_materials.json") as! [NSDictionary]
+    var ret: [Int: StudyMaterial] = [:]
+    for dict in json {
+        let data = dict["data"] as! NSDictionary
+        let subjectId = data["subject_id"] as! Int
+        let meaningSynonyms = data["meaning_synonyms"] as! [String]
+        ensure(ret[subjectId] == nil)
+        ret[subjectId] = StudyMaterial(meaningSynonyms: meaningSynonyms)
+    }
+    return ret
+}
+
 class Subete {
     static var instance: Subete!
     var allWords: ItemList<Word>! = nil
@@ -177,6 +193,7 @@ class Subete {
     var allItems: [Item]! = nil
     var allConfusion: ItemList<Confusion>! = nil
     var srs: SRS? = nil
+    var studyMaterials: [Int: StudyMaterial]! = nil
     
     var lastAppendedTest: Test?
     
@@ -187,6 +204,7 @@ class Subete {
     init() {
         Subete.instance = self
         print("loading json")
+        self.studyMaterials = loadStudyMaterials(basePath: basePath)
         self.allWords = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "vocabulary", class: Word.self))
         self.allKanji = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "kanji", class: Kanji.self))
         print("loading confusion")
@@ -362,7 +380,7 @@ func normalizeReadingTrimmed(_ input: String) -> String {
 }
 
 enum IngType: Comparable {
-    case primary, secondary, whitelist
+    case primary, secondary, whitelist, synonym
 }
 
 struct Ing {
@@ -411,6 +429,11 @@ struct Ing {
             fatalError("unknown auxiliary meaning type \(type)")
         }
     }
+    init(synonymWithText text: String) {
+        self.text = text
+        self.type = .synonym
+        self.acceptedAnswerWK = true
+    }
 }
 
 protocol JSONInit {
@@ -425,11 +448,14 @@ class NormalItem: Item, JSONInit {
     
     required init(json: NSDictionary, relaxed: Bool) {
         let data: NSDictionary
+        let id: Int?
         if let d = json["data"] {
             data = d as! NSDictionary
+            id = (json["id"] as! Int)
         } else {
             if !relaxed { fatalError("expected 'data'") }
             data = json
+            id = nil
         }
 
         //self.json = json
@@ -438,6 +464,10 @@ class NormalItem: Item, JSONInit {
         var meanings = (data["meanings"] as! [Any]).map { Ing(meaningWithJSON: $0, relaxed: relaxed) }
         if let auxiliaryMeanings = json["auxiliary_meanings"] {
             meanings += (auxiliaryMeanings as! [Any]).map { Ing(auxiliaryMeaningWithJSON: $0) }
+        }
+        if let id, let material = Subete.instance.studyMaterials[id] {
+            meanings += material.meaningSynonyms.map { Ing(synonymWithText: $0) }
+            print(material.meaningSynonyms.map { Ing(synonymWithText: $0) })
         }
         self.meanings = meanings
         super.init(name: self.character,
