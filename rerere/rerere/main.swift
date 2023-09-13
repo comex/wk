@@ -467,7 +467,6 @@ class NormalItem: Item, JSONInit {
         }
         if let id, let material = Subete.instance.studyMaterials[id] {
             meanings += material.meaningSynonyms.map { Ing(synonymWithText: $0) }
-            print(material.meaningSynonyms.map { Ing(synonymWithText: $0) })
         }
         self.meanings = meanings
         super.init(name: self.character,
