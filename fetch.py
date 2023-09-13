@@ -30,4 +30,6 @@ def do_subjects():
     assert set(by_kind.keys()) == {'radical', 'kanji', 'vocabulary', 'kana_vocabulary'}
     for kind, items in by_kind.items():
         dump(items, f'{kind}.json')
+
 do_study_materials()
+do_subjects()
