@@ -3,7 +3,7 @@
         "id": 9176,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9176",
-        "data_updated_at": "2023-07-25T14:50:23.681943Z",
+        "data_updated_at": "2023-09-18T23:39:19.788728Z",
         "data": {
             "created_at": "2022-09-14T11:39:10.684981Z",
             "level": 10,
@@ -149,7 +149,7 @@
         "id": 9177,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9177",
-        "data_updated_at": "2023-07-26T23:28:47.200804Z",
+        "data_updated_at": "2023-09-18T23:39:19.804014Z",
         "data": {
             "created_at": "2023-03-14T13:35:00.593974Z",
             "level": 2,
@@ -270,7 +270,7 @@
         "id": 9178,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9178",
-        "data_updated_at": "2023-07-26T23:28:47.211014Z",
+        "data_updated_at": "2023-09-18T23:39:19.819315Z",
         "data": {
             "created_at": "2023-03-14T14:26:53.746650Z",
             "level": 2,
@@ -391,7 +391,7 @@
         "id": 9179,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9179",
-        "data_updated_at": "2023-07-27T23:23:52.611767Z",
+        "data_updated_at": "2023-09-18T23:39:19.834387Z",
         "data": {
             "created_at": "2023-04-18T18:12:48.999787Z",
             "level": 3,
@@ -538,7 +538,7 @@
         "id": 9180,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9180",
-        "data_updated_at": "2023-07-27T23:23:52.622047Z",
+        "data_updated_at": "2023-09-18T23:39:19.848856Z",
         "data": {
             "created_at": "2023-04-18T18:27:49.646257Z",
             "level": 3,
@@ -654,7 +654,7 @@
         "id": 9181,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9181",
-        "data_updated_at": "2023-07-27T23:23:52.632030Z",
+        "data_updated_at": "2023-09-18T23:39:19.863730Z",
         "data": {
             "created_at": "2023-04-24T21:41:08.633403Z",
             "level": 3,
@@ -770,7 +770,7 @@
         "id": 9182,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9182",
-        "data_updated_at": "2023-07-27T23:23:52.641223Z",
+        "data_updated_at": "2023-09-18T23:39:19.878672Z",
         "data": {
             "created_at": "2023-04-24T21:49:47.951572Z",
             "level": 3,
@@ -886,7 +886,7 @@
         "id": 9183,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9183",
-        "data_updated_at": "2023-07-27T23:23:52.650163Z",
+        "data_updated_at": "2023-09-18T23:39:19.894488Z",
         "data": {
             "created_at": "2023-04-24T21:53:13.498824Z",
             "level": 3,
@@ -1007,7 +1007,7 @@
         "id": 9184,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9184",
-        "data_updated_at": "2023-07-27T23:23:52.659254Z",
+        "data_updated_at": "2023-09-18T23:39:19.909443Z",
         "data": {
             "created_at": "2023-04-24T21:57:04.910366Z",
             "level": 3,
@@ -1123,7 +1123,7 @@
         "id": 9185,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9185",
-        "data_updated_at": "2023-07-25T14:50:23.808254Z",
+        "data_updated_at": "2023-09-18T23:39:19.924785Z",
         "data": {
             "created_at": "2023-04-24T22:01:30.930830Z",
             "level": 4,
@@ -1258,7 +1258,7 @@
         "id": 9186,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9186",
-        "data_updated_at": "2023-07-25T14:50:23.819714Z",
+        "data_updated_at": "2023-09-18T23:39:19.941926Z",
         "data": {
             "created_at": "2023-04-24T22:14:02.189207Z",
             "level": 4,
@@ -1384,7 +1384,7 @@
         "id": 9187,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9187",
-        "data_updated_at": "2023-07-25T14:50:23.838977Z",
+        "data_updated_at": "2023-09-18T23:39:19.958268Z",
         "data": {
             "created_at": "2023-04-24T22:34:28.303716Z",
             "level": 4,
@@ -1519,7 +1519,7 @@
         "id": 9188,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9188",
-        "data_updated_at": "2023-07-25T14:50:23.859092Z",
+        "data_updated_at": "2023-09-18T23:39:19.973539Z",
         "data": {
             "created_at": "2023-04-24T22:38:41.754869Z",
             "level": 4,
@@ -1656,7 +1656,7 @@
         "id": 9189,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9189",
-        "data_updated_at": "2023-07-25T14:50:23.875900Z",
+        "data_updated_at": "2023-09-18T23:39:19.987919Z",
         "data": {
             "created_at": "2023-04-24T22:41:46.359820Z",
             "level": 4,
@@ -1782,7 +1782,7 @@
         "id": 9190,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9190",
-        "data_updated_at": "2023-07-25T14:50:23.888985Z",
+        "data_updated_at": "2023-09-18T23:39:20.003852Z",
         "data": {
             "created_at": "2023-04-24T22:44:09.937711Z",
             "level": 4,
@@ -1919,7 +1919,7 @@
         "id": 9191,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9191",
-        "data_updated_at": "2023-07-25T14:50:23.919620Z",
+        "data_updated_at": "2023-09-18T23:39:20.021692Z",
         "data": {
             "created_at": "2023-04-24T22:46:02.407047Z",
             "level": 4,
@@ -2035,7 +2035,7 @@
         "id": 9192,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9192",
-        "data_updated_at": "2023-07-27T17:43:05.695545Z",
+        "data_updated_at": "2023-09-18T23:39:20.035821Z",
         "data": {
             "created_at": "2023-04-24T22:50:07.710461Z",
             "level": 5,
@@ -2178,7 +2178,7 @@
         "id": 9193,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9193",
-        "data_updated_at": "2023-07-27T17:43:05.705209Z",
+        "data_updated_at": "2023-09-18T23:39:20.050484Z",
         "data": {
             "created_at": "2023-04-24T23:01:18.823533Z",
             "level": 5,
@@ -2307,7 +2307,7 @@
         "id": 9194,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9194",
-        "data_updated_at": "2023-07-27T17:43:05.717134Z",
+        "data_updated_at": "2023-09-18T23:39:20.066335Z",
         "data": {
             "created_at": "2023-04-24T23:05:41.604417Z",
             "level": 5,
@@ -2423,7 +2423,7 @@
         "id": 9195,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9195",
-        "data_updated_at": "2023-07-27T17:43:05.728311Z",
+        "data_updated_at": "2023-09-18T23:39:20.080475Z",
         "data": {
             "created_at": "2023-04-24T23:08:10.474835Z",
             "level": 5,
@@ -2570,7 +2570,7 @@
         "id": 9196,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9196",
-        "data_updated_at": "2023-07-27T17:43:05.739543Z",
+        "data_updated_at": "2023-09-18T23:39:20.095444Z",
         "data": {
             "created_at": "2023-04-24T23:10:33.851884Z",
             "level": 5,
@@ -2686,7 +2686,7 @@
         "id": 9197,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9197",
-        "data_updated_at": "2023-07-27T17:43:05.750497Z",
+        "data_updated_at": "2023-09-18T23:39:20.110242Z",
         "data": {
             "created_at": "2023-04-24T23:13:12.429906Z",
             "level": 5,
@@ -2820,7 +2820,7 @@
         "id": 9198,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9198",
-        "data_updated_at": "2023-07-25T14:50:24.028346Z",
+        "data_updated_at": "2023-09-18T23:39:20.125716Z",
         "data": {
             "created_at": "2023-04-24T23:16:20.622475Z",
             "level": 6,
@@ -2947,7 +2947,7 @@
         "id": 9199,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9199",
-        "data_updated_at": "2023-07-25T14:50:24.043641Z",
+        "data_updated_at": "2023-09-18T23:39:20.141848Z",
         "data": {
             "created_at": "2023-04-24T23:19:54.829678Z",
             "level": 6,
@@ -3110,7 +3110,7 @@
         "id": 9200,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9200",
-        "data_updated_at": "2023-07-25T14:50:24.055136Z",
+        "data_updated_at": "2023-09-18T23:39:20.157167Z",
         "data": {
             "created_at": "2023-04-24T23:22:42.638720Z",
             "level": 6,
@@ -3236,7 +3236,7 @@
         "id": 9201,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9201",
-        "data_updated_at": "2023-07-25T14:50:24.074051Z",
+        "data_updated_at": "2023-09-18T23:39:20.172587Z",
         "data": {
             "created_at": "2023-04-24T23:24:16.684845Z",
             "level": 6,
@@ -3362,7 +3362,7 @@
         "id": 9202,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9202",
-        "data_updated_at": "2023-07-25T14:50:24.089215Z",
+        "data_updated_at": "2023-09-18T23:39:20.187874Z",
         "data": {
             "created_at": "2023-04-24T23:28:19.045752Z",
             "level": 6,
@@ -3552,7 +3552,7 @@
         "id": 9203,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9203",
-        "data_updated_at": "2023-07-25T14:50:24.113648Z",
+        "data_updated_at": "2023-09-18T23:39:20.203405Z",
         "data": {
             "created_at": "2023-04-24T23:34:28.686555Z",
             "level": 6,
@@ -3695,7 +3695,7 @@
         "id": 9204,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9204",
-        "data_updated_at": "2023-07-25T14:50:24.129767Z",
+        "data_updated_at": "2023-09-18T23:39:20.220226Z",
         "data": {
             "created_at": "2023-04-24T23:39:13.658795Z",
             "level": 6,
@@ -3816,7 +3816,7 @@
         "id": 9205,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9205",
-        "data_updated_at": "2023-07-26T19:06:58.868585Z",
+        "data_updated_at": "2023-09-18T23:39:20.237561Z",
         "data": {
             "created_at": "2023-04-24T23:40:53.959896Z",
             "level": 7,
@@ -3947,7 +3947,7 @@
         "id": 9206,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9206",
-        "data_updated_at": "2023-07-26T19:06:58.879736Z",
+        "data_updated_at": "2023-09-18T23:39:20.252917Z",
         "data": {
             "created_at": "2023-04-24T23:42:33.596913Z",
             "level": 7,
@@ -4094,7 +4094,7 @@
         "id": 9207,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9207",
-        "data_updated_at": "2023-07-25T14:50:24.170854Z",
+        "data_updated_at": "2023-09-18T23:39:20.270824Z",
         "data": {
             "created_at": "2023-04-24T23:43:43.733819Z",
             "level": 8,
@@ -4224,7 +4224,7 @@
         "id": 9208,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9208",
-        "data_updated_at": "2023-07-25T14:50:24.181746Z",
+        "data_updated_at": "2023-09-18T23:39:20.287467Z",
         "data": {
             "created_at": "2023-04-24T23:45:52.233059Z",
             "level": 8,
@@ -4362,7 +4362,7 @@
         "id": 9209,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9209",
-        "data_updated_at": "2023-07-25T14:50:24.201028Z",
+        "data_updated_at": "2023-09-18T23:39:20.303641Z",
         "data": {
             "created_at": "2023-04-24T23:49:19.082747Z",
             "level": 8,
@@ -4489,7 +4489,7 @@
         "id": 9210,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9210",
-        "data_updated_at": "2023-07-25T14:50:24.213631Z",
+        "data_updated_at": "2023-09-18T23:39:20.318460Z",
         "data": {
             "created_at": "2023-04-24T23:52:43.457614Z",
             "level": 8,
@@ -4605,7 +4605,7 @@
         "id": 9211,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9211",
-        "data_updated_at": "2023-07-25T14:50:24.224679Z",
+        "data_updated_at": "2023-09-18T23:39:20.333950Z",
         "data": {
             "created_at": "2023-04-24T23:55:52.602511Z",
             "level": 8,
@@ -4732,7 +4732,7 @@
         "id": 9212,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9212",
-        "data_updated_at": "2023-07-25T14:50:24.236961Z",
+        "data_updated_at": "2023-09-18T23:39:20.349492Z",
         "data": {
             "created_at": "2023-04-24T23:58:15.359562Z",
             "level": 8,
@@ -4871,7 +4871,7 @@
         "id": 9213,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9213",
-        "data_updated_at": "2023-07-28T06:17:24.325942Z",
+        "data_updated_at": "2023-09-18T23:39:20.369524Z",
         "data": {
             "created_at": "2023-04-25T00:01:23.967209Z",
             "level": 9,
@@ -5055,7 +5055,7 @@
         "id": 9214,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9214",
-        "data_updated_at": "2023-07-28T06:17:24.335417Z",
+        "data_updated_at": "2023-09-18T23:39:20.384917Z",
         "data": {
             "created_at": "2023-04-25T00:04:54.596915Z",
             "level": 9,
@@ -5181,7 +5181,7 @@
         "id": 9215,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9215",
-        "data_updated_at": "2023-07-28T06:17:24.344602Z",
+        "data_updated_at": "2023-09-18T23:39:20.400319Z",
         "data": {
             "created_at": "2023-04-25T00:07:31.489584Z",
             "level": 9,
@@ -5312,7 +5312,7 @@
         "id": 9216,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9216",
-        "data_updated_at": "2023-07-28T06:17:24.353400Z",
+        "data_updated_at": "2023-09-18T23:39:20.414743Z",
         "data": {
             "created_at": "2023-04-25T00:09:44.774013Z",
             "level": 9,
@@ -5455,7 +5455,7 @@
         "id": 9217,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9217",
-        "data_updated_at": "2023-07-28T06:17:24.361936Z",
+        "data_updated_at": "2023-09-18T23:39:20.428783Z",
         "data": {
             "created_at": "2023-04-25T00:17:35.208605Z",
             "level": 9,
@@ -5616,7 +5616,7 @@
         "id": 9218,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9218",
-        "data_updated_at": "2023-07-25T14:50:24.356162Z",
+        "data_updated_at": "2023-09-18T23:39:20.442785Z",
         "data": {
             "created_at": "2023-04-25T00:24:14.607432Z",
             "level": 10,
@@ -5746,7 +5746,7 @@
         "id": 9219,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9219",
-        "data_updated_at": "2023-07-25T14:50:24.371961Z",
+        "data_updated_at": "2023-09-18T23:39:20.456993Z",
         "data": {
             "created_at": "2023-04-25T00:26:49.486712Z",
             "level": 10,
@@ -5906,7 +5906,7 @@
         "id": 9220,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9220",
-        "data_updated_at": "2023-07-25T14:50:24.392338Z",
+        "data_updated_at": "2023-09-18T23:39:20.472193Z",
         "data": {
             "created_at": "2023-04-25T00:28:12.335485Z",
             "level": 10,
@@ -6031,7 +6031,7 @@
         "id": 9221,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9221",
-        "data_updated_at": "2023-07-25T14:50:24.403264Z",
+        "data_updated_at": "2023-09-18T23:39:20.487074Z",
         "data": {
             "created_at": "2023-04-25T00:32:16.066622Z",
             "level": 10,
@@ -6147,7 +6147,7 @@
         "id": 9222,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9222",
-        "data_updated_at": "2023-07-25T14:50:24.413848Z",
+        "data_updated_at": "2023-09-18T23:39:20.504448Z",
         "data": {
             "created_at": "2023-04-25T00:33:52.424602Z",
             "level": 10,
@@ -6276,7 +6276,7 @@
         "id": 9223,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9223",
-        "data_updated_at": "2023-07-25T14:50:24.427782Z",
+        "data_updated_at": "2023-09-18T23:39:20.519878Z",
         "data": {
             "created_at": "2023-04-25T00:38:16.353957Z",
             "level": 10,
@@ -6397,7 +6397,7 @@
         "id": 9224,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9224",
-        "data_updated_at": "2023-07-25T14:50:24.438843Z",
+        "data_updated_at": "2023-09-18T23:39:20.535176Z",
         "data": {
             "created_at": "2023-04-25T00:40:10.937095Z",
             "level": 12,
@@ -6549,7 +6549,7 @@
         "id": 9226,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9226",
-        "data_updated_at": "2023-07-25T14:50:24.464824Z",
+        "data_updated_at": "2023-09-18T23:39:20.549701Z",
         "data": {
             "created_at": "2023-04-25T00:52:02.856721Z",
             "level": 13,
@@ -6678,7 +6678,7 @@
         "id": 9227,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9227",
-        "data_updated_at": "2023-07-25T14:50:24.480077Z",
+        "data_updated_at": "2023-09-18T23:39:20.565693Z",
         "data": {
             "created_at": "2023-04-25T00:58:20.179039Z",
             "level": 13,
@@ -6820,7 +6820,7 @@
         "id": 9228,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9228",
-        "data_updated_at": "2023-07-25T14:50:24.501496Z",
+        "data_updated_at": "2023-09-18T23:39:20.581003Z",
         "data": {
             "created_at": "2023-04-25T01:00:35.748036Z",
             "level": 15,
@@ -6946,7 +6946,7 @@
         "id": 9229,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9229",
-        "data_updated_at": "2023-07-25T14:50:24.514352Z",
+        "data_updated_at": "2023-09-18T23:39:20.596226Z",
         "data": {
             "created_at": "2023-04-25T01:04:29.641812Z",
             "level": 15,
@@ -7085,7 +7085,7 @@
         "id": 9230,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9230",
-        "data_updated_at": "2023-07-26T08:02:48.987201Z",
+        "data_updated_at": "2023-09-18T23:39:20.627000Z",
         "data": {
             "created_at": "2023-04-25T01:08:48.090865Z",
             "level": 16,
@@ -7236,7 +7236,7 @@
         "id": 9231,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9231",
-        "data_updated_at": "2023-07-25T14:50:24.542306Z",
+        "data_updated_at": "2023-09-18T23:39:20.643538Z",
         "data": {
             "created_at": "2023-04-25T01:12:32.657197Z",
             "level": 17,
@@ -7399,7 +7399,7 @@
         "id": 9232,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9232",
-        "data_updated_at": "2023-07-25T14:50:24.556916Z",
+        "data_updated_at": "2023-09-18T23:39:20.658457Z",
         "data": {
             "created_at": "2023-04-25T01:15:44.539362Z",
             "level": 18,
@@ -7549,7 +7549,7 @@
         "id": 9233,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9233",
-        "data_updated_at": "2023-07-25T14:50:24.570041Z",
+        "data_updated_at": "2023-09-18T23:39:20.673570Z",
         "data": {
             "created_at": "2023-04-25T01:18:59.378343Z",
             "level": 30,
@@ -7681,7 +7681,7 @@
         "id": 9234,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9234",
-        "data_updated_at": "2023-07-25T14:50:24.583012Z",
+        "data_updated_at": "2023-09-18T23:39:20.689013Z",
         "data": {
             "created_at": "2023-04-25T01:24:53.229106Z",
             "level": 36,
@@ -7818,7 +7818,7 @@
         "id": 9235,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9235",
-        "data_updated_at": "2023-07-25T14:50:24.594226Z",
+        "data_updated_at": "2023-09-18T23:39:20.707579Z",
         "data": {
             "created_at": "2023-04-25T01:27:12.487553Z",
             "level": 25,
@@ -7952,7 +7952,7 @@
         "id": 9236,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9236",
-        "data_updated_at": "2023-08-14T14:32:11.953678Z",
+        "data_updated_at": "2023-09-18T23:39:20.725630Z",
         "data": {
             "created_at": "2023-04-25T01:29:58.217522Z",
             "level": 48,
