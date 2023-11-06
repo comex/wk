@@ -3,7 +3,7 @@
         "id": 9176,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9176",
-        "data_updated_at": "2023-09-18T23:39:19.788728Z",
+        "data_updated_at": "2023-10-03T07:54:00.521856Z",
         "data": {
             "created_at": "2022-09-14T11:39:10.684981Z",
             "level": 10,
@@ -141,7 +141,7 @@
                     "content_type": "audio/mpeg"
                 }
             ],
-            "lesson_position": 55,
+            "lesson_position": 59,
             "spaced_repetition_system_id": 1
         }
     },
@@ -1258,7 +1258,7 @@
         "id": 9186,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9186",
-        "data_updated_at": "2023-09-18T23:39:19.941926Z",
+        "data_updated_at": "2023-10-02T00:41:03.422365Z",
         "data": {
             "created_at": "2023-04-24T22:14:02.189207Z",
             "level": 4,
@@ -1376,7 +1376,7 @@
                     "content_type": "audio/mpeg"
                 }
             ],
-            "lesson_position": 0,
+            "lesson_position": 7,
             "spaced_repetition_system_id": 1
         }
     },
@@ -1384,7 +1384,7 @@
         "id": 9187,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9187",
-        "data_updated_at": "2023-09-18T23:39:19.958268Z",
+        "data_updated_at": "2023-10-02T00:41:03.414236Z",
         "data": {
             "created_at": "2023-04-24T22:34:28.303716Z",
             "level": 4,
@@ -1511,7 +1511,7 @@
                     "content_type": "audio/ogg"
                 }
             ],
-            "lesson_position": 0,
+            "lesson_position": 6,
             "spaced_repetition_system_id": 1
         }
     },
@@ -1519,7 +1519,7 @@
         "id": 9188,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9188",
-        "data_updated_at": "2023-09-18T23:39:19.973539Z",
+        "data_updated_at": "2023-10-02T00:41:03.406343Z",
         "data": {
             "created_at": "2023-04-24T22:38:41.754869Z",
             "level": 4,
@@ -1648,7 +1648,7 @@
                     "content_type": "audio/mpeg"
                 }
             ],
-            "lesson_position": 0,
+            "lesson_position": 5,
             "spaced_repetition_system_id": 1
         }
     },
@@ -1656,7 +1656,7 @@
         "id": 9189,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9189",
-        "data_updated_at": "2023-09-18T23:39:19.987919Z",
+        "data_updated_at": "2023-10-02T00:41:03.356933Z",
         "data": {
             "created_at": "2023-04-24T22:41:46.359820Z",
             "level": 4,
@@ -1774,7 +1774,7 @@
                     "content_type": "audio/ogg"
                 }
             ],
-            "lesson_position": 0,
+            "lesson_position": 1,
             "spaced_repetition_system_id": 1
         }
     },
@@ -1782,7 +1782,7 @@
         "id": 9190,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9190",
-        "data_updated_at": "2023-09-18T23:39:20.003852Z",
+        "data_updated_at": "2023-10-02T00:41:03.377360Z",
         "data": {
             "created_at": "2023-04-24T22:44:09.937711Z",
             "level": 4,
@@ -1911,7 +1911,7 @@
                     "content_type": "audio/mpeg"
                 }
             ],
-            "lesson_position": 0,
+            "lesson_position": 2,
             "spaced_repetition_system_id": 1
         }
     },
@@ -1919,7 +1919,7 @@
         "id": 9191,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9191",
-        "data_updated_at": "2023-09-18T23:39:20.021692Z",
+        "data_updated_at": "2023-10-02T00:41:03.386396Z",
         "data": {
             "created_at": "2023-04-24T22:46:02.407047Z",
             "level": 4,
@@ -2027,7 +2027,7 @@
                     "content_type": "audio/ogg"
                 }
             ],
-            "lesson_position": 0,
+            "lesson_position": 3,
             "spaced_repetition_system_id": 1
         }
     },
@@ -2035,7 +2035,7 @@
         "id": 9192,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9192",
-        "data_updated_at": "2023-09-18T23:39:20.035821Z",
+        "data_updated_at": "2023-10-03T07:52:01.771074Z",
         "data": {
             "created_at": "2023-04-24T22:50:07.710461Z",
             "level": 5,
@@ -2170,7 +2170,7 @@
                     "content_type": "audio/ogg"
                 }
             ],
-            "lesson_position": 70,
+            "lesson_position": 71,
             "spaced_repetition_system_id": 1
         }
     },
@@ -2178,7 +2178,7 @@
         "id": 9193,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9193",
-        "data_updated_at": "2023-09-18T23:39:20.050484Z",
+        "data_updated_at": "2023-10-03T07:52:01.781841Z",
         "data": {
             "created_at": "2023-04-24T23:01:18.823533Z",
             "level": 5,
@@ -2299,7 +2299,7 @@
                     "content_type": "audio/ogg"
                 }
             ],
-            "lesson_position": 71,
+            "lesson_position": 72,
             "spaced_repetition_system_id": 1
         }
     },
@@ -2307,7 +2307,7 @@
         "id": 9194,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9194",
-        "data_updated_at": "2023-09-18T23:39:20.066335Z",
+        "data_updated_at": "2023-10-03T07:52:01.791968Z",
         "data": {
             "created_at": "2023-04-24T23:05:41.604417Z",
             "level": 5,
@@ -2415,7 +2415,7 @@
                     "content_type": "audio/ogg"
                 }
             ],
-            "lesson_position": 72,
+            "lesson_position": 73,
             "spaced_repetition_system_id": 1
         }
     },
@@ -2423,7 +2423,7 @@
         "id": 9195,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9195",
-        "data_updated_at": "2023-09-18T23:39:20.080475Z",
+        "data_updated_at": "2023-10-03T07:52:01.801332Z",
         "data": {
             "created_at": "2023-04-24T23:08:10.474835Z",
             "level": 5,
@@ -2562,7 +2562,7 @@
                     "content_type": "audio/ogg"
                 }
             ],
-            "lesson_position": 73,
+            "lesson_position": 74,
             "spaced_repetition_system_id": 1
         }
     },
@@ -2570,7 +2570,7 @@
         "id": 9196,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9196",
-        "data_updated_at": "2023-09-18T23:39:20.095444Z",
+        "data_updated_at": "2023-10-03T07:52:01.810377Z",
         "data": {
             "created_at": "2023-04-24T23:10:33.851884Z",
             "level": 5,
@@ -2678,7 +2678,7 @@
                     "content_type": "audio/mpeg"
                 }
             ],
-            "lesson_position": 74,
+            "lesson_position": 75,
             "spaced_repetition_system_id": 1
         }
     },
@@ -2686,7 +2686,7 @@
         "id": 9197,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9197",
-        "data_updated_at": "2023-09-18T23:39:20.110242Z",
+        "data_updated_at": "2023-10-03T07:52:01.818426Z",
         "data": {
             "created_at": "2023-04-24T23:13:12.429906Z",
             "level": 5,
@@ -2812,7 +2812,7 @@
                     "content_type": "audio/mpeg"
                 }
             ],
-            "lesson_position": 75,
+            "lesson_position": 76,
             "spaced_repetition_system_id": 1
         }
     },
@@ -4871,7 +4871,7 @@
         "id": 9213,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9213",
-        "data_updated_at": "2023-09-18T23:39:20.369524Z",
+        "data_updated_at": "2023-09-28T08:03:30.739797Z",
         "data": {
             "created_at": "2023-04-25T00:01:23.967209Z",
             "level": 9,
@@ -5047,7 +5047,7 @@
                     "content_type": "audio/ogg"
                 }
             ],
-            "lesson_position": 64,
+            "lesson_position": 65,
             "spaced_repetition_system_id": 1
         }
     },
@@ -5055,7 +5055,7 @@
         "id": 9214,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9214",
-        "data_updated_at": "2023-09-18T23:39:20.384917Z",
+        "data_updated_at": "2023-09-28T08:03:30.749124Z",
         "data": {
             "created_at": "2023-04-25T00:04:54.596915Z",
             "level": 9,
@@ -5173,7 +5173,7 @@
                     "content_type": "audio/ogg"
                 }
             ],
-            "lesson_position": 65,
+            "lesson_position": 66,
             "spaced_repetition_system_id": 1
         }
     },
@@ -5181,7 +5181,7 @@
         "id": 9215,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9215",
-        "data_updated_at": "2023-09-18T23:39:20.400319Z",
+        "data_updated_at": "2023-09-28T08:03:30.757239Z",
         "data": {
             "created_at": "2023-04-25T00:07:31.489584Z",
             "level": 9,
@@ -5304,7 +5304,7 @@
                     "content_type": "audio/ogg"
                 }
             ],
-            "lesson_position": 66,
+            "lesson_position": 67,
             "spaced_repetition_system_id": 1
         }
     },
@@ -5312,7 +5312,7 @@
         "id": 9216,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9216",
-        "data_updated_at": "2023-09-18T23:39:20.414743Z",
+        "data_updated_at": "2023-09-28T08:03:30.765326Z",
         "data": {
             "created_at": "2023-04-25T00:09:44.774013Z",
             "level": 9,
@@ -5447,7 +5447,7 @@
                     "content_type": "audio/ogg"
                 }
             ],
-            "lesson_position": 67,
+            "lesson_position": 68,
             "spaced_repetition_system_id": 1
         }
     },
@@ -5455,7 +5455,7 @@
         "id": 9217,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9217",
-        "data_updated_at": "2023-09-18T23:39:20.428783Z",
+        "data_updated_at": "2023-09-28T08:03:30.773478Z",
         "data": {
             "created_at": "2023-04-25T00:17:35.208605Z",
             "level": 9,
@@ -5608,7 +5608,7 @@
                     "content_type": "audio/mpeg"
                 }
             ],
-            "lesson_position": 68,
+            "lesson_position": 69,
             "spaced_repetition_system_id": 1
         }
     },
@@ -5616,7 +5616,7 @@
         "id": 9218,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9218",
-        "data_updated_at": "2023-09-18T23:39:20.442785Z",
+        "data_updated_at": "2023-10-03T07:54:00.530283Z",
         "data": {
             "created_at": "2023-04-25T00:24:14.607432Z",
             "level": 10,
@@ -5738,7 +5738,7 @@
                     "content_type": "audio/ogg"
                 }
             ],
-            "lesson_position": 56,
+            "lesson_position": 60,
             "spaced_repetition_system_id": 1
         }
     },
@@ -5746,7 +5746,7 @@
         "id": 9219,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9219",
-        "data_updated_at": "2023-09-18T23:39:20.456993Z",
+        "data_updated_at": "2023-10-03T07:54:00.540370Z",
         "data": {
             "created_at": "2023-04-25T00:26:49.486712Z",
             "level": 10,
@@ -5898,7 +5898,7 @@
                     "content_type": "audio/ogg"
                 }
             ],
-            "lesson_position": 57,
+            "lesson_position": 61,
             "spaced_repetition_system_id": 1
         }
     },
@@ -5906,7 +5906,7 @@
         "id": 9220,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9220",
-        "data_updated_at": "2023-09-18T23:39:20.472193Z",
+        "data_updated_at": "2023-10-03T07:54:00.549981Z",
         "data": {
             "created_at": "2023-04-25T00:28:12.335485Z",
             "level": 10,
@@ -6023,7 +6023,7 @@
                     "content_type": "audio/mpeg"
                 }
             ],
-            "lesson_position": 58,
+            "lesson_position": 62,
             "spaced_repetition_system_id": 1
         }
     },
@@ -6031,7 +6031,7 @@
         "id": 9221,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9221",
-        "data_updated_at": "2023-09-18T23:39:20.487074Z",
+        "data_updated_at": "2023-10-03T07:54:00.558891Z",
         "data": {
             "created_at": "2023-04-25T00:32:16.066622Z",
             "level": 10,
@@ -6139,7 +6139,7 @@
                     "content_type": "audio/ogg"
                 }
             ],
-            "lesson_position": 59,
+            "lesson_position": 63,
             "spaced_repetition_system_id": 1
         }
     },
@@ -6147,7 +6147,7 @@
         "id": 9222,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9222",
-        "data_updated_at": "2023-09-18T23:39:20.504448Z",
+        "data_updated_at": "2023-10-03T07:54:00.568612Z",
         "data": {
             "created_at": "2023-04-25T00:33:52.424602Z",
             "level": 10,
@@ -6268,7 +6268,7 @@
                     "content_type": "audio/mpeg"
                 }
             ],
-            "lesson_position": 60,
+            "lesson_position": 64,
             "spaced_repetition_system_id": 1
         }
     },
@@ -6276,7 +6276,7 @@
         "id": 9223,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9223",
-        "data_updated_at": "2023-09-18T23:39:20.519878Z",
+        "data_updated_at": "2023-10-03T07:54:00.578901Z",
         "data": {
             "created_at": "2023-04-25T00:38:16.353957Z",
             "level": 10,
@@ -6389,7 +6389,7 @@
                     "content_type": "audio/ogg"
                 }
             ],
-            "lesson_position": 61,
+            "lesson_position": 65,
             "spaced_repetition_system_id": 1
         }
     },
@@ -7085,7 +7085,7 @@
         "id": 9230,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9230",
-        "data_updated_at": "2023-09-18T23:39:20.627000Z",
+        "data_updated_at": "2023-09-28T07:44:47.182748Z",
         "data": {
             "created_at": "2023-04-25T01:08:48.090865Z",
             "level": 16,
