@@ -3,7 +3,7 @@
         "id": 9176,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9176",
-        "data_updated_at": "2023-10-03T07:54:00.521856Z",
+        "data_updated_at": "2023-11-16T15:04:37.734303Z",
         "data": {
             "created_at": "2022-09-14T11:39:10.684981Z",
             "level": 10,
@@ -52,7 +52,7 @@
             "parts_of_speech": [
                 "adverb"
             ],
-            "meaning_mnemonic": "You <reading>chort</reading>le (<ja>\u3061\u3087\u3063\u3068</ja>) <vocabulary>a little</vocabulary> at a silly joke. You can\u2019t help chortling for <vocabulary>for a moment</vocabulary>. Go ahead, chortle just a little, for just a moment, to help you remember this word.",
+            "meaning_mnemonic": "You <reading>chort</reading>le (<ja>\u3061\u3087\u3063\u3068</ja>) <vocabulary>a little</vocabulary> at a silly joke. You can\u2019t help chortling <vocabulary>for a moment</vocabulary>. Go ahead, chortle just a little, for just a moment, to help you remember this word.",
             "context_sentences": [
                 {
                     "en": "Oh, wait a moment!",
@@ -149,7 +149,7 @@
         "id": 9177,
         "object": "kana_vocabulary",
         "url": "https://api.wanikani.com/v2/subjects/9177",
-        "data_updated_at": "2023-09-18T23:39:19.804014Z",
+        "data_updated_at": "2023-11-21T19:50:30.748699Z",
         "data": {
             "created_at": "2023-03-14T13:35:00.593974Z",
             "level": 2,
@@ -161,11 +161,6 @@
                 {
                     "meaning": "Good Morning",
                     "primary": true,
-                    "accepted_answer": true
-                },
-                {
-                    "meaning": "Morning",
-                    "primary": false,
                     "accepted_answer": true
                 }
             ],

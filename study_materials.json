@@ -15916,5 +15916,22 @@
             ],
             "hidden": false
         }
+    },
+    {
+        "id": 12022235,
+        "object": "study_material",
+        "url": "https://api.wanikani.com/v2/study_materials/12022235",
+        "data_updated_at": "2023-11-10T04:53:28.855898Z",
+        "data": {
+            "created_at": "2023-11-10T04:53:28.855898Z",
+            "subject_id": 9296,
+            "subject_type": "vocabulary",
+            "meaning_note": null,
+            "reading_note": null,
+            "meaning_synonyms": [
+                "to happen in succession"
+            ],
+            "hidden": false
+        }
     }
 ]

@@ -3,7 +3,7 @@
         "id": 1,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/1",
-        "data_updated_at": "2023-09-26T22:33:09.776898Z",
+        "data_updated_at": "2023-11-21T19:38:33.492450Z",
         "data": {
             "created_at": "2012-02-27T18:08:16.000000Z",
             "level": 1,
@@ -1589,7 +1589,7 @@
         "id": 14,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/14",
-        "data_updated_at": "2023-09-26T22:33:08.556062Z",
+        "data_updated_at": "2023-11-21T19:38:33.492450Z",
         "data": {
             "created_at": "2012-02-27T18:40:12.000000Z",
             "level": 1,
@@ -1864,7 +1864,7 @@
         "id": 16,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/16",
-        "data_updated_at": "2023-09-26T22:33:09.866740Z",
+        "data_updated_at": "2023-11-21T19:38:33.492450Z",
         "data": {
             "created_at": "2012-02-27T18:41:46.000000Z",
             "level": 1,
@@ -2956,7 +2956,7 @@
         "id": 23,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/23",
-        "data_updated_at": "2023-09-26T22:33:10.036605Z",
+        "data_updated_at": "2023-11-21T19:38:33.492450Z",
         "data": {
             "created_at": "2012-02-27T18:46:18.000000Z",
             "level": 1,
@@ -3852,7 +3852,7 @@
         "id": 30,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/30",
-        "data_updated_at": "2023-09-26T22:33:10.467361Z",
+        "data_updated_at": "2023-11-21T19:38:33.492450Z",
         "data": {
             "created_at": "2012-02-28T21:06:08.000000Z",
             "level": 2,
@@ -11107,7 +11107,7 @@
         "id": 90,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/90",
-        "data_updated_at": "2023-10-02T00:41:03.552689Z",
+        "data_updated_at": "2023-11-14T00:41:36.543448Z",
         "data": {
             "created_at": "2012-03-01T21:37:50.000000Z",
             "level": 4,
@@ -16444,7 +16444,7 @@
         "id": 135,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/135",
-        "data_updated_at": "2023-09-26T22:33:09.083347Z",
+        "data_updated_at": "2023-11-14T00:41:36.543448Z",
         "data": {
             "created_at": "2012-03-07T00:22:47.000000Z",
             "level": 6,
@@ -18126,7 +18126,7 @@
         "id": 150,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/150",
-        "data_updated_at": "2023-09-26T22:33:12.130106Z",
+        "data_updated_at": "2023-11-14T00:41:36.543448Z",
         "data": {
             "created_at": "2012-03-22T00:56:04.000000Z",
             "level": 7,
@@ -30345,7 +30345,7 @@
         "id": 263,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/263",
-        "data_updated_at": "2023-09-26T22:33:14.028406Z",
+        "data_updated_at": "2023-12-01T23:00:45.724076Z",
         "data": {
             "created_at": "2012-11-01T00:56:20.624816Z",
             "level": 19,
@@ -30440,7 +30440,7 @@
                 1800
             ],
             "meaning_mnemonic": "This radical is the same as the kanji. It means <radical>become</radical>.",
-            "lesson_position": 0,
+            "lesson_position": 1,
             "spaced_repetition_system_id": 1
         }
     },
@@ -30550,7 +30550,7 @@
         "id": 265,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/265",
-        "data_updated_at": "2023-09-26T22:33:14.048681Z",
+        "data_updated_at": "2023-12-01T23:00:45.840560Z",
         "data": {
             "created_at": "2012-11-01T00:56:39.941512Z",
             "level": 19,
@@ -30646,7 +30646,7 @@
                 2068
             ],
             "meaning_mnemonic": "When you shoot your gun at the sun, it becomes winter. The shot you fired sent the sun into a crazy chain reaction, making it implode in on itself and become a <radical>black hole</radical>. Imagine this happening and imagine the shock you'd feel. You shot the sun. You caused this infinite winter (and soon black hole death).",
-            "lesson_position": 1,
+            "lesson_position": 9,
             "spaced_repetition_system_id": 1
         }
     },
@@ -30654,7 +30654,7 @@
         "id": 266,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/266",
-        "data_updated_at": "2023-09-26T22:33:14.085361Z",
+        "data_updated_at": "2023-12-01T23:00:45.850136Z",
         "data": {
             "created_at": "2012-11-01T00:56:46.941870Z",
             "level": 19,
@@ -30748,7 +30748,7 @@
                 1775
             ],
             "meaning_mnemonic": "This radical is the same as the kanji. It means <radical>director</radical>.",
-            "lesson_position": 2,
+            "lesson_position": 10,
             "spaced_repetition_system_id": 1
         }
     },
@@ -30857,7 +30857,7 @@
         "id": 268,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/268",
-        "data_updated_at": "2023-09-26T22:33:14.157978Z",
+        "data_updated_at": "2023-12-01T23:00:45.859821Z",
         "data": {
             "created_at": "2012-11-01T00:56:59.374838Z",
             "level": 19,
@@ -30955,7 +30955,7 @@
                 8885
             ],
             "meaning_mnemonic": "This radical is the same as the kanji. It means <radical>reason</radical>.",
-            "lesson_position": 3,
+            "lesson_position": 11,
             "spaced_repetition_system_id": 1
         }
     },
@@ -31276,7 +31276,7 @@
         "id": 272,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/272",
-        "data_updated_at": "2023-09-26T22:33:14.105421Z",
+        "data_updated_at": "2023-12-01T23:00:45.869477Z",
         "data": {
             "created_at": "2012-11-01T04:51:09.508368Z",
             "level": 19,
@@ -31369,7 +31369,7 @@
                 2022
             ],
             "meaning_mnemonic": "There's a drunkard holding out his fingers. He's staring at them. Realizing who he is. He's becoming aware of his <radical>ego</radical>. Now that he's aware of himself, he's probably going to get an inflated ego too. Yuck.",
-            "lesson_position": 4,
+            "lesson_position": 12,
             "spaced_repetition_system_id": 1
         }
     },
@@ -34827,7 +34827,7 @@
         "id": 306,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/306",
-        "data_updated_at": "2023-09-26T22:33:14.746585Z",
+        "data_updated_at": "2023-11-16T19:16:39.937772Z",
         "data": {
             "created_at": "2013-01-17T20:21:40.409170Z",
             "level": 26,
@@ -34920,7 +34920,7 @@
                 2247
             ],
             "meaning_mnemonic": "This radical is the same as the kanji. It means <radical>announce</radical>.",
-            "lesson_position": 0,
+            "lesson_position": 2,
             "spaced_repetition_system_id": 1
         }
     },
@@ -34928,7 +34928,7 @@
         "id": 307,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/307",
-        "data_updated_at": "2023-09-26T22:33:14.763863Z",
+        "data_updated_at": "2023-11-16T19:16:39.948596Z",
         "data": {
             "created_at": "2013-01-17T20:23:14.368751Z",
             "level": 26,
@@ -35039,7 +35039,7 @@
                 2265
             ],
             "meaning_mnemonic": "This radical is the same as the kanji. It means <radical>ten thousand</radical>.",
-            "lesson_position": 1,
+            "lesson_position": 3,
             "spaced_repetition_system_id": 1
         }
     },
@@ -40649,7 +40649,7 @@
         "id": 362,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/362",
-        "data_updated_at": "2023-09-26T22:33:15.691101Z",
+        "data_updated_at": "2023-12-01T23:00:45.879796Z",
         "data": {
             "created_at": "2013-05-03T08:25:31.179311Z",
             "level": 19,
@@ -40743,7 +40743,7 @@
                 2436
             ],
             "meaning_mnemonic": "This radical is the same as the kanji. It means <radical>right</radical>.",
-            "lesson_position": 5,
+            "lesson_position": 13,
             "spaced_repetition_system_id": 1
         }
     },
@@ -41465,10 +41465,10 @@
         "id": 370,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/370",
-        "data_updated_at": "2023-09-26T22:33:15.884187Z",
+        "data_updated_at": "2023-11-29T13:58:17.311306Z",
         "data": {
             "created_at": "2013-05-03T18:02:48.597857Z",
-            "level": 38,
+            "level": 39,
             "slug": "sky",
             "hidden_at": null,
             "document_url": "https://www.wanikani.com/radicals/sky",
@@ -47308,7 +47308,7 @@
         "id": 428,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/428",
-        "data_updated_at": "2023-09-26T22:33:08.882398Z",
+        "data_updated_at": "2023-11-30T16:47:24.656223Z",
         "data": {
             "created_at": "2015-06-26T22:31:21.086165Z",
             "level": 34,
@@ -49092,7 +49092,7 @@
         "id": 8766,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/8766",
-        "data_updated_at": "2023-10-02T00:41:03.688392Z",
+        "data_updated_at": "2023-11-21T19:38:33.433508Z",
         "data": {
             "created_at": "2012-03-01T21:30:51.000000Z",
             "level": 4,
@@ -51754,7 +51754,7 @@
         "id": 8791,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/8791",
-        "data_updated_at": "2023-09-26T22:33:08.519399Z",
+        "data_updated_at": "2023-11-16T19:16:39.921929Z",
         "data": {
             "created_at": "2013-01-17T20:23:32.028860Z",
             "level": 26,
@@ -51844,7 +51844,7 @@
             "auxiliary_meanings": [],
             "amalgamation_subject_ids": [],
             "meaning_mnemonic": "The letter \"E\" is for \"<radical>egg</radical>\" - easy enough, right?",
-            "lesson_position": 0,
+            "lesson_position": 1,
             "spaced_repetition_system_id": 1
         }
     },
@@ -51852,7 +51852,7 @@
         "id": 8792,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/8792",
-        "data_updated_at": "2023-09-26T22:33:14.803263Z",
+        "data_updated_at": "2023-11-16T19:16:39.957776Z",
         "data": {
             "created_at": "2013-01-24T02:47:29.902273Z",
             "level": 26,
@@ -51948,7 +51948,7 @@
                 1964
             ],
             "meaning_mnemonic": "Look at all those little things sticking out. You could easily use it to <radical>comb</radical> your hair.",
-            "lesson_position": 2,
+            "lesson_position": 4,
             "spaced_repetition_system_id": 1
         }
     },
@@ -53490,7 +53490,7 @@
         "id": 8827,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/8827",
-        "data_updated_at": "2023-09-26T22:33:16.802646Z",
+        "data_updated_at": "2023-11-16T19:16:39.973127Z",
         "data": {
             "created_at": "2018-12-05T18:39:20.879137Z",
             "level": 26,
@@ -53584,7 +53584,7 @@
                 2362
             ],
             "meaning_mnemonic": "You put your hat on the ground and a flag in your mouth. You're letting the world know that they can use your mouth as a <radical>warehouse</radical>. Your gullet is open for storage business. Need to store some ice cream? Please use my mouth warehouse. ;D ;D ;D",
-            "lesson_position": 3,
+            "lesson_position": 5,
             "spaced_repetition_system_id": 1
         }
     },
@@ -53592,7 +53592,7 @@
         "id": 8828,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/8828",
-        "data_updated_at": "2023-09-26T22:33:16.822582Z",
+        "data_updated_at": "2023-11-16T19:16:39.985710Z",
         "data": {
             "created_at": "2018-12-05T18:39:22.536820Z",
             "level": 26,
@@ -53685,7 +53685,7 @@
                 2094
             ],
             "meaning_mnemonic": "This radical is the same as the kanji. It means <radical>chapter</radical>.",
-            "lesson_position": 4,
+            "lesson_position": 6,
             "spaced_repetition_system_id": 1
         }
     },
