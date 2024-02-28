@@ -172,7 +172,7 @@
         "id": 2,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/2",
-        "data_updated_at": "2023-09-26T22:33:09.759579Z",
+        "data_updated_at": "2024-01-31T16:45:20.461008Z",
         "data": {
             "created_at": "2012-02-27T18:11:07.000000Z",
             "level": 1,
@@ -285,7 +285,7 @@
                 9012
             ],
             "meaning_mnemonic": "Picture a fish. Now picture the fish a little worse, like a child's drawing of the fish. Now erase the fish's body and... you're left with two <radical>fins</radical>! Do you see these two fins? Yeah, you see them.",
-            "lesson_position": 1,
+            "lesson_position": 2,
             "spaced_repetition_system_id": 2
         }
     },
@@ -293,7 +293,7 @@
         "id": 3,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/3",
-        "data_updated_at": "2023-09-26T22:33:09.720634Z",
+        "data_updated_at": "2024-02-07T19:01:36.792487Z",
         "data": {
             "created_at": "2012-02-27T18:12:15.000000Z",
             "level": 1,
@@ -428,7 +428,7 @@
                 8995
             ],
             "meaning_mnemonic": "This little radical is a <radical>drop</radical> of water or some other liquid. Notice how it's only one drop? Sometimes radicals or kanji will have more than one drop, so it's important that you know how to tell them apart.",
-            "lesson_position": 2,
+            "lesson_position": 3,
             "spaced_repetition_system_id": 2
         }
     },
@@ -546,7 +546,7 @@
         "id": 5,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/5",
-        "data_updated_at": "2023-09-26T22:33:09.970197Z",
+        "data_updated_at": "2024-01-31T16:45:20.482714Z",
         "data": {
             "created_at": "2012-02-27T18:14:26.000000Z",
             "level": 1,
@@ -670,7 +670,7 @@
                 8992
             ],
             "meaning_mnemonic": "Close your eyes and imagine you're a kid again. Now open them and... look! It's a <radical>slide</radical>! Imagine little you sliding down this slide over and over, having a great time. Imagination + emotion makes for good memorization!",
-            "lesson_position": 3,
+            "lesson_position": 4,
             "spaced_repetition_system_id": 2
         }
     },
@@ -678,7 +678,7 @@
         "id": 6,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/6",
-        "data_updated_at": "2023-09-26T22:33:09.648751Z",
+        "data_updated_at": "2024-01-31T16:45:20.431544Z",
         "data": {
             "created_at": "2012-02-27T18:15:18.000000Z",
             "level": 1,
@@ -773,7 +773,7 @@
                 2430
             ],
             "meaning_mnemonic": "This radical is shaped like a <radical>barb</radical>. Like the kind you'd see on barb wire. Imagine one of these getting stuck to your arm or your clothes. Think about how much it would hurt with that little hook on the end sticking into you. Say out loud, \"Oh dang, I got a barb stuck in me!\"",
-            "lesson_position": 4,
+            "lesson_position": 1,
             "spaced_repetition_system_id": 2
         }
     },
@@ -1132,7 +1132,7 @@
         "id": 10,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/10",
-        "data_updated_at": "2023-09-26T22:33:10.020609Z",
+        "data_updated_at": "2024-01-31T16:45:20.602864Z",
         "data": {
             "created_at": "2012-02-27T18:19:09.000000Z",
             "level": 1,
@@ -1233,7 +1233,7 @@
                 2270
             ],
             "meaning_mnemonic": "This radical looks just like the katakana character <ja>\u30c8</ja> (to), which sounds like the word <radical>toe</radical>. So when you see <ja>\u30c8</ja>, think toe.",
-            "lesson_position": 24,
+            "lesson_position": 23,
             "spaced_repetition_system_id": 2
         }
     },
@@ -2770,7 +2770,7 @@
         "id": 22,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/22",
-        "data_updated_at": "2023-09-26T22:33:10.003480Z",
+        "data_updated_at": "2024-02-07T19:01:36.792487Z",
         "data": {
             "created_at": "2012-02-27T18:45:52.000000Z",
             "level": 1,
@@ -2948,7 +2948,7 @@
                 9012
             ],
             "meaning_mnemonic": "Since there are no circles in Japanese characters, sometimes rectangles or squares have to make do. In this case, this big rectangle is the <radical>sun</radical>. The middle line going through the center horizontally is the equator. Or maybe it's a cloud, moving across the sun. Picture it, but don't actually look at the sun and burn your eyes!",
-            "lesson_position": 23,
+            "lesson_position": 22,
             "spaced_repetition_system_id": 2
         }
     },
@@ -3290,7 +3290,7 @@
         "id": 25,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/25",
-        "data_updated_at": "2023-09-26T22:33:09.684742Z",
+        "data_updated_at": "2024-01-24T15:19:11.529458Z",
         "data": {
             "created_at": "2012-02-28T20:27:19.000000Z",
             "level": 1,
@@ -3397,7 +3397,7 @@
                 2085,
                 2183
             ],
-            "meaning_mnemonic": "You know those big steel girders that are used for the frame of big buildings? This is like the end of one of those, and have a very distinct shape, just like this radical. These girders are used in construction, which is why this radical means <radical>construction</radical>. Funny thing is, you use these girders to put together buildings just like you're going to use this radical to put together kanji!",
+            "meaning_mnemonic": "You know those big steel girders that are used for the frame of big buildings? This is like the end of one of those, and has a very distinct shape, just like this radical. These girders are used in construction, which is why this radical means <radical>construction</radical>. Funny thing is, you use these girders to put together buildings just like you're going to use this radical to put together kanji!",
             "lesson_position": 19,
             "spaced_repetition_system_id": 2
         }
@@ -4548,7 +4548,7 @@
         "id": 36,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/36",
-        "data_updated_at": "2023-09-26T22:33:09.385951Z",
+        "data_updated_at": "2024-01-04T20:39:27.296923Z",
         "data": {
             "created_at": "2012-02-28T21:12:35.000000Z",
             "level": 2,
@@ -4639,6 +4639,10 @@
                 {
                     "type": "whitelist",
                     "meaning": "Spring"
+                },
+                {
+                    "type": "whitelist",
+                    "meaning": "Archery"
                 }
             ],
             "amalgamation_subject_ids": [
@@ -7044,7 +7048,7 @@
         "id": 57,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/57",
-        "data_updated_at": "2023-09-26T22:33:10.837747Z",
+        "data_updated_at": "2023-12-06T22:48:27.091848Z",
         "data": {
             "created_at": "2012-03-01T01:50:35.000000Z",
             "level": 3,
@@ -7768,7 +7772,7 @@
         "id": 63,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/63",
-        "data_updated_at": "2023-09-26T22:33:08.951652Z",
+        "data_updated_at": "2023-12-06T22:48:27.019179Z",
         "data": {
             "created_at": "2012-03-01T01:56:23.000000Z",
             "level": 3,
@@ -13231,10 +13235,10 @@
         "id": 107,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/107",
-        "data_updated_at": "2023-10-03T07:52:01.116103Z",
+        "data_updated_at": "2024-02-07T19:01:36.832740Z",
         "data": {
             "created_at": "2012-03-03T02:08:54.000000Z",
-            "level": 5,
+            "level": 3,
             "slug": "window",
             "hidden_at": null,
             "document_url": "https://www.wanikani.com/radicals/window",
@@ -15105,10 +15109,10 @@
         "id": 123,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/123",
-        "data_updated_at": "2023-10-03T07:52:01.230828Z",
+        "data_updated_at": "2023-12-12T07:56:17.369757Z",
         "data": {
             "created_at": "2012-03-06T01:28:52.000000Z",
-            "level": 5,
+            "level": 3,
             "slug": "ice",
             "hidden_at": null,
             "document_url": "https://www.wanikani.com/radicals/ice",
@@ -15194,6 +15198,7 @@
             ],
             "auxiliary_meanings": [],
             "amalgamation_subject_ids": [
+                517,
                 585,
                 616,
                 661,
@@ -18646,7 +18651,7 @@
         "id": 155,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/155",
-        "data_updated_at": "2023-10-03T07:52:01.258728Z",
+        "data_updated_at": "2023-12-06T15:26:33.756379Z",
         "data": {
             "created_at": "2012-03-22T01:41:38.000000Z",
             "level": 5,
@@ -44747,10 +44752,10 @@
         "id": 403,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/403",
-        "data_updated_at": "2023-09-26T22:33:16.415047Z",
+        "data_updated_at": "2024-02-15T03:36:33.104287Z",
         "data": {
             "created_at": "2013-08-16T22:23:09.979514Z",
-            "level": 48,
+            "level": 29,
             "slug": "mysterious",
             "hidden_at": null,
             "document_url": "https://www.wanikani.com/radicals/mysterious",
@@ -48333,7 +48338,7 @@
         "id": 438,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/438",
-        "data_updated_at": "2023-09-26T22:33:16.567403Z",
+        "data_updated_at": "2024-01-27T08:54:10.328506Z",
         "data": {
             "created_at": "2015-07-01T18:53:36.452581Z",
             "level": 53,
@@ -48425,7 +48430,7 @@
                 2194
             ],
             "meaning_mnemonic": "This radical is the same as the kanji. It means <radical>tall</radical>.",
-            "lesson_position": 0,
+            "lesson_position": 1,
             "spaced_repetition_system_id": 1
         }
     },
@@ -48534,7 +48539,7 @@
         "id": 8761,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/8761",
-        "data_updated_at": "2023-09-26T22:33:09.986332Z",
+        "data_updated_at": "2024-01-31T16:45:20.611487Z",
         "data": {
             "created_at": "2012-02-27T18:34:03.000000Z",
             "level": 1,
@@ -48638,7 +48643,7 @@
                 8862
             ],
             "meaning_mnemonic": "This is a <radical>stick</radical>, sticking out of the ground. It even looks like a stick.",
-            "lesson_position": 25,
+            "lesson_position": 24,
             "spaced_repetition_system_id": 2
         }
     },
@@ -48646,7 +48651,7 @@
         "id": 8762,
         "object": "radical",
         "url": "https://api.wanikani.com/v2/subjects/8762",
-        "data_updated_at": "2023-09-26T22:33:09.795744Z",
+        "data_updated_at": "2024-01-31T16:45:20.574442Z",
         "data": {
             "created_at": "2012-02-27T18:34:58.000000Z",
             "level": 1,
@@ -48757,7 +48762,7 @@
                 2332
             ],
             "meaning_mnemonic": "This looks a lot like a long <radical>gun</radical> pointing to the right. You have a shoulder rest on the left, and the barrel on the right. Imagine it hanging in a case on the wall in a museum.",
-            "lesson_position": 22,
+            "lesson_position": 21,
             "spaced_repetition_system_id": 2
         }
     },

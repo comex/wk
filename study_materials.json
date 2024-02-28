@@ -15933,5 +15933,39 @@
             ],
             "hidden": false
         }
+    },
+    {
+        "id": 12242787,
+        "object": "study_material",
+        "url": "https://api.wanikani.com/v2/study_materials/12242787",
+        "data_updated_at": "2023-12-21T04:44:08.850917Z",
+        "data": {
+            "created_at": "2023-12-21T04:44:08.850917Z",
+            "subject_id": 9190,
+            "subject_type": "kana_vocabulary",
+            "meaning_note": null,
+            "reading_note": null,
+            "meaning_synonyms": [
+                "sayonara"
+            ],
+            "hidden": false
+        }
+    },
+    {
+        "id": 12270333,
+        "object": "study_material",
+        "url": "https://api.wanikani.com/v2/study_materials/12270333",
+        "data_updated_at": "2023-12-26T18:47:41.275114Z",
+        "data": {
+            "created_at": "2023-12-26T18:47:41.275114Z",
+            "subject_id": 9309,
+            "subject_type": "vocabulary",
+            "meaning_note": null,
+            "reading_note": null,
+            "meaning_synonyms": [
+                "newbie"
+            ],
+            "hidden": false
+        }
     }
 ]
