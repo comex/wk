@@ -628,7 +628,10 @@ class NormalItem: Item, JSONInit {
     }
     func tildify(_ prompt: String) -> String {
         if self.character.starts(with: "〜") {
-            return "(〜) " + prompt
+            return "(〜 ) " + prompt
+            // why the heck is there starts(with:) but not ends(with:)
+        } else if self.character.hasSuffix("〜") {
+            return "( 〜) " + prompt
         } else {
             return prompt
         }
