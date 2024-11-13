@@ -622,6 +622,7 @@ class NormalItem: Item, JSONInit {
                                 " >> "
                 var colored = ing.text
                 if colorful { colored = (ing.type == .primary ? ANSI.red : ANSI.dred)(colored) }
+                colored = self.tildify(colored)
                 out += separator + colored
             }
             prev = ing
@@ -639,10 +640,10 @@ class NormalItem: Item, JSONInit {
     }
     func tildify(_ prompt: String) -> String {
         if self.character.starts(with: "〜") {
-            return "(〜ロ) " + prompt
+            return "〜" + prompt
             // why the heck is there starts(with:) but not ends(with:)
         } else if self.character.hasSuffix("〜") {
-            return "(ロ〜) " + prompt
+            return "\(prompt)〜"
         } else {
             return prompt
         }
@@ -986,7 +987,6 @@ class Test {
 
     func doCLIMeaningToReading(item: NormalItem) throws {
         var prompt = item.cliMeanings(colorful: false)
-        prompt = item.tildify(prompt)
         if item is Kanji {
             prompt = ANSI.purple(prompt) + " /k"
         }
@@ -1005,7 +1005,6 @@ class Test {
     }
     func doCLIReadingToMeaning(item: NormalItem) throws {
         var prompt = item.cliReadings(colorful: false)
-        prompt = item.tildify(prompt)
         if item is Kanji {
             prompt += " /k"
         }
