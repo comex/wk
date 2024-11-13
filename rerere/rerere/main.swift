@@ -14,6 +14,7 @@ import Foundation
 import Yams
 import ArgumentParser
 import XCTest
+import System
 
 // TODO: ~ is broken for r2m
 // TODO: !wrong doesn't act as expected when halfway through a k2rm
@@ -187,6 +188,16 @@ func loadStudyMaterials(basePath: String) -> [Int: StudyMaterial] {
     return ret
 }
 
+func getWkDir() -> String {
+    var path = FilePath(Bundle.main.executablePath!)
+    while path.lastComponent?.string != "wk" {
+        if !path.removeLastComponent() {
+            fatalError("failed to find wk directory")
+        }
+    }
+    return path.string
+}
+
 class Subete {
     static var instance: Subete!
     var allWords: ItemList<Word>! = nil
@@ -198,7 +209,7 @@ class Subete {
     
     var lastAppendedTest: Test?
     
-    let basePath = "/Users/comex/c/wk"
+    let basePath = getWkDir()
 
     var nextItemID = 0
 
