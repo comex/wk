@@ -20,6 +20,10 @@ import System
 // TODO: !wrong doesn't act as expected when halfway through a k2rm
 // TODO: don't let you mu more than once
 
+func data(of path: String) throws -> Data {
+    return try Data(contentsOf: URL(fileURLWithPath: path))
+}
+
 func time<T>(count: Int, block: () -> T) {
     let a = CFAbsoluteTimeGetCurrent()
     for _ in 0..<count {
@@ -81,17 +85,15 @@ func unwrapOrThrow<T>(_ t: T?, err: @autoclosure () -> Error) throws -> T {
     guard let t = t else { throw err() }
     return t
 }
-func loadJSON(path: String) -> Any {
-    return try! JSONSerialization.jsonObject(
-        with: try! Data(contentsOf: URL(fileURLWithPath: path)),
-        options: JSONSerialization.ReadingOptions())
-}
-func loadYAML(path: String) -> Any {
-    return try! Yams.load(yaml: try! String(contentsOf: URL(fileURLWithPath: path)))!
-}
-func loadJSONAndExtraYAML<T: JSONInit>(basePath: String, stem: String, class: T.Type) -> [T] {
-    let base = (loadJSON(path: "\(basePath)/\(stem).json") as! [NSDictionary]).map { T(json: $0, relaxed: false) }
-    let extra = (loadYAML(path: "\(basePath)/extra-\(stem).yaml") as! [NSDictionary]).map { T(json: $0, relaxed: true) }
+
+func loadJSONAndExtraYAML<T>(basePath: String, stem: String, class: T.Type) -> [T]
+    where T: DecodableWithConfiguration, T.DecodingConfiguration == Relaxed, T: Decodable
+{
+    let jsonData = try! data(of: "\(basePath)/\(stem).json")
+    let base = try! JSONDecoder().decode([T].self, from: jsonData, configuration: Relaxed(relaxed: false))
+    let yamlData = try! data(of: "\(basePath)/extra-\(stem).yaml")
+    let extra = try! YAMLDecoder().decode([T].self, from: yamlData,
+                                          userInfo: [CodingUserInfoKey(rawValue: "relaxed")!: true])
     return base + extra
 }
 
@@ -145,7 +147,7 @@ func runAndGetOutput(_ args: [String]) throws -> String {
     }
     
     let queue = DispatchQueue(label: "runAndGetOutput")
-    var output: Data? = nil
+    nonisolated(unsafe) var output: Data? = nil
     pipe.fileHandleForWriting.closeFile()
     queue.async {
         output = pipe.fileHandleForReading.readDataToEndOfFile()
@@ -176,12 +178,18 @@ struct StudyMaterial {
     let meaningSynonyms: [String]
 }
 func loadStudyMaterials(basePath: String) -> [Int: StudyMaterial] {
-    let json = loadJSON(path: "\(basePath)/study_materials.json") as! [NSDictionary]
+    struct StudyMaterialsJSONEntry: Decodable {
+        struct Data: Decodable {
+            let subject_id: Int
+            let meaning_synonyms: [String]
+        }
+        let data: Data
+    }
+    let entries = try! JSONDecoder().decode([StudyMaterialsJSONEntry].self, from: data(of: "\(basePath)/study_materials.json"))
     var ret: [Int: StudyMaterial] = [:]
-    for dict in json {
-        let data = dict["data"] as! NSDictionary
-        let subjectId = data["subject_id"] as! Int
-        let meaningSynonyms = data["meaning_synonyms"] as! [String]
+    for entry in entries {
+        let subjectId = entry.data.subject_id
+        let meaningSynonyms = entry.data.meaning_synonyms
         ensure(ret[subjectId] == nil)
         ret[subjectId] = StudyMaterial(meaningSynonyms: meaningSynonyms)
     }
@@ -199,7 +207,7 @@ func getWkDir() -> String {
 }
 
 class Subete {
-    static var instance: Subete!
+    nonisolated(unsafe) static var instance: Subete!
     var allWords: ItemList<Word>! = nil
     var allKanji: ItemList<Kanji>! = nil
     var allItems: [Item]! = nil
@@ -312,7 +320,7 @@ class Subete {
     }
 }
 
-enum ItemKind: String, ExpressibleByArgument, Codable {
+enum ItemKind: String, ExpressibleByArgument, Codable, CodingKeyRepresentable {
     case word, kanji, confusion
 }
 
@@ -392,7 +400,7 @@ func normalizeReadingTrimmed(_ input: String) -> String {
 }
 
 enum IngType: Comparable {
-    case primary, secondary, whitelist, synonym
+    case primary, secondary, whitelist, blacklist, synonym
 }
 
 struct Ing {
@@ -405,38 +413,52 @@ struct Ing {
         return true
     }
 
-    init(readingWithJSON json: Any, relaxed: Bool) {
-        if let text = json as? String, relaxed {
+    init(readingFrom dec: any Decoder, relaxed: Bool) throws {
+        enum K: CodingKey { case reading, primary, accepted_answer }
+        let c: KeyedDecodingContainer<K>
+        do {
+            c = try dec.container(keyedBy: K.self)
+        } catch DecodingError.typeMismatch {
+            if !relaxed { fatalError("expected dictionary") }
+            let text = try dec.singleValueContainer().decode(String.self)
             self.text = text
             self.type = .primary
             self.acceptedAnswerWK = true
-        } else {
-            let json = json as! NSDictionary
-            self.text = json["reading"] as! String
-            self.type = json["primary"] as! Bool ? .primary : .secondary
-            self.acceptedAnswerWK = json["accepted_answer"] as! Bool
+            return
         }
+        self.text = try c.decode(String.self, forKey: .reading)
+        self.type = try c.decode(Bool.self, forKey: .primary) ? .primary : .secondary
+        self.acceptedAnswerWK = try c.decode(Bool.self, forKey: .accepted_answer)
     }
-    init(meaningWithJSON json: Any, relaxed: Bool) {
-        if let text = json as? String, relaxed {
+    init(meaningFrom dec: any Decoder, relaxed: Bool) throws {
+        enum K: CodingKey { case meaning, primary, accepted_answer }
+        let c: KeyedDecodingContainer<K>
+        do {
+            c = try dec.container(keyedBy: K.self)
+        } catch DecodingError.typeMismatch {
+            if !relaxed { fatalError("expected dictionary") }
+            let text = try dec.singleValueContainer().decode(String.self)
             self.text = text
             self.type = .primary
             self.acceptedAnswerWK = true
-        } else {
-            let json = json as! NSDictionary
-            self.text = (json["meaning"] as! String).lowercased()
-            self.type = json["primary"] as! Bool ? .primary : .secondary
-            self.acceptedAnswerWK = json["accepted_answer"] as! Bool
+            return
         }
+        self.text = try c.decode(String.self, forKey: .meaning)
+        self.type = try c.decode(Bool.self, forKey: .primary) ? .primary : .secondary
+        self.acceptedAnswerWK = try c.decode(Bool.self, forKey: .accepted_answer)
     }
-    init(auxiliaryMeaningWithJSON json: Any) {
-        let json = json as! NSDictionary
-        self.text = json["meaning"] as! String
-        let type = json["type"] as! String
+    init(auxiliaryMeaningFrom dec: any Decoder) throws {
+        enum K: CodingKey { case meaning, type }
+        let c = try dec.container(keyedBy: K.self)
+        self.text = try c.decode(String.self, forKey: .meaning)
+        let type = try c.decode(String.self, forKey: .type)
         switch type {
         case "whitelist":
             self.type = .whitelist
             self.acceptedAnswerWK = true
+        case "blacklist":
+            self.type = .blacklist
+            self.acceptedAnswerWK = false
         default:
             fatalError("unknown auxiliary meaning type \(type)")
         }
@@ -448,41 +470,61 @@ struct Ing {
     }
 }
 
-protocol JSONInit {
-    init(json: NSDictionary, relaxed: Bool)
+func decodeArray<T>(_ dec: any UnkeyedDecodingContainer, _ callback: (Decoder) throws -> T) throws -> [T] {
+    var dec = dec
+    var ret: [T] = []
+    while !dec.isAtEnd {
+        // hack
+        ret.append(try callback(dec.superDecoder()))
+    }
+    return ret
 }
 
-class NormalItem: Item, JSONInit {
+struct Relaxed { let relaxed: Bool }
+class NormalItem: Item, DecodableWithConfiguration, Decodable {
     let meanings: [Ing]
     let readings: [Ing]
     let character: String
-    //let json: NSDictionary
-    
-    required init(json: NSDictionary, relaxed: Bool) {
-        let data: NSDictionary
-        let id: Int?
-        if let d = json["data"] {
-            data = d as! NSDictionary
-            id = (json["id"] as! Int)
+    typealias DecodingConfiguration = Relaxed
+
+    required convenience init(from dec: any Decoder) throws {
+        try self.init(from: dec, configuration: Relaxed(relaxed:
+            dec.userInfo[CodingUserInfoKey(rawValue: "relaxed")!] as! Bool))
+    }
+
+    required init(from dec: any Decoder, configuration: Relaxed) throws {
+        let relaxed = configuration.relaxed
+        enum K: CodingKey { case data, id, characters, readings, meanings, auxiliary_meanings, birth }
+        let topC = try dec.container(keyedBy: K.self)
+        var dataC: KeyedDecodingContainer<K>
+        let wkId: Int?
+        if topC.contains(.data) {
+            wkId = try topC.decode(Int.self, forKey: .id)
+            dataC = try topC.nestedContainer(keyedBy: K.self, forKey: .data)
         } else {
             if !relaxed { fatalError("expected 'data'") }
-            data = json
-            id = nil
+            dataC = topC
+            wkId = nil
         }
 
-        //self.json = json
-        self.character = trim(data["characters"] as! String)
-        self.readings = (data["readings"] as! [Any]).map { Ing(readingWithJSON: $0, relaxed: relaxed) }
-        var meanings = (data["meanings"] as! [Any]).map { Ing(meaningWithJSON: $0, relaxed: relaxed) }
-        if let auxiliaryMeanings = json["auxiliary_meanings"] {
-            meanings += (auxiliaryMeanings as! [Any]).map { Ing(auxiliaryMeaningWithJSON: $0) }
+        self.character = trim(try dataC.decode(String.self, forKey: .characters))
+        self.readings = try decodeArray(dataC.nestedUnkeyedContainer(forKey: .readings)) {
+            try Ing(readingFrom: $0, relaxed: relaxed)
         }
-        if let id, let material = Subete.instance.studyMaterials[id] {
+        var meanings = try decodeArray(dataC.nestedUnkeyedContainer(forKey: .meanings)) {
+            try Ing(meaningFrom: $0, relaxed: relaxed)
+        }
+        if dataC.contains(.auxiliary_meanings) {
+            meanings += try decodeArray(dataC.nestedUnkeyedContainer(forKey: .auxiliary_meanings)) {
+                try Ing(auxiliaryMeaningFrom: $0)
+            }
+        }
+        if let wkId, let material = Subete.instance.studyMaterials[wkId] {
             meanings += material.meaningSynonyms.map { Ing(synonymWithText: $0) }
         }
         self.meanings = meanings
         super.init(name: self.character,
-            birthday: data["birth"].map { $0 as! Date })
+            birthday: try dataC.decodeIfPresent(Date.self, forKey: .birth))
     }
     func readingAlternatives(reading: String) -> [Item] {
         let normalizedReading = normalizeReadingTrimmed(trim(reading))
@@ -616,7 +658,7 @@ class NormalItem: Item, JSONInit {
         var prev: Ing? = nil
         var out: String = ""
         for ing in (ings.sorted { $0.type < $1.type }) {
-            if ing.type != .whitelist {
+            if ing.type != .whitelist && ing.type != .blacklist {
                 let separator = prev == nil ? "" :
                                 prev!.type == ing.type ? ", " :
                                 " >> "
@@ -819,6 +861,11 @@ extension String {
     }
     
 }
+
+struct RetiredYaml: Decodable {
+    let retired: [ItemKind: [String]]
+    let replace: [ItemKind: [String: String]]
+}
 struct TestResult {
     let question: Question
     let date: Date?
@@ -833,15 +880,9 @@ struct TestResult {
         ]
         return components.joined(separator: ":")
     }
-    static let retiredInfo: NSDictionary = loadYAML(path: "\(Subete.instance.basePath)/retired.yaml") as! NSDictionary
-    static let retired: [ItemKind: Set<String>] = Dictionary(uniqueKeysWithValues:
-        (retiredInfo["retired"] as! [String: [String]]).map {
-            (ItemKind(rawValue: $0.key)!, Set($0.value))
-        })
-    static let replace: [ItemKind: [String: String]] = Dictionary(uniqueKeysWithValues:
-        (retiredInfo["replace"] as! [String: [String: String]]).map {
-            (ItemKind(rawValue: $0.key)!, $0.value)
-        })
+    static let retiredInfo: RetiredYaml = try! YAMLDecoder().decode(RetiredYaml.self, from: data(of: "\(Subete.instance.basePath)/retired.yaml"))
+    static let retired: [ItemKind: Set<String>] = retiredInfo.retired.mapValues { Set($0) }
+    static let replace: [ItemKind: [String: String]] = retiredInfo.replace
     static func parse(line: String) throws -> TestResult? {
         var components: [String] = line.splut(separator: 58 /* ':' */, includingSpaces: true, map: { $0 })
         var date: Date? = nil
@@ -1529,7 +1570,7 @@ struct SerializableTestSession: Codable {
     }
 }
 
-struct BenchSTS: ParsableCommand {
+struct BenchSTSCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "bench-sts")
     @Flag() var deser: Bool = false
@@ -1549,6 +1590,14 @@ struct BenchSTS: ParsableCommand {
                 return sts.serialize()
             }
         }
+    }
+}
+
+struct BenchStartupCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "bench-startup")
+    func run() {
+        let _ = Subete()
     }
 }
 
@@ -1663,7 +1712,7 @@ struct Rerere: ParsableCommand {
 
     static let configuration = CommandConfiguration(
             //abstract: "Randomness utilities.",
-            subcommands: [ForecastCommand.self, TestOneCommand.self, BenchSTS.self])
+            subcommands: [ForecastCommand.self, TestOneCommand.self, BenchStartupCommand.self, BenchSTSCommand.self])
 
     func validate() throws {
         guard minRandomQuestionsFraction >= 0 && minRandomQuestionsFraction <= 1 else {
