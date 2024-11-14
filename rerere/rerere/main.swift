@@ -197,13 +197,15 @@ func loadStudyMaterials(basePath: String) -> [Int: StudyMaterial] {
 }
 
 func getWkDir() -> String {
-    var path = FilePath(Bundle.main.executablePath!)
-    while path.lastComponent?.string != "wk" {
-        if !path.removeLastComponent() {
+    var path = FilePath(Bundle.main.executablePath!).removingLastComponent()
+    while !(FileManager.default.fileExists(atPath: path.pushing("kanji.json").string)) {
+        path.push("..")
+        if path.length > 512 {
             fatalError("failed to find wk directory")
         }
     }
-    return path.string
+
+    return try! URL(fileURLWithPath: path.string).resourceValues(forKeys: [.canonicalPathKey]).canonicalPath!
 }
 
 class Subete {
@@ -214,6 +216,9 @@ class Subete {
     var allConfusion: ItemList<Confusion>! = nil
     var srs: SRS? = nil
     var studyMaterials: [Int: StudyMaterial]! = nil
+
+    var retired: [ItemKind: Set<String>]!
+    var replace: [ItemKind: [String: String]]!
     
     var lastAppendedTest: Test?
     
@@ -223,6 +228,11 @@ class Subete {
 
     init() {
         Subete.instance = self
+
+        let retiredInfo: RetiredYaml = try! YAMLDecoder().decode(RetiredYaml.self, from: data(of: "\(basePath)/retired.yaml"))
+        retired = retiredInfo.retired.mapValues { Set($0) }
+        replace = retiredInfo.replace
+
         print("loading json")
         self.studyMaterials = loadStudyMaterials(basePath: basePath)
         self.allWords = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "vocabulary", class: Word.self))
@@ -345,7 +355,7 @@ class Item: Hashable, Equatable, Comparable {
     }
 
     // trying to turn this into a protocol has issues
-    var kind: ItemKind {
+    class var kind: ItemKind {
         fatalError("must override kind on \(self)")
     }
     func cliPrint(colorful: Bool) {
@@ -528,7 +538,7 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable {
     }
     func readingAlternatives(reading: String) -> [Item] {
         let normalizedReading = normalizeReadingTrimmed(trim(reading))
-        return Subete.instance.allByKind(self.kind).findByReading(normalizedReading).filter { $0 != self }
+        return Subete.instance.allByKind(Self.kind).findByReading(normalizedReading).filter { $0 != self }
     }
     func meaningMatches(normalizedInput: String, levenshtein: inout Levenshtein) -> Bool {
         return self.evaluateMeaningAnswerInner(normalizedInput: normalizedInput, levenshtein: &levenshtein) > 0
@@ -537,11 +547,11 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable {
         let normalizedMeaning = normalizeMeaningTrimmed(trim(meaning))
         /*
         var levenshtein = Levenshtein()
-        return Subete.instance.allByKind(self.kind).vagueItems.filter { (other: Item) -> Bool in
+        return Subete.instance.allByKind(Self.kind).vagueItems.filter { (other: Item) -> Bool in
             return other != self && (other as! NormalItem).meaningMatches(normalizedInput: normalizedMeaning, levenshtein: &levenshtein)
         }
         */
-        let ret = Subete.instance.allByKind(self.kind).findByMeaning(normalizedMeaning).filter { $0 != self }
+        let ret = Subete.instance.allByKind(Self.kind).findByMeaning(normalizedMeaning).filter { $0 != self }
         return ret
     }
     func cliPrintAlternatives(_ items: [Item], isReading: Bool) {
@@ -560,7 +570,7 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable {
     func similarMeaning() -> [Item] {
         var set: Set<Item> = []
         for meaning in self.meanings {
-            set.formUnion(Subete.instance.allByKind(self.kind).findByMeaning(meaning.text))
+            set.formUnion(Subete.instance.allByKind(Self.kind).findByMeaning(meaning.text))
         }
         set.remove(self)
         return Array(set).sorted()
@@ -576,7 +586,7 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable {
     func sameReading() -> [Item] {
         var set: Set<Item> = []
         for reading in self.readings {
-            set.formUnion(Subete.instance.allByKind(self.kind).findByReading(reading.text))
+            set.formUnion(Subete.instance.allByKind(Self.kind).findByReading(reading.text))
         }
         set.remove(self)
         return Array(set).sorted()
@@ -699,14 +709,14 @@ class Word : NormalItem, CustomStringConvertible {
     var description: String {
         return "<Word \(self.character)>"
     }
-    override var kind: ItemKind { return .word }
+    override class var kind: ItemKind { return .word }
     override var cliName: String { return String(self.name) }
 }
 class Kanji : NormalItem, CustomStringConvertible {
     var description: String {
         return "<Kanji \(self.character)>"
     }
-    override var kind: ItemKind { return .kanji }
+    override class var kind: ItemKind { return .kanji }
     override var cliName: String { return ANSI.purple(String(self.name) + " /k") }
 }
 class Confusion: Item, CustomStringConvertible {
@@ -753,7 +763,7 @@ class Confusion: Item, CustomStringConvertible {
     var description: String {
         return "<Confusion \(self.items)>"
     }
-    override var kind: ItemKind { return .confusion }
+    override class var kind: ItemKind { return .confusion }
     override var availableTests: [TestKind] { return [.confusion] }
 }
 
@@ -787,6 +797,12 @@ class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
                 }
             }
         }
+
+        let kind: ItemKind = X.kind
+        for (old, new) in Subete.instance.replace[kind] ?? [:] {
+            byName[old] = byName[new]!
+        }
+
         self.byName = byName
         self.byReading = byReading
         self.byMeaning = byMeaning
@@ -874,15 +890,12 @@ struct TestResult {
         let components: [String] = [
             String(Int(Date().timeIntervalSince1970)),
             self.question.testKind.rawValue,
-            self.question.item.kind.rawValue,
+            type(of: self.question.item).kind.rawValue,
             self.question.item.name,
             self.outcome.rawValue
         ]
         return components.joined(separator: ":")
     }
-    static let retiredInfo: RetiredYaml = try! YAMLDecoder().decode(RetiredYaml.self, from: data(of: "\(Subete.instance.basePath)/retired.yaml"))
-    static let retired: [ItemKind: Set<String>] = retiredInfo.retired.mapValues { Set($0) }
-    static let replace: [ItemKind: [String: String]] = retiredInfo.replace
     static func parse(line: String) throws -> TestResult? {
         var components: [String] = line.splut(separator: 58 /* ':' */, includingSpaces: true, map: { $0 })
         var date: Date? = nil
@@ -902,11 +915,9 @@ struct TestResult {
         // TODO: rawValue with substring?
         let itemKind = try unwrapOrThrow(ItemKind(rawValue: String(components[1])),
                                      err: MyError("invalid item kind \(components[1])"))
-        var name = String(components[2])
-        if retired[itemKind]?.contains(name) == .some(true) {
+        let name = String(components[2])
+        if Subete.instance.retired[itemKind]?.contains(name) == .some(true) {
             return nil
-        } else if let newName = replace[itemKind]?[name] {
-            name = newName
         }
 
         let question = Question(
@@ -1481,7 +1492,7 @@ struct ItemRef: Codable, Hashable, Equatable {
     }
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(item.kind, forKey: .kind)
+        try container.encode(type(of: item).kind, forKey: .kind)
         try container.encode(item.name, forKey: .name)
     }
 }
