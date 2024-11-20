@@ -89,7 +89,6 @@ func unwrapOrThrow<T>(_ t: T?, err: @autoclosure () -> Error) throws -> T {
 func loadJSONAndExtraYAML<T>(basePath: String, stem: String, class: T.Type) -> [T]
     where T: DecodableWithConfiguration, T.DecodingConfiguration == Relaxed, T: Decodable
 {
-    let base: [T]
     let jsonData = try! data(of: "\(basePath)/\(stem).json")
     let base = try! JSONDecoder().decode([T].self, from: jsonData, configuration: Relaxed(relaxed: false))
     let yamlData = try! data(of: "\(basePath)/extra-\(stem).yaml")
@@ -98,9 +97,7 @@ func loadJSONAndExtraYAML<T>(basePath: String, stem: String, class: T.Type) -> [
     return base + extra
 }
 
-func loadFlashcardYAML(basePath: String) -> [Flashcard]
-    where T: DecodableWithConfiguration, T.DecodingConfiguration == Relaxed, T: Decodable
-{
+func loadFlashcardYAML(basePath: String) -> [Flashcard] {
     let yamlData = try! data(of: "\(basePath)/flashcards.yaml")
     return try! YAMLDecoder().decode([Flashcard].self, from: yamlData)
 }
@@ -355,9 +352,11 @@ class Item: Hashable, Equatable, Comparable {
         self.id = Subete.instance.nextItemID
         Subete.instance.nextItemID = self.id + 1
     }
-    init(name: String, from dec: any Decoder) throws {
-        init(name: name,
-             birthday: try dataC.decodeIfPresent(Date.self, forKey: .birth))
+    convenience init(name: String, from dec: any Decoder) throws {
+        enum K: CodingKey { case birth }
+        let container = try dec.container(keyedBy: K.self)
+        self.init(name: name,
+                  birthday: try container.decodeIfPresent(Date.self, forKey: .birth))
     }
     func hash(into hasher: inout Hasher) {
         hasher.combine(self.name)
@@ -384,6 +383,18 @@ class Item: Hashable, Equatable, Comparable {
     // (Item, TestKind) in the future
     var myQuestions: [Question] {
         return availableTests.map { Question(item: self, testKind: $0) }
+    }
+
+    func meaningAlternatives(meaning: String) -> [Item] {
+        let normalizedMeaning = normalizeMeaningTrimmed(trim(meaning))
+        /*
+        var levenshtein = Levenshtein()
+        return Subete.instance.allByKind(Self.kind).vagueItems.filter { (other: Item) -> Bool in
+            return other != self && (other as! NormalItem).meaningMatches(normalizedInput: normalizedMeaning, levenshtein: &levenshtein)
+        }
+        */
+        let ret = Subete.instance.allByKind(Self.kind).findByMeaning(normalizedMeaning).filter { $0 != self }
+        return ret
     }
 }
 
@@ -438,8 +449,8 @@ struct Ing {
         return true
     }
 
-    init(readingFrom dec: any Decoder, relaxed: Bool) throws {
-        enum K: CodingKey { case reading, primary, accepted_answer }
+    init(from dec: any Decoder, isMeaning: Bool, relaxed: Bool) throws {
+        enum K: CodingKey { case reading, meaning, primary, accepted_answer }
         let c: KeyedDecodingContainer<K>
         do {
             c = try dec.container(keyedBy: K.self)
@@ -451,24 +462,11 @@ struct Ing {
             self.acceptedAnswerWK = true
             return
         }
-        self.text = try c.decode(String.self, forKey: .reading)
-        self.type = try c.decode(Bool.self, forKey: .primary) ? .primary : .secondary
-        self.acceptedAnswerWK = try c.decode(Bool.self, forKey: .accepted_answer)
-    }
-    init(meaningFrom dec: any Decoder, relaxed: Bool) throws {
-        enum K: CodingKey { case meaning, primary, accepted_answer }
-        let c: KeyedDecodingContainer<K>
-        do {
-            c = try dec.container(keyedBy: K.self)
-        } catch DecodingError.typeMismatch {
-            if !relaxed { fatalError("expected dictionary") }
-            let text = try dec.singleValueContainer().decode(String.self)
-            self.text = text
-            self.type = .primary
-            self.acceptedAnswerWK = true
-            return
+        if isMeaning {
+            self.text = try c.decode(String.self, forKey: .meaning).lowercased()
+        } else {
+            self.text = try c.decode(String.self, forKey: .reading)
         }
-        self.text = try c.decode(String.self, forKey: .meaning).lowercased()
         self.type = try c.decode(Bool.self, forKey: .primary) ? .primary : .secondary
         self.acceptedAnswerWK = try c.decode(Bool.self, forKey: .accepted_answer)
     }
@@ -505,6 +503,58 @@ func decodeArray<T>(_ dec: any UnkeyedDecodingContainer, _ callback: (Decoder) t
     return ret
 }
 
+// without alternatives, without normalization, just return qual
+func evaluateMeaningAnswerInner(normalizedInput: String, meanings: [Ing], levenshtein: inout Levenshtein) -> Int {
+    var bestQual: Int = 0
+    for meaning in meanings {
+        let text = meaning.text
+        let okDist = Int(round(0.4 * Double(text.count)))
+        let thisQual: Int
+        if normalizedInput == text {
+            thisQual = 2
+        } else if levenshtein.distance(between: normalizedInput, and: text) <= okDist {
+            thisQual = 1
+        } else {
+            continue
+        }
+        bestQual = max(bestQual, thisQual)
+    }
+    return bestQual
+}
+
+// TODO: CLI class
+func cliIngs(ings: [Ing], colorful: Bool, tildify: (String) -> String) -> String {
+    var prev: Ing? = nil
+    var out: String = ""
+    for ing in (ings.sorted { $0.type < $1.type }) {
+        if ing.type != .whitelist && ing.type != .blacklist {
+            let separator = prev == nil ? "" :
+                            prev!.type == ing.type ? ", " :
+                            " >> "
+            var colored = ing.text
+            if colorful { colored = (ing.type == .primary ? ANSI.red : ANSI.dred)(colored) }
+            colored = tildify(colored)
+            out += separator + colored
+        }
+        prev = ing
+    }
+    return out
+}
+
+func cliPrintAlternatives(_ items: [Item], label: String) {
+    if items.isEmpty { return }
+    let s = "Entered \(label) matches"
+    if items.count > 8 {
+        print(" (\(s) \(items.count) items)")
+        return
+    } else {
+        print(" \(s):")
+        for item in items {
+            item.cliPrint(colorful: false)
+        }
+    }
+}
+
 struct Relaxed { let relaxed: Bool }
 class NormalItem: Item, DecodableWithConfiguration, Decodable {
     let meanings: [Ing]
@@ -519,7 +569,7 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable {
 
     required init(from dec: any Decoder, configuration: Relaxed) throws {
         let relaxed = configuration.relaxed
-        enum K: CodingKey { case data, id, characters, readings, meanings, auxiliary_meanings, birth }
+        enum K: CodingKey { case data, id, characters, readings, meanings, auxiliary_meanings }
         let topC = try dec.container(keyedBy: K.self)
         var dataC: KeyedDecodingContainer<K>
         let wkId: Int?
@@ -534,10 +584,10 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable {
 
         self.character = trim(try dataC.decode(String.self, forKey: .characters))
         self.readings = try decodeArray(dataC.nestedUnkeyedContainer(forKey: .readings)) {
-            try Ing(readingFrom: $0, relaxed: relaxed)
+            try Ing(from: $0, isMeaning: false, relaxed: relaxed)
         }
         var meanings = try decodeArray(dataC.nestedUnkeyedContainer(forKey: .meanings)) {
-            try Ing(meaningFrom: $0, relaxed: relaxed)
+            try Ing(from: $0, isMeaning: true, relaxed: relaxed)
         }
         if dataC.contains(.auxiliary_meanings) {
             meanings += try decodeArray(dataC.nestedUnkeyedContainer(forKey: .auxiliary_meanings)) {
@@ -548,38 +598,16 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable {
             meanings += material.meaningSynonyms.map { Ing(synonymWithText: $0) }
         }
         self.meanings = meanings
-        super.init(name: self.character, from: dec)
+        try super.init(name: self.character, from: try dataC.superDecoder())
     }
     func readingAlternatives(reading: String) -> [Item] {
         let normalizedReading = normalizeReadingTrimmed(trim(reading))
         return Subete.instance.allByKind(Self.kind).findByReading(normalizedReading).filter { $0 != self }
     }
     func meaningMatches(normalizedInput: String, levenshtein: inout Levenshtein) -> Bool {
-        return self.evaluateMeaningAnswerInner(normalizedInput: normalizedInput, levenshtein: &levenshtein) > 0
-    }
-    func meaningAlternatives(meaning: String) -> [Item] {
-        let normalizedMeaning = normalizeMeaningTrimmed(trim(meaning))
-        /*
-        var levenshtein = Levenshtein()
-        return Subete.instance.allByKind(Self.kind).vagueItems.filter { (other: Item) -> Bool in
-            return other != self && (other as! NormalItem).meaningMatches(normalizedInput: normalizedMeaning, levenshtein: &levenshtein)
-        }
-        */
-        let ret = Subete.instance.allByKind(Self.kind).findByMeaning(normalizedMeaning).filter { $0 != self }
-        return ret
-    }
-    func cliPrintAlternatives(_ items: [Item], isReading: Bool) {
-        if items.isEmpty { return }
-        let s = "Entered \(isReading ? "kana" : "meaning") matches"
-        if items.count > 8 {
-            print(" (\(s) \(items.count) items)")
-            return
-        } else {
-            print(" \(s):")
-            for item in items {
-                item.cliPrint(colorful: false)
-            }
-        }
+        return evaluateMeaningAnswerInner(normalizedInput: normalizedInput,
+                                          meanings: self.meanings,
+                                          levenshtein: &levenshtein) > 0
     }
     func similarMeaning() -> [Item] {
         var set: Set<Item> = []
@@ -615,23 +643,6 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable {
         }
     }
 
-    // without alternatives, without normalization, just return qual
-    func evaluateMeaningAnswerInner(normalizedInput: String, levenshtein: inout Levenshtein) -> Int {
-        var bestQual: Int = 0
-        for meaning in self.meanings {
-            let okDist = Int(round(0.4 * Double(meaning.text.count)))
-            let thisQual: Int
-            if normalizedInput == meaning.text {
-                thisQual = 2
-            } else if levenshtein.distance(between: normalizedInput, and: meaning.text) <= okDist {
-                thisQual = 1
-            } else {
-                continue
-            }
-            bestQual = max(bestQual, thisQual)
-        }
-        return bestQual
-    }
     func evaluateReadingAnswerInner(normalizedInput: String) -> Int {
         var bestQual: Int = 0
         for reading in self.readings {
@@ -664,7 +675,9 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable {
     func evaluateMeaningAnswer(input: String, allowAlternatives: Bool) -> (outcome: TestOutcome, qual: Int, alternatives: [Item]) {
         let normalizedInput = normalizeMeaningTrimmed(trim(input))
         var levenshtein = Levenshtein()
-        let qual = evaluateMeaningAnswerInner(normalizedInput: normalizedInput, levenshtein: &levenshtein)
+        let qual = evaluateMeaningAnswerInner(normalizedInput: normalizedInput,
+                                              meanings: self.meanings,
+                                              levenshtein: &levenshtein)
         var outcome: TestOutcome = qual > 0 ? .right : .wrong
         let alternatives = meaningAlternatives(meaning: normalizedInput)
         if outcome == .wrong && allowAlternatives && alternatives.contains(where: { (alternative: Item) in
@@ -678,28 +691,12 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable {
         }
         return (outcome, qual, alternatives)
     }
-    func cliIngs(ings: [Ing], colorful: Bool) -> String {
-        var prev: Ing? = nil
-        var out: String = ""
-        for ing in (ings.sorted { $0.type < $1.type }) {
-            if ing.type != .whitelist && ing.type != .blacklist {
-                let separator = prev == nil ? "" :
-                                prev!.type == ing.type ? ", " :
-                                " >> "
-                var colored = ing.text
-                if colorful { colored = (ing.type == .primary ? ANSI.red : ANSI.dred)(colored) }
-                colored = self.tildify(colored)
-                out += separator + colored
-            }
-            prev = ing
-        }
-        return out
-    }
     func cliReadings(colorful: Bool) -> String {
-        return self.cliIngs(ings: self.readings, colorful: colorful)
+        return cliIngs(ings: self.readings, colorful: colorful, tildify: self.tildify)
     }
     func cliMeanings(colorful: Bool) -> String {
-        return self.cliIngs(ings: self.meanings, colorful: false) // yes, ignore colorful for now
+        // yes, ignore colorful for now
+        return cliIngs(ings: self.meanings, colorful: false, tildify: self.tildify)
     }
     override func cliPrint(colorful: Bool) {
         print("\(self.cliName) \(self.cliReadings(colorful: colorful)) \(self.cliMeanings(colorful: colorful))")
@@ -787,10 +784,10 @@ final class Flashcard: Item, CustomStringConvertible, Decodable {
         enum K: CodingKey { case front, backs }
         let container = try dec.container(keyedBy: K.self)
         self.front = try container.decode(String.self, forKey: .front)
-        self.backs = try decodeArray(dataC.nestedUnkeyedContainer(forKey: .backs)) {
-            try Ing(meaningFrom: $0, relaxed: relaxed)
+        self.backs = try decodeArray(container.nestedUnkeyedContainer(forKey: .backs)) {
+            try Ing(from: $0, isMeaning: true, relaxed: true)
         }
-        super.init(name: self.front, from: dec)
+        try super.init(name: self.front, from: dec)
     }
     var description: String {
         return "<Flashcard \(self.front)>"
@@ -799,7 +796,20 @@ final class Flashcard: Item, CustomStringConvertible, Decodable {
         return "\(front) /f"
     }
     override func cliPrint(colorful: Bool) {
-        print("\(self.cliName) \(self.cliReadings(colorful: colorful)) \(self.cliMeanings(colorful: colorful))")
+        print("\(self.front) \(self.cliBacks(colorful: colorful))")
+    }
+    func evaluateBackAnswer(input: String, allowAlternatives: Bool) -> (outcome: TestOutcome, qual: Int, alternatives: [Item]) {
+        let normalizedInput = normalizeMeaningTrimmed(trim(input))
+        var levenshtein = Levenshtein()
+        let qual = evaluateMeaningAnswerInner(normalizedInput: normalizedInput,
+                                              meanings: self.backs,
+                                              levenshtein: &levenshtein)
+        var outcome: TestOutcome = qual > 0 ? .right : .wrong
+        let alternatives = meaningAlternatives(meaning: normalizedInput)
+        return (outcome, qual, alternatives)
+    }
+    func cliBacks(colorful: Bool) -> String {
+        return cliIngs(ings: self.backs, colorful: colorful, tildify: { $0 })
     }
     override class var kind: ItemKind { return .flashcard }
     override var availableTests: [TestKind] { return [.flashcard] }
@@ -824,7 +834,7 @@ class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
         if X.self is NormalItem.Type {
             byReading = [:]
             byMeaning = [:]
-        } else if X.self is Flashcard.type {
+        } else if X.self is Flashcard.Type {
             byMeaning = [:]
         }
         for item in items {
@@ -834,14 +844,14 @@ class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
             byName[item.name] = item
             if let normalItem = item as? NormalItem {
                 for reading in normalItem.readings {
-                    byReading[reading.text] = (byReading[reading.text] ?? []) + [item]
+                    byReading![reading.text] = (byReading![reading.text] ?? []) + [item]
                 }
                 for meaning in normalItem.meanings {
-                    byMeaning[meaning.text] = (byMeaning[meaning.text] ?? []) + [item]
+                    byMeaning![meaning.text] = (byMeaning![meaning.text] ?? []) + [item]
                 }
             } else if let flashcard = item as? Flashcard {
                 for back in flashcard.backs {
-                    byMeaning[back.text] = (byMeaning[back.text] ?? []) + [item]
+                    byMeaning![back.text] = (byMeaning![back.text] ?? []) + [item]
                 }
             }
         }
@@ -1100,7 +1110,7 @@ class Test {
             var out: String = cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate)
             out += " " + item.cliName + " " + item.cliReadings(colorful: false)
             print(out)
-            item.cliPrintAlternatives(alternatives, isReading: true)
+            cliPrintAlternatives(alternatives, label: "kana")
             item.cliPrintSimilarMeaning()
         
             if outcome == .right { break }
@@ -1117,7 +1127,7 @@ class Test {
             let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: true)
             print(cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate))
             item.cliPrint(colorful: true)
-            item.cliPrintAlternatives(alternatives, isReading: false)
+            cliPrintAlternatives(alternatives, label: "meaning")
             //if outcome != .right {
                 item.cliPrintSameReadingIfFew()
             //}
@@ -1144,7 +1154,7 @@ class Test {
                     // for later in the c2 and later in a confusion this might
                     // be part of
                     if outcome == .wrong {
-                        item.cliPrintAlternatives(alternatives, isReading: false)
+                        cliPrintAlternatives(alternatives, label: "meaning")
                     }
                 } else {
                     (outcome, qual, alternatives) = item.evaluateReadingAnswer(input: k, allowAlternatives: false)
@@ -1152,7 +1162,7 @@ class Test {
                     print(cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate))
                     print(item.cliReadings(colorful: true))
                     if outcome == .wrong { // See above
-                        item.cliPrintAlternatives(alternatives, isReading: true)
+                        cliPrintAlternatives(alternatives, label: "kana")
                     }
                 }
                 if outcome == .right { break }
@@ -1169,14 +1179,11 @@ class Test {
         var prompt = item.cliPrompt(colorful: false)
         while true {
             let k: String = try cliRead(prompt: prompt, kana: false)
-            let (outcome, qual, alternatives) = item.evaluateMeaningAnswer(input: k, allowAlternatives: true)
+            let (outcome, qual, alternatives) = item.evaluateBackAnswer(input: k, allowAlternatives: true)
             let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: true)
             print(cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate))
             item.cliPrint(colorful: true)
-            item.cliPrintAlternatives(alternatives, isReading: false)
-            //if outcome != .right {
-                item.cliPrintSameReadingIfFew()
-            //}
+            cliPrintAlternatives(alternatives, label: "answer")
             if outcome == .right {
                 break
             }
@@ -1879,9 +1886,9 @@ struct Rerere: ParsableCommand {
 Levenshtein.test()
 //print("   :xsamdfa: b  :  c:   ".splut(separator: 58, includingSpaces: true, map: { $0 }))
 
-Subete()
-Subete.instance.allWords.findByName("自由")!.cliPrint(true)
-Subete.instance.allWords.findByName("自由")!.cliPrint(false)
-exit()
+let _ = Subete()
+Subete.instance.allWords.findByName("自由")!.cliPrint(colorful: true)
+Subete.instance.allWords.findByName("自由")!.cliPrint(colorful: false)
+exit(0)
 
 Rerere.main()
