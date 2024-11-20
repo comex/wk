@@ -267,7 +267,6 @@ class Subete {
     var allWords: ItemList<Word>! = nil
     var allKanji: ItemList<Kanji>! = nil
     var allConfusion: ItemList<Confusion>! = nil
-    var allFlashcards: ItemList<Flashcard>! = nil
     var allItems: [Item]! = nil
     var srs: SRS? = nil
     var studyMaterials: [Int: StudyMaterial]! = nil
@@ -304,7 +303,6 @@ class Subete {
         case .word: return self.allWords
         case .kanji: return self.allKanji
         case .confusion: return self.allConfusion
-        case .flashcard: return self.allFlashcards
         }
     }
     func loadConfusion(path: String, isWord: Bool) -> [Confusion] {
@@ -384,7 +382,7 @@ class Subete {
 }
 
 enum ItemKind: String, Codable, CodingKeyRepresentable {
-    case word, kanji, confusion, flashcard
+    case word, kanji, confusion
 }
 
 class Item: Hashable, Equatable, Comparable {
@@ -822,43 +820,6 @@ final class Confusion: Item, CustomStringConvertible {
     override class var kind: ItemKind { return .confusion }
     override var availableTests: [TestKind] { return [.confusion] }
 }
-final class Flashcard: Item, CustomStringConvertible, Decodable {
-    let front: String
-    var backs: [Ing]
-    init(from dec: any Decoder) throws {
-        enum K: CodingKey { case front, backs }
-        let container = try dec.container(keyedBy: K.self)
-        self.front = try container.decode(String.self, forKey: .front)
-        self.backs = try decodeArray(container.nestedUnkeyedContainer(forKey: .backs)) {
-            try Ing(from: $0, isMeaning: true, relaxed: true)
-        }
-        try super.init(name: self.front, from: dec)
-    }
-    var description: String {
-        return "<Flashcard \(self.front)>"
-    }
-    func cliPrompt(colorful: Bool) -> String {
-        return "\(front) /f"
-    }
-    override func cliPrint(colorful: Bool) {
-        print("\(self.front) \(self.cliBacks(colorful: colorful))")
-    }
-    func evaluateBackAnswer(input: String, allowAlternatives: Bool) -> (outcome: TestOutcome, qual: Int, alternatives: [Item]) {
-        let normalizedInput = normalizeMeaningTrimmed(trim(input))
-        var levenshtein = Levenshtein()
-        let qual = evaluateMeaningAnswerInner(normalizedInput: normalizedInput,
-                                              meanings: self.backs,
-                                              levenshtein: &levenshtein)
-        let outcome: TestOutcome = qual > 0 ? .right : .wrong
-        let alternatives = meaningAlternatives(meaning: normalizedInput)
-        return (outcome, qual, alternatives)
-    }
-    func cliBacks(colorful: Bool) -> String {
-        return cliIngs(ings: self.backs, colorful: colorful, tildify: { $0 })
-    }
-    override class var kind: ItemKind { return .flashcard }
-    override var availableTests: [TestKind] { return [.flashcard] }
-}
 
 protocol ItemListProtocol {
     func findByName(_ name: String) -> Item?
@@ -879,8 +840,6 @@ class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
         if X.self is NormalItem.Type {
             byReading = [:]
             byMeaning = [:]
-        } else if X.self is Flashcard.Type {
-            byMeaning = [:]
         }
         for item in items {
             if byName[item.name] != nil {
@@ -893,10 +852,6 @@ class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
                 }
                 for meaning in normalItem.meanings {
                     byMeaning![meaning.text] = (byMeaning![meaning.text] ?? []) + [item]
-                }
-            } else if let flashcard = item as? Flashcard {
-                for back in flashcard.backs {
-                    byMeaning![back.text] = (byMeaning![back.text] ?? []) + [item]
                 }
             }
         }
@@ -935,7 +890,6 @@ enum TestKind: String, Codable {
     case readingToMeaning = "r2m"
     case characterToRM = "c2"
     case confusion = "kc"
-    case flashcard = "fc"
 }
 
 enum TestOutcome: String {
@@ -1118,8 +1072,6 @@ class Test {
             try self.doCLICharacterToRM(item: item as! NormalItem, final: true)
         case .confusion:
             try self.doCLIConfusion(item: item as! Confusion)
-        case .flashcard:
-            try self.doCLIFlashcard(item: item as! Flashcard)
         }
         if self.result == nil { fatalError("should have marked result") }
     }
@@ -1218,20 +1170,6 @@ class Test {
         let items = item.items.shuffled()
         for (i, subitem) in items.enumerated() {
             try doCLICharacterToRM(item: subitem as! NormalItem, final: i == items.count - 1)
-        }
-    }
-    func doCLIFlashcard(item: Flashcard) throws {
-        let prompt = item.cliPrompt(colorful: false)
-        while true {
-            let k: String = try cliRead(prompt: prompt, kana: false)
-            let (outcome, qual, alternatives) = item.evaluateBackAnswer(input: k, allowAlternatives: true)
-            let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: true)
-            print(cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate))
-            item.cliPrint(colorful: true)
-            cliPrintAlternatives(alternatives, label: "answer")
-            if outcome == .right {
-                break
-            }
         }
     }
     static let readingPrompt: String = ANSI.red("reading> ")
