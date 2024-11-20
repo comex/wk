@@ -89,12 +89,20 @@ func unwrapOrThrow<T>(_ t: T?, err: @autoclosure () -> Error) throws -> T {
 func loadJSONAndExtraYAML<T>(basePath: String, stem: String, class: T.Type) -> [T]
     where T: DecodableWithConfiguration, T.DecodingConfiguration == Relaxed, T: Decodable
 {
+    let base: [T]
     let jsonData = try! data(of: "\(basePath)/\(stem).json")
     let base = try! JSONDecoder().decode([T].self, from: jsonData, configuration: Relaxed(relaxed: false))
     let yamlData = try! data(of: "\(basePath)/extra-\(stem).yaml")
     let extra = try! YAMLDecoder().decode([T].self, from: yamlData,
                                           userInfo: [CodingUserInfoKey(rawValue: "relaxed")!: true])
     return base + extra
+}
+
+func loadFlashcardYAML(basePath: String) -> [Flashcard]
+    where T: DecodableWithConfiguration, T.DecodingConfiguration == Relaxed, T: Decodable
+{
+    let yamlData = try! data(of: "\(basePath)/flashcards.yaml")
+    return try! YAMLDecoder().decode([Flashcard].self, from: yamlData)
 }
 
 let startupDate: Date = Date()
@@ -212,8 +220,9 @@ class Subete {
     nonisolated(unsafe) static var instance: Subete!
     var allWords: ItemList<Word>! = nil
     var allKanji: ItemList<Kanji>! = nil
-    var allItems: [Item]! = nil
     var allConfusion: ItemList<Confusion>! = nil
+    var allFlashcards: ItemList<Flashcard>! = nil
+    var allItems: [Item]! = nil
     var srs: SRS? = nil
     var studyMaterials: [Int: StudyMaterial]! = nil
 
@@ -237,6 +246,7 @@ class Subete {
         self.studyMaterials = loadStudyMaterials(basePath: basePath)
         self.allWords = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "vocabulary", class: Word.self))
         self.allKanji = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "kanji", class: Kanji.self))
+        self.allFlashcards = ItemList(loadFlashcardYAML(basePath: basePath))
         print("loading confusion")
         let allKanjiConfusion = loadConfusion(path: basePath + "/confusion.txt", isWord: false)
         let allWordConfusion = loadConfusion(path: basePath + "/confusion-vocab.txt", isWord: true)
@@ -252,6 +262,7 @@ class Subete {
         case .word: return self.allWords
         case .kanji: return self.allKanji
         case .confusion: return self.allConfusion
+        case .flashcard: return self.allFlashcards
         }
     }
     func loadConfusion(path: String, isWord: Bool) -> [Confusion] {
@@ -331,7 +342,7 @@ class Subete {
 }
 
 enum ItemKind: String, ExpressibleByArgument, Codable, CodingKeyRepresentable {
-    case word, kanji, confusion
+    case word, kanji, confusion, flashcard
 }
 
 class Item: Hashable, Equatable, Comparable {
@@ -343,6 +354,10 @@ class Item: Hashable, Equatable, Comparable {
         self.birthday = birthday
         self.id = Subete.instance.nextItemID
         Subete.instance.nextItemID = self.id + 1
+    }
+    init(name: String, from dec: any Decoder) throws {
+        init(name: name,
+             birthday: try dataC.decodeIfPresent(Date.self, forKey: .birth))
     }
     func hash(into hasher: inout Hasher) {
         hasher.combine(self.name)
@@ -533,8 +548,7 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable {
             meanings += material.meaningSynonyms.map { Ing(synonymWithText: $0) }
         }
         self.meanings = meanings
-        super.init(name: self.character,
-            birthday: try dataC.decodeIfPresent(Date.self, forKey: .birth))
+        super.init(name: self.character, from: dec)
     }
     func readingAlternatives(reading: String) -> [Item] {
         let normalizedReading = normalizeReadingTrimmed(trim(reading))
@@ -705,21 +719,21 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable {
         fatalError("must override cliName on \(self)")
     }
 }
-class Word : NormalItem, CustomStringConvertible {
+final class Word : NormalItem, CustomStringConvertible {
     var description: String {
         return "<Word \(self.character)>"
     }
     override class var kind: ItemKind { return .word }
     override var cliName: String { return String(self.name) }
 }
-class Kanji : NormalItem, CustomStringConvertible {
+final class Kanji : NormalItem, CustomStringConvertible {
     var description: String {
         return "<Kanji \(self.character)>"
     }
     override class var kind: ItemKind { return .kanji }
     override var cliName: String { return ANSI.purple(String(self.name) + " /k") }
 }
-class Confusion: Item, CustomStringConvertible {
+final class Confusion: Item, CustomStringConvertible {
     let characters: [String]
     let items: [Item]
     let isWord: Bool
@@ -766,6 +780,30 @@ class Confusion: Item, CustomStringConvertible {
     override class var kind: ItemKind { return .confusion }
     override var availableTests: [TestKind] { return [.confusion] }
 }
+final class Flashcard: Item, CustomStringConvertible, Decodable {
+    let front: String
+    var backs: [Ing]
+    init(from dec: any Decoder) throws {
+        enum K: CodingKey { case front, backs }
+        let container = try dec.container(keyedBy: K.self)
+        self.front = try container.decode(String.self, forKey: .front)
+        self.backs = try decodeArray(dataC.nestedUnkeyedContainer(forKey: .backs)) {
+            try Ing(meaningFrom: $0, relaxed: relaxed)
+        }
+        super.init(name: self.front, from: dec)
+    }
+    var description: String {
+        return "<Flashcard \(self.front)>"
+    }
+    func cliPrompt(colorful: Bool) -> String {
+        return "\(front) /f"
+    }
+    override func cliPrint(colorful: Bool) {
+        print("\(self.cliName) \(self.cliReadings(colorful: colorful)) \(self.cliMeanings(colorful: colorful))")
+    }
+    override class var kind: ItemKind { return .flashcard }
+    override var availableTests: [TestKind] { return [.flashcard] }
+}
 
 protocol ItemListProtocol {
     func findByName(_ name: String) -> Item?
@@ -776,13 +814,19 @@ protocol ItemListProtocol {
 class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
     let items: [X]
     let byName: [String: X]
-    let byReading: [String: [X]]
-    let byMeaning: [String: [X]]
+    let byReading: [String: [X]]?
+    let byMeaning: [String: [X]]?
     init(_ items: [X]) {
         self.items = items
         var byName: [String: X] = [:]
-        var byReading: [String: [X]] = [:]
-        var byMeaning: [String: [X]] = [:]
+        var byReading: [String: [X]]? = nil
+        var byMeaning: [String: [X]]? = nil
+        if X.self is NormalItem.Type {
+            byReading = [:]
+            byMeaning = [:]
+        } else if X.self is Flashcard.type {
+            byMeaning = [:]
+        }
         for item in items {
             if byName[item.name] != nil {
                 fatalError("duplicate \(X.self) item named \(item.name)")
@@ -794,6 +838,10 @@ class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
                 }
                 for meaning in normalItem.meanings {
                     byMeaning[meaning.text] = (byMeaning[meaning.text] ?? []) + [item]
+                }
+            } else if let flashcard = item as? Flashcard {
+                for back in flashcard.backs {
+                    byMeaning[back.text] = (byMeaning[back.text] ?? []) + [item]
                 }
             }
         }
@@ -814,10 +862,10 @@ class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
         return self.byName[name]
     }
     func findByReading(_ reading: String) -> [Item] {
-        return self.byReading[reading] ?? []
+        return self.byReading![reading] ?? []
     }
     func findByMeaning(_ meaning: String) -> [Item] {
-        return self.byMeaning[meaning] ?? []
+        return self.byMeaning![meaning] ?? []
     }
     var vagueItems: [Item] {
         return self.items
@@ -832,6 +880,7 @@ enum TestKind: String, ExpressibleByArgument, Codable {
     case readingToMeaning = "r2m"
     case characterToRM = "c2"
     case confusion = "kc"
+    case flashcard = "fc"
 }
 
 enum TestOutcome: String {
@@ -1014,6 +1063,8 @@ class Test {
             try self.doCLICharacterToRM(item: item as! NormalItem, final: true)
         case .confusion:
             try self.doCLIConfusion(item: item as! Confusion)
+        case .flashcard:
+            try self.doCLIFlashcard(item: item as! Flashcard)
         }
         if self.result == nil { fatalError("should have marked result") }
     }
@@ -1112,6 +1163,23 @@ class Test {
         let items = item.items.shuffled()
         for (i, subitem) in items.enumerated() {
             try doCLICharacterToRM(item: subitem as! NormalItem, final: i == items.count - 1)
+        }
+    }
+    func doCLIFlashcard(item: Flashcard) throws {
+        var prompt = item.cliPrompt(colorful: false)
+        while true {
+            let k: String = try cliRead(prompt: prompt, kana: false)
+            let (outcome, qual, alternatives) = item.evaluateMeaningAnswer(input: k, allowAlternatives: true)
+            let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: true)
+            print(cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate))
+            item.cliPrint(colorful: true)
+            item.cliPrintAlternatives(alternatives, isReading: false)
+            //if outcome != .right {
+                item.cliPrintSameReadingIfFew()
+            //}
+            if outcome == .right {
+                break
+            }
         }
     }
     static let readingPrompt: String = ANSI.red("reading> ")
@@ -1810,4 +1878,10 @@ struct Rerere: ParsableCommand {
 }
 Levenshtein.test()
 //print("   :xsamdfa: b  :  c:   ".splut(separator: 58, includingSpaces: true, map: { $0 }))
+
+Subete()
+Subete.instance.allWords.findByName("自由")!.cliPrint(true)
+Subete.instance.allWords.findByName("自由")!.cliPrint(false)
+exit()
+
 Rerere.main()
