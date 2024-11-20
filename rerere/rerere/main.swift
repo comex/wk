@@ -346,17 +346,23 @@ class Item: Hashable, Equatable, Comparable {
     let name: String
     let birthday: Date?
     let id: Int
-    init(name: String, birthday: Date?) {
-        self.name = name
-        self.birthday = birthday
+
+    // ItemInitializer is a workaround for convenience inits not interacting
+    // well with subclassing
+    typealias ItemInitializer = (name: String, birthday: Date?)
+    init(_ initializer: ItemInitializer) {
+        self.name = initializer.name
+        self.birthday = initializer.birthday
         self.id = Subete.instance.nextItemID
         Subete.instance.nextItemID = self.id + 1
     }
-    convenience init(name: String, from dec: any Decoder) throws {
+    static func initializer(name: String, from dec: any Decoder) throws -> ItemInitializer {
         enum K: CodingKey { case birth }
         let container = try dec.container(keyedBy: K.self)
-        self.init(name: name,
-                  birthday: try container.decodeIfPresent(Date.self, forKey: .birth))
+        // I can't delegate to the other init because that requires being a
+        // convenience init, yet convenience inits are inherited so they can't
+        // be called from the subclass??
+        return (name: name, birthday: try container.decodeIfPresent(Date.self, forKey: .birth))
     }
     func hash(into hasher: inout Hasher) {
         hasher.combine(self.name)
@@ -571,16 +577,17 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable {
         let relaxed = configuration.relaxed
         enum K: CodingKey { case data, id, characters, readings, meanings, auxiliary_meanings }
         let topC = try dec.container(keyedBy: K.self)
-        var dataC: KeyedDecodingContainer<K>
+        var dataDec: any Decoder
         let wkId: Int?
         if topC.contains(.data) {
             wkId = try topC.decode(Int.self, forKey: .id)
-            dataC = try topC.nestedContainer(keyedBy: K.self, forKey: .data)
+            dataDec = try topC.superDecoder(forKey: .data)
         } else {
             if !relaxed { fatalError("expected 'data'") }
-            dataC = topC
+            dataDec = dec
             wkId = nil
         }
+        let dataC = try dataDec.container(keyedBy: K.self)
 
         self.character = trim(try dataC.decode(String.self, forKey: .characters))
         self.readings = try decodeArray(dataC.nestedUnkeyedContainer(forKey: .readings)) {
@@ -598,7 +605,7 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable {
             meanings += material.meaningSynonyms.map { Ing(synonymWithText: $0) }
         }
         self.meanings = meanings
-        try super.init(name: self.character, from: try dataC.superDecoder())
+        super.init(try Item.initializer(name: self.character, from: dataDec))
     }
     func readingAlternatives(reading: String) -> [Item] {
         let normalizedReading = normalizeReadingTrimmed(trim(reading))
@@ -769,7 +776,7 @@ final class Confusion: Item, CustomStringConvertible {
         self.isWord = isWord
         let name = nameOpt ?? characters[0]
         self.characters = characters
-        super.init(name: name, birthday: birthday)
+        super.init((name: name, birthday: birthday))
     }
     var description: String {
         return "<Confusion \(self.items)>"
@@ -787,7 +794,7 @@ final class Flashcard: Item, CustomStringConvertible, Decodable {
         self.backs = try decodeArray(container.nestedUnkeyedContainer(forKey: .backs)) {
             try Ing(from: $0, isMeaning: true, relaxed: true)
         }
-        try super.init(name: self.front, from: dec)
+        super.init(try Item.initializer(name: self.front, from: dec))
     }
     var description: String {
         return "<Flashcard \(self.front)>"
@@ -1394,7 +1401,7 @@ class SRS {
 }
 
 func testSRS() {
-    let item = Item(name: "test", birthday: nil)
+    let item = Item((name: "test", birthday: nil))
     let question = Question(item: item, testKind: .confusion)
     var info: SRS.ItemInfo = .burned
     let _ = info.update(
@@ -1884,11 +1891,4 @@ struct Rerere: ParsableCommand {
     }
 }
 Levenshtein.test()
-//print("   :xsamdfa: b  :  c:   ".splut(separator: 58, includingSpaces: true, map: { $0 }))
-
-let _ = Subete()
-Subete.instance.allWords.findByName("自由")!.cliPrint(colorful: true)
-Subete.instance.allWords.findByName("自由")!.cliPrint(colorful: false)
-exit(0)
-
 Rerere.main()
