@@ -1,2 +1,195 @@
-- front: asdf
-  backs: [adfg]
+- front: Α
+  backs: [Alpha]
+  birth: 2024-11-20
+
+- front: α
+  backs: [Alpha]
+  birth: 2024-11-20
+
+- front: Β
+  backs: [Beta]
+  birth: 2024-11-20
+
+- front: β
+  backs: [Beta]
+  birth: 2024-11-20
+
+- front: Γ
+  backs: [Gamma]
+  birth: 2024-11-20
+
+- front: γ
+  backs: [Gamma]
+  birth: 2024-11-20
+
+- front: Δ
+  backs: [Delta]
+  birth: 2024-11-20
+
+- front: δ
+  backs: [Delta]
+  birth: 2024-11-20
+
+- front: Ε
+  backs: [Epsilon]
+  birth: 2024-11-20
+
+- front: ε
+  backs: [Epsilon]
+  birth: 2024-11-20
+
+- front: Ζ
+  backs: [Zeta]
+  birth: 2024-11-20
+
+- front: ζ
+  backs: [Zeta]
+  birth: 2024-11-20
+
+- front: Η
+  backs: [Eta]
+  birth: 2024-11-20
+
+- front: η
+  backs: [Eta]
+  birth: 2024-11-20
+
+- front: Θ
+  backs: [Theta]
+  birth: 2024-11-20
+
+- front: θ
+  backs: [Theta]
+  birth: 2024-11-20
+
+- front: Ι
+  backs: [Iota]
+  birth: 2024-11-20
+
+- front: ι
+  backs: [Iota]
+  birth: 2024-11-20
+
+- front: Κ
+  backs: [Kappa]
+  birth: 2024-11-20
+
+- front: κ
+  backs: [Kappa]
+  birth: 2024-11-20
+
+- front: Λ
+  backs: [Lambda]
+  birth: 2024-11-20
+
+- front: λ
+  backs: [Lambda]
+  birth: 2024-11-20
+
+- front: Μ
+  backs: [Mu]
+  birth: 2024-11-20
+
+- front: μ
+  backs: [Mu]
+  birth: 2024-11-20
+
+- front: Ν
+  backs: [Nu]
+  birth: 2024-11-20
+
+- front: ν
+  backs: [Nu]
+  birth: 2024-11-20
+
+- front: Ξ
+  backs: [Xi]
+  birth: 2024-11-20
+
+- front: ξ
+  backs: [Xi]
+  birth: 2024-11-20
+
+- front: Ο
+  backs: [Omicron]
+  birth: 2024-11-20
+
+- front: ο
+  backs: [Omicron]
+  birth: 2024-11-20
+
+- front: Π
+  backs: [Pi]
+  birth: 2024-11-20
+
+- front: π
+  backs: [Pi]
+  birth: 2024-11-20
+
+- front: Ρ
+  backs: [Rho]
+  birth: 2024-11-20
+
+- front: ρ
+  backs: [Rho]
+  birth: 2024-11-20
+
+- front: Σ
+  backs: [Sigma]
+  birth: 2024-11-20
+
+- front: σ
+  backs: [Sigma]
+  birth: 2024-11-20
+
+- front: ς
+  backs: [Sigma]
+  birth: 2024-11-20
+
+- front: Τ
+  backs: [Tau]
+  birth: 2024-11-20
+
+- front: τ
+  backs: [Tau]
+  birth: 2024-11-20
+
+- front: Υ
+  backs: [Upsilon]
+  birth: 2024-11-20
+
+- front: υ
+  backs: [Upsilon]
+  birth: 2024-11-20
+
+- front: Φ
+  backs: [Phi]
+  birth: 2024-11-20
+
+- front: φ
+  backs: [Phi]
+  birth: 2024-11-20
+
+- front: Χ
+  backs: [Chi]
+  birth: 2024-11-20
+
+- front: χ
+  backs: [Chi]
+  birth: 2024-11-20
+
+- front: Ψ
+  backs: [Psi]
+  birth: 2024-11-20
+
+- front: ψ
+  backs: [Psi]
+  birth: 2024-11-20
+
+- front: Ω
+  backs: [Omega]
+  birth: 2024-11-20
+
+- front: ω
+  backs: [Omega]
+  birth: 2024-11-20
