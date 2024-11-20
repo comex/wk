@@ -453,14 +453,14 @@ struct Ing {
             self.acceptedAnswerWK = true
             return
         }
-        self.text = try c.decode(String.self, forKey: .meaning)
+        self.text = try c.decode(String.self, forKey: .meaning).lowercased()
         self.type = try c.decode(Bool.self, forKey: .primary) ? .primary : .secondary
         self.acceptedAnswerWK = try c.decode(Bool.self, forKey: .accepted_answer)
     }
     init(auxiliaryMeaningFrom dec: any Decoder) throws {
         enum K: CodingKey { case meaning, type }
         let c = try dec.container(keyedBy: K.self)
-        self.text = try c.decode(String.self, forKey: .meaning)
+        self.text = try c.decode(String.self, forKey: .meaning).lowercased()
         let type = try c.decode(String.self, forKey: .type)
         switch type {
         case "whitelist":
