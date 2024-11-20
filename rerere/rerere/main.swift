@@ -804,7 +804,7 @@ final class Flashcard: Item, CustomStringConvertible, Decodable {
         let qual = evaluateMeaningAnswerInner(normalizedInput: normalizedInput,
                                               meanings: self.backs,
                                               levenshtein: &levenshtein)
-        var outcome: TestOutcome = qual > 0 ? .right : .wrong
+        let outcome: TestOutcome = qual > 0 ? .right : .wrong
         let alternatives = meaningAlternatives(meaning: normalizedInput)
         return (outcome, qual, alternatives)
     }
@@ -1176,7 +1176,7 @@ class Test {
         }
     }
     func doCLIFlashcard(item: Flashcard) throws {
-        var prompt = item.cliPrompt(colorful: false)
+        let prompt = item.cliPrompt(colorful: false)
         while true {
             let k: String = try cliRead(prompt: prompt, kana: false)
             let (outcome, qual, alternatives) = item.evaluateBackAnswer(input: k, allowAlternatives: true)
