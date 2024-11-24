@@ -911,38 +911,37 @@ enum TestOutcome: String {
     case mu
 }
 
-extension String {
-    func splut(separator: UTF8.CodeUnit, includingSpaces: Bool = false, map: (String) -> String) -> [String] {
+extension Data {
+    func splut(separator: Int, includingSpaces: Bool = false, map: (Data) -> String) -> [String] {
         var res: [String] = []
-        let utf = self.utf8
-        let start = utf.startIndex
-        let end = utf.endIndex
+        let start = self.startIndex
+        let end = self.endIndex
         var i = start
         var lastStart = i
         while true {
-            if i == end || utf[i] == separator {
+            if i == end || self[i] == separator {
                 var lastEnd = i
                 if includingSpaces {
                     while true {
                         if lastEnd == lastStart { break }
-                        let prev = utf.index(before: lastEnd)
-                        if !isSpace(utf[prev]) { break }
+                        let prev = lastEnd - 1
+                        if !isSpace(self[prev]) { break }
                         lastEnd = prev
                     }
                     if i != end {
                         while true {
-                            let next = utf.index(after: i)
+                            let next = i + 1
                             if next == end { break }
-                            if !isSpace(utf[next]) { break }
+                            if !isSpace(self[next]) { break }
                             i = next
                         }
                     }
                 }
-                res.append(map(String(utf[lastStart..<lastEnd])!))
+                res.append(map(self[lastStart..<lastEnd]))
                 if i == end { return res }
-                lastStart = utf.index(after: i)
+                lastStart = i + 1
             }
-            i = utf.index(after: i)
+            i += 1
         }
         return res
     }
@@ -967,8 +966,8 @@ struct TestResult {
         ]
         return components.joined(separator: ":")
     }
-    static func parse(line: String) throws -> TestResult? {
-        var components: [String] = line.splut(separator: 58 /* ':' */, includingSpaces: true, map: { $0 })
+    static func parse(line: Data) throws -> TestResult? {
+        var components: [String] = line.splut(separator: 58 /* ':' */, includingSpaces: true, map: { String(data: $0, encoding: .utf8)! })
         var date: Date? = nil
         if components.count > 4 {
             
@@ -1006,10 +1005,9 @@ struct TestResult {
     }
     static func readAllFromLog() throws -> [TestResult] {
         let data = try Subete.instance.openLogTxt(write: false) { (fh: FileHandle) in fh.readDataToEndOfFile() }
-        let text = String(decoding: data, as: UTF8.self)
-        return text.split(separator: "\n").compactMap {
+        return data.split(separator: 10 /*"\n"*/).compactMap {
             do {
-                return try TestResult.parse(line: String($0))
+                return try TestResult.parse(line: $0)
             } catch let e {
                 warn("error parsing log line: \(e)")
                 return nil
