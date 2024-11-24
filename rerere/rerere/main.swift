@@ -24,13 +24,17 @@ func data(of path: String) throws -> Data {
     return try Data(contentsOf: URL(fileURLWithPath: path))
 }
 
-func time<T>(count: Int, block: () -> T) {
+@discardableResult
+func time<T>(count: Int, block: () -> T) -> T {
     let a = CFAbsoluteTimeGetCurrent()
+    var t: T?
     for _ in 0..<count {
-        blackBox(block())
+		t = block()
+		blackBox(t)
     }
     let b = CFAbsoluteTimeGetCurrent()
     print((b - a) / Double(count))
+    return t!
 }
 func blackBox<T>(_ t: T) {
     withUnsafePointer(to: t) { (ptr) in
@@ -202,7 +206,8 @@ func loadStudyMaterials(basePath: String) -> [Int: StudyMaterial] {
 }
 
 func getWkDir() -> String {
-    var path = FilePath(Bundle.main.executablePath!).removingLastComponent()
+    var path = FilePath(#filePath).removingLastComponent()
+    print(">>", path)
     while !(FileManager.default.fileExists(atPath: path.pushing("kanji.json").string)) {
         path.push("..")
         if path.length > 512 {
@@ -250,7 +255,7 @@ class Subete {
         self.allConfusion = ItemList(allKanjiConfusion + allWordConfusion)
         self.allItems = self.allWords.items + self.allKanji.items + self.allConfusion.items
         print("loading srs")
-        self.srs = self.createSRSFromLog()
+		self.srs = time(count: 20) { self.createSRSFromLog() }
         print("done loading")
 
     }
