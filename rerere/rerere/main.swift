@@ -756,18 +756,20 @@ struct CLI {
 
     func doOneTest(_ test: Test, lastTest: Test?) throws {
         var gotAnswerAlready = false
-        while !test.finished {
+        while !test.state.isDone {
             test.testSession.save()
             let prompt = test.state.curPrompt!
-            test.state.nextPrompt()
-            let isLastOfItem = test.state.curPrompt?.item != prompt.item
+            let nextState = test.state.nextState
             let promptText = formatPromptOutput(prompt) + formatKindSuffix(item: prompt.item)
             let resp = try promptInner(promptText: promptText, kana: prompt.expectedInput == .reading)
             switch resp {
             case .answer(let answerText):
-                let ra = try test.handlePromptResponse(prompt: prompt, input: answerText, isLastOfItem: isLastOfItem)
+                let ra = try test.handlePromptResponse(prompt: prompt, input: answerText, final: nextState.isDone)
                 print(formatResponseAcknowledgement(ra))
                 gotAnswerAlready = true
+                if ra.outcome == .right {
+                    test.state = nextState
+                }
             case .bang(let bangText):
                 handleBang(bangText, curTest: test, gotAnswerAlready: gotAnswerAlready, lastTest: lastTest)
             }
@@ -1217,20 +1219,20 @@ enum TestState {
         }
     }
 
-    mutating func nextPrompt() {
+    var nextState: TestState {
         switch self {
         case .done:
             fatalError("nextPrompt when already done")
         case .prompt(_):
-            self = .done
+            return .done
         case .shuffle(var substates, let substateIdx):
-            substates[substateIdx].nextPrompt()
+            substates[substateIdx] = substates[substateIdx].nextState
             if !substates[substateIdx].isDone {
-                self = .shuffle(substates: substates, substateIdx: substateIdx)
+                return .shuffle(substates: substates, substateIdx: substateIdx)
             } else if substateIdx + 1 == substates.count {
-                self = .done
+                return .done
             } else {
-                self = .shuffle(substates: substates, substateIdx: substateIdx + 1)
+                return .shuffle(substates: substates, substateIdx: substateIdx + 1)
             }
         }
     }
@@ -1247,7 +1249,6 @@ class Test {
     let question: Question
     let testSession: TestSession
     var result: TestResult? = nil
-    var finished: Bool = false
     var state: TestState
     var appendedStuff: Data? = nil
 
@@ -1298,9 +1299,6 @@ class Test {
         } else {
             ret = .noChangeOther
         }
-        if final { 
-            self.finished = true
-        }
         return ret
     }
     func markResult(outcome: TestOutcome?) throws -> SRSUpdate {
@@ -1347,7 +1345,8 @@ class Test {
     }
 
     // TODO: this function kind of sucks
-    func handlePromptResponse(prompt: Prompt, input: String, isLastOfItem: Bool) throws -> ResponseAcknowledgement {
+    // and passing `final` is an abstraction violation
+    func handlePromptResponse(prompt: Prompt, input: String, final: Bool) throws -> ResponseAcknowledgement {
         let outcome: TestOutcome
         let qual: Int
         var alternativesSections: [AlternativesSection]
@@ -1371,7 +1370,7 @@ class Test {
             alternativesSections = [AlternativesSection(kind: .meaningAlternatives, items: alternativeItems)]
         }
 
-        let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: self.state.isDone)
+        let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: final)
 
         switch self.question.testKind {
         case .meaningToReading, .flashcard:
@@ -1393,8 +1392,7 @@ class Test {
             outcome: outcome,
             qual: qual,
             alternativesSections: alternativesSections,
-            srsUpdate: srsUpdate,
-            isLastOfItem: isLastOfItem
+            srsUpdate: srsUpdate
         )
     }
 
@@ -1438,7 +1436,6 @@ struct ResponseAcknowledgement {
     let qual: Int
     let alternativesSections: [AlternativesSection]
     let srsUpdate: SRSUpdate
-    let isLastOfItem: Bool
 }
 
 enum SRSUpdate {
