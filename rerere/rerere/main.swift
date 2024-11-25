@@ -538,11 +538,11 @@ struct CLI {
 
     func formatItemName(_ item: Item) -> String {
         if item is Kanji {
-            return ANSI.purple(item.name) + " /k"
+            return ANSI.purple(item.name) + formatKindSuffix(item: item)
         } else if item is Flashcard {
-            return item.name + " /f"
+            return item.name + formatKindSuffix(item: item)
         } else {
-            return item.name
+            return item.name + formatKindSuffix(item: item)
         }
     }
     func formatItemReadings(_ normal: NormalItem, colorful: Bool) -> String {
@@ -567,6 +567,29 @@ struct CLI {
             return "\(name) \(backs)"
         }
         fatalError("unknown item kind \(item)")
+    }
+
+    func formatKindSuffix(item: Item) -> String {
+        if item is Kanji {
+            return " /k"
+        } else if item is Flashcard {
+            return " /f"
+        } else {
+            return ""
+        }
+    }
+
+    func formatPromptOutput(_ prompt: Prompt) -> String {
+        switch prompt.output {
+        case .meaning:
+            return formatItemMeanings(prompt.item as! NormalItem, colorful: false)
+        case .reading:
+            return formatItemReadings(prompt.item as! NormalItem, colorful: false)
+        case .flashcardFront:
+            return (prompt.item as! Flashcard).front
+        case .character:
+            return prompt.item.name
+        }
     }
 
     func formatAlternativesInner(_ items: [Item], label: String) -> String {
@@ -625,20 +648,19 @@ struct CLI {
         return back(text) + srsUpdate.cliLabel
     }
 
-    func formatPromptResponse(pr: PromptResponse) -> String {
-        let item = pr.question.item
-        var out = formatLabel(outcome: pr.outcome, qual: pr.qual, srsUpdate: pr.srsUpdate)
-        out += " " + formatItemName(item)
+    func formatResponseAcknowledgement(_ ra: ResponseAcknowledgement) -> String {
+        let item = ra.question.item
+        var out = formatLabel(outcome: ra.outcome, qual: ra.qual, srsUpdate: ra.srsUpdate)
         // should this be further abstracted?
-        switch pr.question.testKind {
+        switch ra.question.testKind {
         case .meaningToReading:
-            out += " " + formatItemReadings(item as! NormalItem, colorful: false)
+            out += " " + formatItemName(item) + " " + formatItemReadings(item as! NormalItem, colorful: false)
         case .readingToMeaning:
-            out += " " + formatItemMeanings(item as! NormalItem, colorful: true)
+            out += " " + formatItemName(item) + " " + formatItemMeanings(item as! NormalItem, colorful: true)
         case .characterToRM, .confusion, .flashcard:
             out += " " + formatItemFull(item, colorful: true)
         }
-        for section in pr.alternativesSections {
+        for section in ra.alternativesSections {
             let altOut = formatAlternativesSection(section)
             if !altOut.isEmpty {
                 out += "\n" + altOut
@@ -650,13 +672,12 @@ struct CLI {
     static let readingPrompt: String = ANSI.red("reading> ")
     static let meaningPrompt: String = ANSI.blue("meaning> ")
 
-    enum PromptInnerResponse {
+    enum PromptResponse {
         case answer(String)
         case bang(String)
     }
 
-    func promptInner(promptText: String, kana: Bool) throws -> PromptInnerResponse {
-        print("XXX self.testSession.save()")
+    func promptInner(promptText: String, kana: Bool) throws -> PromptResponse {
         while true {
             print(promptText)
             let args: [String]
@@ -675,19 +696,19 @@ struct CLI {
             return .answer(output)
         }
     }
-    func handleBang(_ input: String, curTest: Test, gotAnswerAlready: Bool) {
+    func handleBang(_ input: String, curTest: Test, gotAnswerAlready: Bool, lastTest: Test?) {
         switch input {
         case "!right":
-            handleChangeLast(outcome: .right, curTest: curTest, gotAnswerAlready: gotAnswerAlready)
+            handleChangeLast(outcome: .right, curTest: curTest, gotAnswerAlready: gotAnswerAlready, lastTest: lastTest)
         case "!wrong":
-            handleChangeLast(outcome: .wrong, curTest: curTest, gotAnswerAlready: gotAnswerAlready)
+            handleChangeLast(outcome: .wrong, curTest: curTest, gotAnswerAlready: gotAnswerAlready, lastTest: lastTest)
         case "!mu":
-            handleChangeLast(outcome: .mu, curTest: curTest, gotAnswerAlready: gotAnswerAlready)
+            handleChangeLast(outcome: .mu, curTest: curTest, gotAnswerAlready: gotAnswerAlready, lastTest: lastTest)
         default:
             print("?bang? \(input)")
         }
     }
-    func handleChangeLast(outcome: TestOutcome, curTest: Test, gotAnswerAlready: Bool) {
+    func handleChangeLast(outcome: TestOutcome, curTest: Test, gotAnswerAlready: Bool, lastTest: Test?) {
         let test: Test
         var outcome: TestOutcome? = outcome
         if gotAnswerAlready {
@@ -696,8 +717,7 @@ struct CLI {
             if outcome == .right { outcome = nil }
         } else {
             print("changing last test")
-            // TODO: refactor
-            guard let t = Subete.instance.lastAppendedTest else {
+            guard let t = lastTest else {
                 print("no last")
                 return
             }
@@ -708,6 +728,31 @@ struct CLI {
             print(srsUpdate.cliLabel)
         }
     }
+
+    func doOneTest(_ test: Test, lastTest: Test?) throws {
+        var gotAnswerAlready = false
+        while !test.finished {
+            test.testSession.save()
+            let prompt = test.nextPrompt()
+            let promptText = formatPromptOutput(prompt) + formatKindSuffix(item: prompt.item)
+            let resp = try promptInner(promptText: promptText, kana: prompt.expectedInput == .reading)
+            switch resp {
+            case .answer(let answerText):
+                let ra = try test.handlePromptResponse(prompt: prompt, input: answerText)
+                print(formatResponseAcknowledgement(ra))
+                gotAnswerAlready = true
+            case .bang(let bangText):
+                handleBang(bangText, curTest: test, gotAnswerAlready: gotAnswerAlready, lastTest: lastTest)
+            }
+        }
+
+    }
+
+    func doTestInSession(test: Test, lastTest: Test?, session: TestSession) throws {
+        print("[\(session.base.numDone) | \(session.numRemainingQuestions())]")
+        try doOneTest(test, lastTest: lastTest)
+    }
+
 
 }
 
@@ -1167,6 +1212,9 @@ class Test {
     }
 
     func removeFromLog() throws {
+        if Subete.instance.lastAppendedTest !== self {
+            throw MyError("removeFromLog out of order")
+        }
         let toRemove = self.appendedStuff!
         try Subete.instance.openLogTxt(write: true) { (fh: FileHandle) throws in
             let welp = MyError("log.txt did not end with what we just appended to it")
@@ -1229,14 +1277,14 @@ class Test {
     static func initialState(item: Item, testKind: TestKind) -> TestState {
         switch testKind {
         case .meaningToReading:
-            return .prompt(.reading(item as! NormalItem))
+            return .prompt(Prompt(item: item, output: .meaning, expectedInput: .reading))
         case .readingToMeaning:
-            return .prompt(.meaning(item as! NormalItem))
+            return .prompt(Prompt(item: item, output: .reading, expectedInput: .meaning))
         case .characterToRM:
             return .shuffle(
                 substates: [
-                    initialState(item: item, testKind: .meaningToReading),
-                    initialState(item: item, testKind: .readingToMeaning)
+                    .prompt(Prompt(item: item, output: .character, expectedInput: .meaning)),
+                    .prompt(Prompt(item: item, output: .character, expectedInput: .reading)),
                 ].shuffled(),
                 substateIdx: 0
             )
@@ -1248,7 +1296,7 @@ class Test {
                 substateIdx: 0
             )
         case .flashcard:
-            return .prompt(.flashcardBack(item as! Flashcard))
+            return .prompt(Prompt(item: item, output: .flashcardFront, expectedInput: .flashcardBack))
         }
     }
 
@@ -1257,7 +1305,7 @@ class Test {
     }
 
     // TODO: this function kind of sucks
-    func handlePromptResponse(prompt: Prompt, input: String) throws -> PromptResponse {
+    func handlePromptResponse(prompt: Prompt, input: String) throws -> ResponseAcknowledgement {
         let outcome: TestOutcome
         let qual: Int
         var alternativesSections: [AlternativesSection]
@@ -1269,7 +1317,7 @@ class Test {
             allowAlternatives = false
         }
         let alternativeItems: [Item]
-        switch prompt {
+        switch prompt.expectedInput {
         case .meaning:
             (outcome, qual, alternativeItems) = (self.question.item as! NormalItem).evaluateMeaningAnswer(input: input, allowAlternatives: allowAlternatives)
             alternativesSections = [AlternativesSection(kind: .meaningAlternatives, items: alternativeItems)]
@@ -1300,7 +1348,7 @@ class Test {
             }
         }
 
-        return PromptResponse(
+        return ResponseAcknowledgement(
             question: self.question,
             outcome: outcome,
             qual: qual,
@@ -1311,10 +1359,24 @@ class Test {
 
 }
 
-enum Prompt {
-    case meaning(NormalItem)
-    case reading(NormalItem)
-    case flashcardBack(Flashcard)
+enum PromptOutput {
+    case meaning
+    case reading
+    case flashcardFront
+    case character
+}
+
+enum PromptExpectedInput {
+    case meaning
+    case reading
+    case flashcardBack
+}
+
+
+struct Prompt {
+    let item: Item
+    let output: PromptOutput
+    let expectedInput: PromptExpectedInput
 }
 
 struct AlternativesSection {
@@ -1328,7 +1390,7 @@ struct AlternativesSection {
     let items: [Item]
 }
 
-struct PromptResponse {
+struct ResponseAcknowledgement {
     let question: Question
     let outcome: TestOutcome
     let qual: Int
@@ -1639,7 +1701,7 @@ struct TestOneCommand: ParsableCommand {
             randomMode: .all
         ))
         let test = Test(question: question, testSession: testSession)
-        try test.cliGo()
+        try CLI().doOneTest(test, lastTest: nil)
     }
 }
 
@@ -1855,18 +1917,6 @@ class TestSession {
         }
     }
 
-    func cliGoOne() throws -> Bool {
-        guard let question = self.randomQuestion() else {
-            return false
-        }
-        print("[\(self.base.numDone) | \(self.numRemainingQuestions())]")
-        //let testKind = item.availableTests.randomElement()!
-        let test = Test(question: question, testSession: self)
-        try test.cliGo()
-        self.base.numDone += 1
-        return true
-    }
-
     func save() {
         guard let saveURL = self.saveURL else { return }
         do {
@@ -1973,7 +2023,14 @@ struct Rerere: ParsableCommand {
         }
         runOrExit {
             sess.save()
-            while try sess.cliGoOne() {}
+            var lastTest: Test? = nil
+            let cli = CLI()
+            while let question = sess.randomQuestion() {
+                let test = Test(question: question, testSession: sess)
+                try cli.doTestInSession(test: test, lastTest: lastTest, session: sess)
+                sess.base.numDone += 1
+                lastTest = test
+            }
             sess.trashSave()
         }
     }
