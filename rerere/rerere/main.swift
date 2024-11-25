@@ -261,6 +261,8 @@ class Subete {
         self.allItems = self.allWords.items + self.allKanji.items + self.allConfusion.items
         print("loading srs")
         self.srs = time(count: 20) { self.createSRSFromLog() }
+        let x = Date(timeIntervalSince1970: 42)
+        print("\(x)")
         print("done loading")
         exit(0)
 
@@ -300,7 +302,7 @@ class Subete {
     func createSRSFromLog() -> SRS {
         let results = try! TestResult.readAllFromLog()
         let srs = SRS()
-        let srsEpoch = Date(timeIntervalSince1970: 1611966197)
+        let srsEpoch = 1611966197
         for result in results {
             guard let date = result.date else { continue }
             if date < srsEpoch { continue }
@@ -309,7 +311,7 @@ class Subete {
         for question in self.allQuestions {
             let _ = srs.info(question: question) // allow items with no results to stale
         }
-        srs.updateStales(date: Date())
+        srs.updateStales(date: Int(Date().timeIntervalSince1970))
         return srs
     }
     func handleBang(_ input: String, curTest: Test) {
@@ -960,11 +962,11 @@ struct TestResultParser : ~Copyable {
 
 struct TestResult {
     let question: Question
-    let date: Date?
+    let date: Int?
     let outcome: TestOutcome
     func getRecordLine() -> String {
         let components: [String] = [
-            String(Int(Date().timeIntervalSince1970)),
+            String(self.date!),
             self.question.testKind.rawValue,
             type(of: self.question.item).kind.rawValue,
             self.question.item.name,
@@ -977,11 +979,11 @@ struct TestResult {
         try UnsafeData.withData(line) { (unsafeLine: UnsafeData) -> TestResult? in
             let components = parser.splutBuffer.buf
             let componentsCount = unsafeLine.split(separator: 58 /* ':' */, into: components, includingSpaces: true)
-            var date: Date? = nil
+            var date: Int? = nil
             var i = 0
             if componentsCount > 4 {
-                date = Date(timeIntervalSince1970: Double(try unwrapOrThrow(parseNonnegativeInt(data: components[0]),
-                    err: MyError("invalid timestamp \(d2s(parser.splutBuffer[0]))"))))
+                date = try unwrapOrThrow(parseNonnegativeInt(data: components[0]),
+                    err: MyError("invalid timestamp \(d2s(parser.splutBuffer[0]))"))
                 i = 1
             }
             ensure(componentsCount >= i + 4)
@@ -1256,7 +1258,7 @@ class Test {
             Subete.instance.srs?.revert(forQuestion: self.question)
         }
         if let outcome = outcome {
-            self.result = TestResult(question: self.question, date: Date(), outcome: outcome)
+            self.result = TestResult(question: self.question, date: Int(Date().timeIntervalSince1970), outcome: outcome)
             try self.addToLog()
             return Subete.instance.srs!.update(forResult: self.result!)
         } else {
@@ -1298,7 +1300,7 @@ enum SRSUpdate {
 
 class SRS {
     enum ItemInfo {
-        case active((lastSeen: Date, points: Double, urgentRetest: Bool))
+        case active((lastSeen: Int, points: Double, urgentRetest: Bool))
         case burned
 
         var nextTestDays: Double? {
@@ -1313,32 +1315,32 @@ class SRS {
                     return nil
             }
         }
-        var nextTestDate: Date? {
+        var nextTestDate: Int? {
             //print("points=\(self.points) nextTestDays=\(self.nextTestDays)")
             switch self {
                 case let .active(info):
-                    return info.lastSeen + self.nextTestDays! * 60 * 60 * 24
+                    return info.lastSeen + Int(self.nextTestDays! * 60 * 60 * 24)
                 case .burned:
                     return nil
             }
         }
-        var timePastDue: TimeInterval? {
+        var timePastDue: Int? {
             guard let next = self.nextTestDate else { return nil }
-            let now = Date()
-            return now >= next ? now.timeIntervalSince(next) : nil
+            let now = Int(Date().timeIntervalSince1970)
+            return now >= next ? (now - next) : nil
         }
-        mutating func updateIfStale(date: Date) {
+        mutating func updateIfStale(date: Int) {
             if case let .active(info) = self {
-                if date.timeIntervalSince(info.lastSeen) > 60 * 60 * 24 * 60 {
+                if (date - info.lastSeen) > 60 * 60 * 24 * 60 {
                     //print("staling \(self)")
                     self = .burned
                 }
             }
         }
         mutating func update(forResult result: TestResult) -> SRSUpdate {
-            let date = result.date ?? Date(timeIntervalSince1970: 0)
+            let date = result.date ?? 0
 
-            if let birthday = result.question.item.birthday, date < birthday {
+            if let birthday = result.question.item.birthday, TimeInterval(date) < birthday.timeIntervalSince1970 {
                 return .anachronism
             }
             self.updateIfStale(date: date)
@@ -1346,7 +1348,7 @@ class SRS {
             
             switch self {
                 case .active(var info):
-                    let sinceLast = date.timeIntervalSince(info.lastSeen)
+                    let sinceLast = date - info.lastSeen
                     info.lastSeen = date
                     //print("sinceLast=\(sinceLast)")
                     var update: SRSUpdate? = nil
@@ -1357,7 +1359,7 @@ class SRS {
                         case .mu:
                             update = .noChangeOther
                         case .right:
-                            info.points += max(sinceLast / (60*60*24), 1.0)
+                            info.points += max(Double(sinceLast) / (60*60*24), 1.0)
                             info.urgentRetest = false
                             if info.points >= 60 {
                                 update = .burned
@@ -1389,7 +1391,7 @@ class SRS {
         itemInfo[result.question] = info
         return srsUpdate
     }
-    func updateStales(date: Date) {
+    func updateStales(date: Int) {
         for (item, var info) in itemInfo {
             info.updateIfStale(date: date)
             itemInfo[item] = info
@@ -1411,7 +1413,7 @@ class SRS {
     }
     private func defaultInfo(question: Question) -> ItemInfo {
         if let birthday = question.item.birthday {
-            return .active((lastSeen: min(birthday, startupDate), points: 0, urgentRetest: false))
+            return .active((lastSeen: Int(min(birthday, startupDate).timeIntervalSince1970), points: 0, urgentRetest: false))
         } else {
             return .burned
         }
@@ -1424,7 +1426,7 @@ func testSRS() {
     var info: SRS.ItemInfo = .burned
     let _ = info.update(
         forResult: TestResult(question: question,
-                              date: Date(timeIntervalSince1970: 0),
+                              date: 0,
                               outcome: .wrong))
     for i in 0... {
         let srsUpdate = info.update(
@@ -1516,16 +1518,16 @@ struct ForecastCommand: ParsableCommand {
     func run() {
         let _ = Subete()
         let srs = Subete.instance.srs!
-        let now = Date()
-        let srsItems: [(nextTestDate: Date, question: Question)] = Subete.instance.allQuestions.compactMap { (question) in
+        let now = Date().timeIntervalSince1970
+        let srsItems: [(nextTestDate: Int, question: Question)] = Subete.instance.allQuestions.compactMap { (question) in
             guard let nextTestDate = srs.info(question: question).nextTestDate else { return nil }
             return (nextTestDate: nextTestDate, question: question)
         }
         let maxDays = 20
         let secondsPerDay: Double = 60 * 60 * 24
-        let byDay: [(key: Int, value: [(nextTestDate: Date, question: Question)])] =
-            Dictionary(grouping: srsItems, by: { (val: (nextTestDate: Date, question: Question)) -> Int in
-                min(maxDays, max(0, Int(ceil(val.nextTestDate.timeIntervalSince(now) / secondsPerDay))))
+        let byDay: [(key: Int, value: [(nextTestDate: Int, question: Question)])] =
+            Dictionary(grouping: srsItems, by: { (val: (nextTestDate: Int, question: Question)) -> Int in
+                min(maxDays, max(0, Int(ceil((TimeInterval(val.nextTestDate) - now) / secondsPerDay))))
             }).sorted { $0.key < $1.key }
         var total = 0
         for (days, items) in byDay {
@@ -1847,8 +1849,8 @@ struct Rerere: ParsableCommand {
                 return (minQuestions: _minQuestions, maxQuestions: _maxQuestions)
         }
     }
-    func gatherSRSQuestions() -> [(nextTestDate: Date, question: Question)] {
-        let now = Date()
+    func gatherSRSQuestions() -> [(nextTestDate: Int, question: Question)] {
+        let now = Int(Date().timeIntervalSince1970)
         let srs = Subete.instance.srs!
         return Subete.instance.allQuestions.compactMap { (question) in
             guard let nextTestDate = srs.info(question: question).nextTestDate else { return nil }
