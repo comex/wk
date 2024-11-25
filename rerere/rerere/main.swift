@@ -402,9 +402,6 @@ class Item: Hashable, Equatable, Comparable {
     class var kind: ItemKind {
         fatalError("must override kind on \(self)")
     }
-    func cliPrint(colorful: Bool) {
-        fatalError("must override cliPrint on \(self)")
-    }
     var availableTests: [TestKind] {
         fatalError("must override availableTests on \(self)")
     }
@@ -552,36 +549,134 @@ func evaluateMeaningAnswerInner(normalizedInput: String, meanings: [Ing], levens
     return bestQual
 }
 
-// TODO: CLI class
-func cliIngs(ings: [Ing], colorful: Bool, tildify: (String) -> String) -> String {
-    var prev: Ing? = nil
-    var out: String = ""
-    for ing in (ings.sorted { $0.type < $1.type }) {
-        if ing.type != .whitelist && ing.type != .blacklist {
-            let separator = prev == nil ? "" :
-                            prev!.type == ing.type ? ", " :
-                            " >> "
-            var colored = ing.text
-            if colorful { colored = (ing.type == .primary ? ANSI.red : ANSI.dred)(colored) }
-            colored = tildify(colored)
-            out += separator + colored
+struct CLI {
+    func formatIngs(ings: [Ing], colorful: Bool, tildify: (String) -> String) -> String {
+        var prev: Ing? = nil
+        var out: String = ""
+        for ing in (ings.sorted { $0.type < $1.type }) {
+            if ing.type != .whitelist && ing.type != .blacklist {
+                let separator = prev == nil ? "" :
+                                prev!.type == ing.type ? ", " :
+                                " >> "
+                var colored = ing.text
+                if colorful { colored = (ing.type == .primary ? ANSI.red : ANSI.dred)(colored) }
+                colored = tildify(colored)
+                out += separator + colored
+            }
+            prev = ing
         }
-        prev = ing
+        return out
     }
-    return out
-}
 
-func cliPrintAlternatives(_ items: [Item], label: String) {
-    if items.isEmpty { return }
-    let s = "Entered \(label) matches"
-    if items.count > 8 {
-        print(" (\(s) \(items.count) items)")
-        return
-    } else {
-        print(" \(s):")
-        for item in items {
-            item.cliPrint(colorful: false)
+    func formatItemName(_ item: Item) -> String {
+        if item is Kanji {
+            return ANSI.purple(item.name) + " /k"
+        } else if item is Flashcard {
+            return item.name + " /f"
+        } else {
+            return item.name
         }
+    }
+    func formatItemReadings(_ normal: NormalItem, colorful: Bool) -> String {
+        return formatIngs(normal.readings, colorful: colorful, tildify: normal.tildify)
+    }
+    func formatItemMeanings(_ normal: NormalItem, colorful: Bool) -> String {
+        return formatIngs(normal.meanings, colorful: colorful, tildify: normal.tildify)
+    }
+    func formatItemBacks(_ fc: Flashcard, colorful: Bool) -> String {
+        return formatIngs(fc.backs, colorful: colorful, tildify: { $0 })
+    }
+
+    func formatItemFull(_ item: Item, colorful: Bool) -> String {
+        let name = formatItemName(item)
+        if let normal = item as? NormalItem {
+            let readings = formatItemReadings(normal, colorful: colorful)
+            let meanings = formatItemMeanings(normal, colorful: false)
+            return "\(name) \(readings) \(meanings)"
+        }
+        if let fc = item as? Flashcard {
+            let backs = formatItemBacks(colorful: colorful)
+            return "\(name) \(backs)"
+        }
+        fatalError("unknown item kind \(item)")
+    }
+
+    func formatAlternativesInner(_ items: [Item], label: String) -> String {
+        if items.isEmpty { return }
+        let initial = "Entered \(label) matches"
+        if items.count > 8 {
+            return " (\(initial) \(items.count) items)")
+        } else {
+            var ret = " \(initial):"
+            for item in items {
+                ret += "\n" + formatItemFull(item, colorful: false)
+            }
+            return ret
+        }
+    }
+    func formatAlternativesSection(_ sect: AlternativesSection) -> String {
+        switch sect {
+            case .meaningAlternatives(let items):
+                return formatAlternativesInner(items, label: "kana")
+            case .readingAlternatives(let items):
+                return formatAlternativesInner(items, label: "meaning")
+            case .sameReading(let items):
+                if items.isEmpty { return }
+                if items.count > 6 { return }
+                var ret = " Same reading:"
+                for item in items {
+                    ret += "\n" + formatItem(item, colorful: false)
+                }
+                return ret
+            case .similarMeaning(let items):
+                if items.isEmpty { return }
+                var ret = " Similar meaning:"
+                for item in items {
+                    ret += "\n" + formatItem(item, colorful: false)
+                }
+                return ret
+        }
+    }
+    func formatLabel(outcome: TestOutcome, qual: Int, srsUpdate: SRSUpdate) -> String {
+        let text: String
+        var back: (String) -> String
+        switch outcome {
+        case .wrong:
+            (text, back) = ("NOPE", ANSI.rback)
+        case .mu:
+            (text, back) = ("MU", ANSI.cback)
+        case .right:
+            (text, back) = ("YEP" + (qual == 1 ? "?" : ""), ANSI.yback)
+        }
+        // THIS SUCKS
+        if self.result?.outcome == .wrong {
+            back = ANSI.rback
+        } else if self.result?.outcome == .mu {
+            back = ANSI.cback
+        }
+        return back(text) + srsUpdate.cliLabel
+    }
+
+    func formatPromptResponse(pr: PromptResponse) -> String {
+        let item = pr.question.item
+        var out = formatLabel(outcome: pr.outcome, qual: pr.qual, srsUpdate: pr.srsUpdate)
+        out += " " + formatItemName(item)
+        // should this be further abstracted?
+        switch pr.question.testKind {
+        case .meaningToReading:
+            out += " " + formatItemReadings(item as! NormalItem, colorful: false)
+        case .readingToMeaning:
+            out += " " + formatItemMeanings(item as! NormalItem, colorful: true)
+        case .characterToRM, .confusion, .flashcard:
+            out += " " + formatItemFull(item, colorful: true)
+        }
+        for section in pr.alternativesSections {
+            let altOut = formatAlternativesSection(section)
+            if !altOut.isEmpty {
+                out += "\n" + altOut
+            }
+        }
+        return out
     }
 }
 
@@ -648,14 +743,6 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable {
         set.remove(self)
         return Array(set).sorted()
     }
-    func cliPrintSimilarMeaning() {
-        let items = similarMeaning()
-        if items.isEmpty { return }
-        print(" Similar meaning:")
-        for item in items {
-            item.cliPrint(colorful: false)
-        }
-    }
     func sameReading() -> [Item] {
         var set: Set<Item> = []
         for reading in self.readings {
@@ -663,15 +750,6 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable {
         }
         set.remove(self)
         return Array(set).sorted()
-    }
-    func cliPrintSameReadingIfFew() {
-        let items = sameReading()
-        if items.isEmpty { return }
-        if items.count > 6 { return }
-        print(" Same reading:")
-        for item in items {
-            item.cliPrint(colorful: false)
-        }
     }
 
     func evaluateReadingAnswerInner(normalizedInput: String) -> Int {
@@ -722,16 +800,6 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable {
         }
         return (outcome, qual, alternatives)
     }
-    func cliReadings(colorful: Bool) -> String {
-        return cliIngs(ings: self.readings, colorful: colorful, tildify: self.tildify)
-    }
-    func cliMeanings(colorful: Bool) -> String {
-        // yes, ignore colorful for now
-        return cliIngs(ings: self.meanings, colorful: false, tildify: self.tildify)
-    }
-    override func cliPrint(colorful: Bool) {
-        print("\(self.cliName) \(self.cliReadings(colorful: colorful)) \(self.cliMeanings(colorful: colorful))")
-    }
     func tildify(_ prompt: String) -> String {
         if self.character.starts(with: "〜") {
             return "〜" + prompt
@@ -743,23 +811,18 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable {
         }
     }
     override var availableTests: [TestKind] { return [.characterToRM, .meaningToReading, .readingToMeaning] }
-    var cliName: String {
-        fatalError("must override cliName on \(self)")
-    }
 }
 final class Word : NormalItem, CustomStringConvertible {
     var description: String {
         return "<Word \(self.character)>"
     }
     override class var kind: ItemKind { return .word }
-    override var cliName: String { return String(self.name) }
 }
 final class Kanji : NormalItem, CustomStringConvertible {
     var description: String {
         return "<Kanji \(self.character)>"
     }
     override class var kind: ItemKind { return .kanji }
-    override var cliName: String { return ANSI.purple(String(self.name) + " /k") }
 }
 final class Confusion: Item, CustomStringConvertible {
     let characters: [String]
@@ -823,12 +886,6 @@ final class Flashcard: Item, CustomStringConvertible, Decodable {
     var description: String {
         return "<Flashcard \(self.front)>"
     }
-    func cliPrompt(colorful: Bool) -> String {
-        return "\(front) /f"
-    }
-    override func cliPrint(colorful: Bool) {
-        print("\(self.front) \(self.cliBacks(colorful: colorful))")
-    }
     func evaluateBackAnswer(input: String, allowAlternatives: Bool) -> (outcome: TestOutcome, qual: Int, alternatives: [Item]) {
         let normalizedInput = normalizeMeaningTrimmed(trim(input))
         var levenshtein = Levenshtein()
@@ -838,9 +895,6 @@ final class Flashcard: Item, CustomStringConvertible, Decodable {
         let outcome: TestOutcome = qual > 0 ? .right : .wrong
         let alternatives = meaningAlternatives(meaning: normalizedInput)
         return (outcome, qual, alternatives)
-    }
-    func cliBacks(colorful: Bool) -> String {
-        return cliIngs(ings: self.backs, colorful: colorful, tildify: { $0 })
     }
     override class var kind: ItemKind { return .flashcard }
     override var availableTests: [TestKind] { return [.flashcard] }
@@ -1047,8 +1101,8 @@ class Test {
     let question: Question
     let testSession: TestSession
     var result: TestResult? = nil
+    var finished: Bool = false
     var appendedStuff: Data? = nil
-    var didCliRead: Bool = false
     init(question: Question, testSession: TestSession) {
         self.question = question
         self.testSession = testSession
@@ -1095,11 +1149,16 @@ class Test {
         }
     }
     func maybeMarkResult(outcome: TestOutcome, final: Bool) throws -> SRSUpdate {
+        let ret
         if outcome == .wrong || (self.result == nil && final) {
-            return try self.markResult(outcome: outcome)
+            ret = try self.markResult(outcome: outcome)
         } else {
-            return .noChangeOther
+            ret = .noChangeOther
         }
+        if final { 
+            self.finished = true
+        }
+        return ret
     }
     func markResult(outcome: TestOutcome?) throws -> SRSUpdate {
         self.testSession.setQuestionCompleteness(question: self.question, complete: outcome == .some(.right))
@@ -1122,40 +1181,28 @@ class Test {
     }
 }
 
-enum SemColor {
-    case normal
-    case kanjiMeaningPrompt
-    case otherMeaningPrompt
+enum Prompt {
+    case meaningToReading
+    case readingToMeaning
 }
 
-enum SemColorAttribute : AttributedStringKey {
-    typealias Value = SemColor
-    static let name = "SemColor"
-}
-
-struct SemAttributes : AttributeScope {
-    let color: SemColorAttribute
-}
-
-extension AttributeDynamicLookup {
-    subscript<T: AttributedStringKey>(dynamicMember keyPath: KeyPath<SemAttributes, T>) -> T {
-        return self[T.self]
+struct AlternativesSection {
+    enum Kind {
+        case meaningAlternatives
+        case readingAlternatives
+        case sameReading
+        case similarMeaning
     }
-}
-
-func color(_ string: String, _ color: SemColor) -> AttributedString {
-    return AttributedString(string, attributes: SemAttributes(color: color)))
-}
-
-struct Prompt {
-    let text: AttributedString
-    let wantKana: true
+    let kind: Kind
+    let items: [Item]
 }
 
 struct PromptResponse {
+    let question: Question
     let outcome: TestOutcome
     let qual: Int
-    let currentItem
+    let alternativesSections: [AlternativesSection]
+    let srsUpdate: SRSUpdate
 }
 
 /*
@@ -1167,36 +1214,43 @@ struct PromptResponse {
  */
 class MeaningToReadingTest: Test {
     override func nextPrompt() -> Prompt {
-        var text = color(item.cliMeanings(colorful: false),
-                         item is Kanji ? .kanjiMeaningPrompt : .otherMeaningPrompt)
-        if item is Kanji {
-            text += " /k"
-        }
-        return Prompt(text: text, wantKana: true)
+        return .meaningToReading(self.question.item)
     }
     override func handlePromptResponse(response: String) {
-            let (outcome, qual, alternatives) = item.evaluateReadingAnswer(input: response, allowAlternatives: true)
-            let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: true)
-            var out: String = cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate)
-            out += " " + item.cliName + " " + item.cliReadings(colorful: false)
-            print(out)
-            cliPrintAlternatives(alternatives, label: "kana")
-            item.cliPrintSimilarMeaning()
-        
-            if outcome == .right { break }
-        }
+        let (outcome, qual, alternatives) = self.question.item.evaluateReadingAnswer(input: response, allowAlternatives: true)
+        let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: true)
+        return PromptResponse(
+            question: self.question,
+            outcome: outcome,
+            qual: qual,
+            alternativesSections: [AlternativesSection(kind: .readingAlternatives, items: alternatives)],
+            srsUpdate: srsUpdate
+        )
+    }
+}
+
+class ReadingToMeaningTest: Test {
+    override func nextPrompt() -> Prompt {
+        return .readingToMeaning(self.question.item)
+    }
+    override func handlePromptResponse(input: String) {
+        let (outcome, qual, alternatives) = self.question.item.evaluateMeaningAnswer(input: input, allowAlternatives: true)
+        let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: true)
+        return PromptResponse(
+            question: self.question,
+            outcome: outcome,
+            qual: qual,
+            alternativesSections: [AlternativesSection(kind: .meaningAlternatives, items: alternatives)],
+            srsUpdate: srsUpdate
+        )
     }
 
 }
 
-struct ReadingToMeaningPrompt: Prompt {
-}
-class ReadingToMeaningTest: Test {
-
-}
 class CharacterToRMTest: Test {
 
 }
+
 class ConfusionTest: Test {
 
 }
@@ -1204,63 +1258,7 @@ class FlashcardTest: Test {
 
 }
 /*
-    func cliGo() throws {
-        let item = self.question.item
-        switch self.question.testKind {
-        case .meaningToReading:
-            try self.doCLIMeaningToReading(item: item as! NormalItem)
-        case .readingToMeaning:
-            try self.doCLIReadingToMeaning(item: item as! NormalItem)
-        case .characterToRM:
-            try self.doCLICharacterToRM(item: item as! NormalItem, final: true)
-        case .confusion:
-            try self.doCLIConfusion(item: item as! Confusion)
-        case .flashcard:
-            try self.doCLIFlashcard(item: item as! Flashcard)
-        }
-        if self.result == nil { fatalError("should have marked result") }
-    }
-    func cliLabel(outcome: TestOutcome, qual: Int, srsUpdate: SRSUpdate) -> String {
-        let text: String
-        var back: (String) -> String
-        switch outcome {
-        case .wrong:
-            (text, back) = ("NOPE", ANSI.rback)
-        case .mu:
-            (text, back) = ("MU", ANSI.cback)
-        case .right:
-            (text, back) = ("YEP" + (qual == 1 ? "?" : ""), ANSI.yback)
-        }
-        // THIS SUCKS
-        if self.result?.outcome == .wrong {
-            back = ANSI.rback
-        } else if self.result?.outcome == .mu {
-            back = ANSI.cback
-        }
-        return back(text) + srsUpdate.cliLabel
-    }
 
-
-    func doCLIReadingToMeaning(item: NormalItem) throws {
-        var prompt = item.cliReadings(colorful: false)
-        if item is Kanji {
-            prompt += " /k"
-        }
-        while true {
-            let k: String = try cliRead(prompt: prompt, kana: false)
-            let (outcome, qual, alternatives) = item.evaluateMeaningAnswer(input: k, allowAlternatives: true)
-            let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: true)
-            print(cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate))
-            item.cliPrint(colorful: true)
-            cliPrintAlternatives(alternatives, label: "meaning")
-            //if outcome != .right {
-                item.cliPrintSameReadingIfFew()
-            //}
-            if outcome == .right {
-                break
-            }
-        }
-    }
     func doCLICharacterToRM(item: NormalItem, final: Bool) throws {
         let prompt = item.cliName
         enum Mode { case reading, meaning }
@@ -1336,8 +1334,6 @@ class FlashcardTest: Test {
                 Subete.instance.handleBang(output, curTest: self)
                 continue
             }
-            // TODO: Python checks for doublewidth here
-            self.didCliRead = true
             return output
         }
     }
