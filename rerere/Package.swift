@@ -21,6 +21,7 @@ let package = Package(
             path: "rerere/",
             sources: [
                 "main.swift",
+                "buffers.swift",
                 "Levenshtein.swift",
             ],
             cSettings: [

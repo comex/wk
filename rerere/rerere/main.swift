@@ -79,7 +79,9 @@ func trim(_ s: Substring) -> String {
 func d2s(_ d: Data) -> String {
     String(data: d, encoding: .utf8)!
 }
-
+func d2s(_ ud: UnsafeData) -> String {
+    ud.ubp.withMemoryRebound(to: UInt8.self) { String(bytes: $0, encoding: .utf8)! }
+}
 func commaSplitNoTrim(_ s: String) -> [String] {
     return s.split(separator: ",").map { String($0) }
 }
@@ -355,14 +357,14 @@ struct DataToEnumCache<T>
     where T: CaseIterable & RawRepresentable,
           T.RawValue == String
 {
-    let map: [Data: T]
+    let map: [MaybeOwnedData: T]
     init() {
-        self.map = Dictionary(uniqueKeysWithValues: T.allCases.map { (t: T) -> (Data, T) in
-            (Data(t.rawValue.utf8), t)
+        self.map = Dictionary(uniqueKeysWithValues: T.allCases.map { (t: T) -> (MaybeOwnedData, T) in
+            (MaybeOwnedData.owned(Data(t.rawValue.utf8)), t)
         })
     }
-    subscript(d: Data) -> T? {
-        self.map[d]
+    subscript(d: UnsafeData) -> T? {
+        self.map[.unowned(d)]
     }
 }
     
@@ -934,75 +936,26 @@ enum TestOutcome: String, CaseIterable {
     case mu
 }
 
-extension Data {
-    func splut(separator: Int, includingSpaces: Bool = false) -> [Data] {
-        var res: [Data] = []
-        let start = self.startIndex
-        let end = self.endIndex
-        var i = start
-        var lastStart = i
-        while true {
-            if i == end || self[i] == separator {
-                var lastEnd = i
-                if includingSpaces {
-                    while true {
-                        if lastEnd == lastStart { break }
-                        let prev = lastEnd - 1
-                        if !isSpace(self[prev]) { break }
-                        lastEnd = prev
-                    }
-                    if i != end {
-                        while true {
-                            let next = i + 1
-                            if next == end { break }
-                            if !isSpace(self[next]) { break }
-                            i = next
-                        }
-                    }
-                }
-                res.append(self[lastStart..<lastEnd])
-                if i == end { return res }
-                lastStart = i + 1
-            }
-            i += 1
-        }
-        return res
-    }
-}
-func parseInt(data: Data) -> Int? {
-    var i = data.startIndex
-    let end = data.endIndex
-    var ret: Int = 0
-    while i < end {
-        let c = data[i]
-        if !(c >= 0x30 && c <= 0x39) {
-            return nil
-        }
-        ret = (ret * 10) + Int(c - 0x30)
-        i += 1
-    }
-    return ret
-}
 
 struct RetiredYaml: Decodable {
     let retired: [ItemKind: [String]]
     let replace: [ItemKind: [String: String]]
 }
 
-struct TestResultParser {
+struct TestResultParser : ~Copyable {
     let itemKindDataToEnumCache: DataToEnumCache<ItemKind> = DataToEnumCache()
     let testKindDataToEnumCache: DataToEnumCache<TestKind> = DataToEnumCache()
     let testOutcomeDataToEnumCache: DataToEnumCache<TestOutcome> = DataToEnumCache()
-    let retiredByName: [ItemKind: Set<Data>] = Subete.instance.retired.mapValues { (stringList) in
-        Set(stringList.map { Data($0.utf8) })
+    let retiredByName: [ItemKind: Set<MaybeOwnedData>] = Subete.instance.retired.mapValues { (stringList) in
+        Set(stringList.map { MaybeOwnedData.owned(Data($0.utf8)) })
     }
-    let itemsByName: [ItemKind: [Data: Item]] = Dictionary(uniqueKeysWithValues: ItemKind.allCases.map { (itemKind) in
+    let itemsByName: [ItemKind: [MaybeOwnedData: Item]] = Dictionary(uniqueKeysWithValues: ItemKind.allCases.map { (itemKind) in
         let itemList = Subete.instance.allByKind(itemKind)
         return (itemKind, Dictionary(uniqueKeysWithValues: itemList.names.map {
-            (Data($0.utf8), itemList.findByName($0)!)
+            (MaybeOwnedData.owned(Data($0.utf8)), itemList.findByName($0)!)
         }))
     })
-    
+    let splutBuffer: StableArray<UnsafeData> = StableArray(repeating: UnsafeData(), count: 8)
 }
 
 struct TestResult {
@@ -1021,45 +974,48 @@ struct TestResult {
     }
 
     static func parse(line: Data, parser: inout TestResultParser) throws -> TestResult? {
-        let components: [Data] = line.splut(separator: 58 /* ':' */, includingSpaces: true)
-        var date: Date? = nil
-        var i = 0
-        if components.count > 4 {
-            date = Date(timeIntervalSince1970: Double(try unwrapOrThrow(parseInt(data: components[0]),
-                err: MyError("invalid timestamp \(d2s(components[0]))"))))
-            i = 1
-        }
-        ensure(components.count >= i + 4)
-        if components.count > i + 4 {
-            warn("extra components")
-        }
-        
-        let testKindData = components[i]
-        let itemKindData = components[i+1]
-        let nameData = components[i+2]
-        let outcomeData = components[i+3]
-        
-        // TODO: rawValue with substring?
-        let itemKind = try unwrapOrThrow(parser.itemKindDataToEnumCache[itemKindData],
-                                     err: MyError("invalid item kind \(d2s(itemKindData))"))
-        guard let item = parser.itemsByName[itemKind]?[nameData] else {
-            if parser.retiredByName[itemKind]?.contains(nameData) == .some(true) {
-                return nil
+        try UnsafeData.withData(line) { (unsafeLine: UnsafeData) -> TestResult? in
+            let components = parser.splutBuffer.buf
+            let componentsCount = unsafeLine.split(separator: 58 /* ':' */, into: components, includingSpaces: true)
+            var date: Date? = nil
+            var i = 0
+            if componentsCount > 4 {
+                date = Date(timeIntervalSince1970: Double(try unwrapOrThrow(parseNonnegativeInt(data: components[0]),
+                    err: MyError("invalid timestamp \(d2s(parser.splutBuffer[0]))"))))
+                i = 1
             }
-            throw MyError("no such item kind \(d2s(itemKindData)) name \(d2s(nameData))")
-        }
+            ensure(componentsCount >= i + 4)
+            if componentsCount > i + 4 {
+                warn("extra components")
+            }
+            
+            let testKindData = components[i]
+            let itemKindData = components[i+1]
+            let nameData = components[i+2]
+            let outcomeData = components[i+3]
+            
+            // TODO: rawValue with substring?
+            let itemKind = try unwrapOrThrow(parser.itemKindDataToEnumCache[itemKindData],
+                                         err: MyError("invalid item kind \(d2s(itemKindData))"))
+            guard let item = parser.itemsByName[itemKind]?[.unowned(nameData)] else {
+                if parser.retiredByName[itemKind]?.contains(.unowned(nameData)) == .some(true) {
+                    return nil
+                }
+                throw MyError("no such item kind \(d2s(itemKindData)) name \(d2s(nameData))")
+            }
 
-        let question = Question(
-            item: item,
-            testKind: try unwrapOrThrow(parser.testKindDataToEnumCache[testKindData],
-                                    err: MyError("invalid test kind \(d2s(testKindData))"))
-        )
-        return TestResult(
-            question: question,
-            date: date,
-            outcome: try unwrapOrThrow(parser.testOutcomeDataToEnumCache[outcomeData],
-                                   err: MyError("invalid outcome kind \(d2s(outcomeData))"))
-        )
+            let question = Question(
+                item: item,
+                testKind: try unwrapOrThrow(parser.testKindDataToEnumCache[testKindData],
+                                        err: MyError("invalid test kind \(d2s(testKindData))"))
+            )
+            return TestResult(
+                question: question,
+                date: date,
+                outcome: try unwrapOrThrow(parser.testOutcomeDataToEnumCache[outcomeData],
+                                       err: MyError("invalid outcome kind \(d2s(outcomeData))"))
+            )
+        }
     }
     static func readAllFromLog() throws -> [TestResult] {
         let data = try Subete.instance.openLogTxt(write: false) { (fh: FileHandle) in fh.readDataToEndOfFile() }
