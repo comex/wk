@@ -29,8 +29,8 @@ func time<T>(count: Int, block: () -> T) -> T {
     let a = CFAbsoluteTimeGetCurrent()
     var t: T?
     for _ in 0..<count {
-		t = block()
-		blackBox(t)
+        t = block()
+        blackBox(t)
     }
     let b = CFAbsoluteTimeGetCurrent()
     print((b - a) / Double(count))
@@ -77,7 +77,7 @@ func trim(_ s: Substring) -> String {
   return trim(String(s))
 }
 func d2s(_ d: Data) -> String {
-	String(data: d, encoding: .utf8)!
+    String(data: d, encoding: .utf8)!
 }
 
 func commaSplitNoTrim(_ s: String) -> [String] {
@@ -258,8 +258,9 @@ class Subete {
         self.allConfusion = ItemList(allKanjiConfusion + allWordConfusion)
         self.allItems = self.allWords.items + self.allKanji.items + self.allConfusion.items
         print("loading srs")
-		self.srs = time(count: 2000) { self.createSRSFromLog() }
+        self.srs = time(count: 20) { self.createSRSFromLog() }
         print("done loading")
+        exit(0)
 
     }
     func allByKind(_ kind: ItemKind) -> ItemListProtocol {
@@ -345,19 +346,26 @@ class Subete {
         return allItems.flatMap { $0.myQuestions }
     }
 }
-	
-func initWithRawValueData<T: CodingKeyRepresentable>(data: Data, type: T.Type) -> T? {
-	static let map: [Data: T] = {
-		var m: [Data: T] = [:]
-		return m
-	}()
-	return map[data]
-}
 
-enum ItemKind: String, ExpressibleByArgument, Codable, CodingKeyRepresentable, InitWithRawValueData {
+enum ItemKind: String, ExpressibleByArgument, Codable, CodingKeyRepresentable, CaseIterable {
     case word, kanji, confusion, flashcard
 }
 
+struct DataToEnumCache<T>
+    where T: CaseIterable & RawRepresentable,
+          T.RawValue == String
+{
+    let map: [Data: T]
+    init() {
+        self.map = Dictionary(uniqueKeysWithValues: T.allCases.map { (t: T) -> (Data, T) in
+            (Data(t.rawValue.utf8), t)
+        })
+    }
+    subscript(d: Data) -> T? {
+        self.map[d]
+    }
+}
+    
 class Item: Hashable, Equatable, Comparable {
     let name: String
     let birthday: Date?
@@ -842,6 +850,7 @@ protocol ItemListProtocol {
     func findByName(_ name: String) -> Item?
     func findByReading(_ reading: String) -> [Item]
     func findByMeaning(_ meaning: String) -> [Item]
+    var names: [String] { get }
     var vagueItems: [Item] { get }
 }
 class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
@@ -900,6 +909,9 @@ class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
     func findByMeaning(_ meaning: String) -> [Item] {
         return self.byMeaning![meaning] ?? []
     }
+    var names: [String] {
+        return Array(self.byName.keys)
+    }
     var vagueItems: [Item] {
         return self.items
     }
@@ -908,7 +920,7 @@ class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
     }
 }
 
-enum TestKind: String, ExpressibleByArgument, Codable, CodingKeyRepresentable {
+enum TestKind: String, ExpressibleByArgument, Codable, CodingKeyRepresentable, CaseIterable {
     case meaningToReading = "m2r"
     case readingToMeaning = "r2m"
     case characterToRM = "c2"
@@ -916,7 +928,7 @@ enum TestKind: String, ExpressibleByArgument, Codable, CodingKeyRepresentable {
     case flashcard = "fc"
 }
 
-enum TestOutcome: String {
+enum TestOutcome: String, CaseIterable {
     case right
     case wrong
     case mu
@@ -958,24 +970,41 @@ extension Data {
     }
 }
 func parseInt(data: Data) -> Int? {
-	var i = data.startIndex
-	let end = data.endIndex
-	var ret: Int = 0
-	while i < end {
-		let c = data[i]
-		if !(c >= 0x30 && c <= 0x39) {
-			return nil
-		}
-		ret = (ret * 10) + Int(c - 0x30)
-		i += 1
-	}
-	return ret
+    var i = data.startIndex
+    let end = data.endIndex
+    var ret: Int = 0
+    while i < end {
+        let c = data[i]
+        if !(c >= 0x30 && c <= 0x39) {
+            return nil
+        }
+        ret = (ret * 10) + Int(c - 0x30)
+        i += 1
+    }
+    return ret
 }
 
 struct RetiredYaml: Decodable {
     let retired: [ItemKind: [String]]
     let replace: [ItemKind: [String: String]]
 }
+
+struct TestResultParser {
+    let itemKindDataToEnumCache: DataToEnumCache<ItemKind> = DataToEnumCache()
+    let testKindDataToEnumCache: DataToEnumCache<TestKind> = DataToEnumCache()
+    let testOutcomeDataToEnumCache: DataToEnumCache<TestOutcome> = DataToEnumCache()
+    let retiredByName: [ItemKind: Set<Data>] = Subete.instance.retired.mapValues { (stringList) in
+        Set(stringList.map { Data($0.utf8) })
+    }
+    let itemsByName: [ItemKind: [Data: Item]] = Dictionary(uniqueKeysWithValues: ItemKind.allCases.map { (itemKind) in
+        let itemList = Subete.instance.allByKind(itemKind)
+        return (itemKind, Dictionary(uniqueKeysWithValues: itemList.names.map {
+            (Data($0.utf8), itemList.findByName($0)!)
+        }))
+    })
+    
+}
+
 struct TestResult {
     let question: Question
     let date: Date?
@@ -991,46 +1020,53 @@ struct TestResult {
         return components.joined(separator: ":")
     }
 
-    static func parse(line: Data) throws -> TestResult? {
-        var components: [Data] = line.splut(separator: 58 /* ':' */, includingSpaces: true)
+    static func parse(line: Data, parser: inout TestResultParser) throws -> TestResult? {
+        let components: [Data] = line.splut(separator: 58 /* ':' */, includingSpaces: true)
         var date: Date? = nil
         var i = 0
         if components.count > 4 {
             date = Date(timeIntervalSince1970: Double(try unwrapOrThrow(parseInt(data: components[0]),
-				err: MyError("invalid timestamp \(d2s(components[0]))"))))
-            
+                err: MyError("invalid timestamp \(d2s(components[0]))"))))
+            i = 1
         }
         ensure(components.count >= i + 4)
         if components.count > i + 4 {
             warn("extra components")
         }
         
+        let testKindData = components[i]
+        let itemKindData = components[i+1]
+        let nameData = components[i+2]
+        let outcomeData = components[i+3]
+        
         // TODO: rawValue with substring?
-        let itemKind = try unwrapOrThrow(initWithRawValueData(components[i+1], type: ItemKind.self),
-                                     err: MyError("invalid item kind \(d2s(components[i+1]))"))
-        let name = components[i+2]
-        if Subete.instance.retiredByData[itemKind]?.contains(name) == .some(true) {
-            return nil
+        let itemKind = try unwrapOrThrow(parser.itemKindDataToEnumCache[itemKindData],
+                                     err: MyError("invalid item kind \(d2s(itemKindData))"))
+        guard let item = parser.itemsByName[itemKind]?[nameData] else {
+            if parser.retiredByName[itemKind]?.contains(nameData) == .some(true) {
+                return nil
+            }
+            throw MyError("no such item kind \(d2s(itemKindData)) name \(d2s(nameData))")
         }
 
         let question = Question(
-            item: try unwrapOrThrow(Subete.instance.allByKind(itemKind).findByName(data: name),
-                                err: MyError("no such item kind \(d2s(components[i+1])) name \(d2s(name))")),
-			testKind: try unwrapOrThrow(initWithRawValueData(components[i], type: TestKind.self),
-                                    err: MyError("invalid test kind \(d2s(components[i]))"))
+            item: item,
+            testKind: try unwrapOrThrow(parser.testKindDataToEnumCache[testKindData],
+                                    err: MyError("invalid test kind \(d2s(testKindData))"))
         )
         return TestResult(
             question: question,
             date: date,
-            outcome: try unwrapOrThrow(TestOutcome(rawValue: String(components[i+3])),
-                                   err: MyError("invalid outcome kind \(d2s(components[i+3]))"))
+            outcome: try unwrapOrThrow(parser.testOutcomeDataToEnumCache[outcomeData],
+                                   err: MyError("invalid outcome kind \(d2s(outcomeData))"))
         )
     }
     static func readAllFromLog() throws -> [TestResult] {
         let data = try Subete.instance.openLogTxt(write: false) { (fh: FileHandle) in fh.readDataToEndOfFile() }
+        var parser = TestResultParser()
         return data.split(separator: 10 /*"\n"*/).compactMap {
             do {
-                return try TestResult.parse(line: $0)
+                return try TestResult.parse(line: $0, parser: &parser)
             } catch let e {
                 warn("error parsing log line: \(e)")
                 return nil
