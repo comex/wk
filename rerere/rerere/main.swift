@@ -643,7 +643,7 @@ struct CLI {
             return ret
         }
     }
-    func formatLabel(outcome: TestOutcome, qual: Int, srsUpdate: SRSUpdate) -> String {
+    func formatLabel(outcome: TestOutcome, qual: Int, srsUpdate: SRSUpdate, existingOutcome: TestOutcome?) -> String {
         let text: String
         var back: (String) -> String
         switch outcome {
@@ -654,10 +654,9 @@ struct CLI {
         case .right:
             (text, back) = ("YEP" + (qual == 1 ? "?" : ""), ANSI.yback)
         }
-        // THIS SUCKS (why?)
-        if outcome == .wrong {
+        if existingOutcome == .wrong {
             back = ANSI.rback
-        } else if outcome == .mu {
+        } else if existingOutcome == .mu {
             back = ANSI.cback
         }
         return back(text) + srsUpdate.cliLabel
@@ -665,7 +664,7 @@ struct CLI {
 
     func formatResponseAcknowledgement(_ ra: ResponseAcknowledgement) -> String {
         let item = ra.prompt.item
-        var out = formatLabel(outcome: ra.outcome, qual: ra.qual, srsUpdate: ra.srsUpdate)
+        var out = formatLabel(outcome: ra.outcome, qual: ra.qual, srsUpdate: ra.srsUpdate, existingOutcome: ra.existingOutcome)
         // should this be further abstracted?
         switch ra.question.testKind {
         case .meaningToReading:
@@ -1390,6 +1389,7 @@ class Test {
             question: self.question,
             prompt: prompt,
             outcome: outcome,
+            existingOutcome: self.result?.outcome,
             qual: qual,
             alternativesSections: alternativesSections,
             srsUpdate: srsUpdate
@@ -1433,6 +1433,7 @@ struct ResponseAcknowledgement {
     let question: Question
     let prompt: Prompt
     let outcome: TestOutcome
+    let existingOutcome: TestOutcome?
     let qual: Int
     let alternativesSections: [AlternativesSection]
     let srsUpdate: SRSUpdate
