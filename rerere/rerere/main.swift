@@ -76,6 +76,9 @@ func trim(_ s: String) -> String {
 func trim(_ s: Substring) -> String {
   return trim(String(s))
 }
+func d2s(_ d: Data) -> String {
+	String(data: d, encoding: .utf8)!
+}
 
 func commaSplitNoTrim(_ s: String) -> [String] {
     return s.split(separator: ",").map { String($0) }
@@ -255,7 +258,7 @@ class Subete {
         self.allConfusion = ItemList(allKanjiConfusion + allWordConfusion)
         self.allItems = self.allWords.items + self.allKanji.items + self.allConfusion.items
         print("loading srs")
-		self.srs = time(count: 20) { self.createSRSFromLog() }
+		self.srs = time(count: 2000) { self.createSRSFromLog() }
         print("done loading")
 
     }
@@ -342,8 +345,16 @@ class Subete {
         return allItems.flatMap { $0.myQuestions }
     }
 }
+	
+func initWithRawValueData<T: CodingKeyRepresentable>(data: Data, type: T.Type) -> T? {
+	static let map: [Data: T] = {
+		var m: [Data: T] = [:]
+		return m
+	}()
+	return map[data]
+}
 
-enum ItemKind: String, ExpressibleByArgument, Codable, CodingKeyRepresentable {
+enum ItemKind: String, ExpressibleByArgument, Codable, CodingKeyRepresentable, InitWithRawValueData {
     case word, kanji, confusion, flashcard
 }
 
@@ -897,7 +908,7 @@ class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
     }
 }
 
-enum TestKind: String, ExpressibleByArgument, Codable {
+enum TestKind: String, ExpressibleByArgument, Codable, CodingKeyRepresentable {
     case meaningToReading = "m2r"
     case readingToMeaning = "r2m"
     case characterToRM = "c2"
@@ -912,8 +923,8 @@ enum TestOutcome: String {
 }
 
 extension Data {
-    func splut(separator: Int, includingSpaces: Bool = false, map: (Data) -> String) -> [String] {
-        var res: [String] = []
+    func splut(separator: Int, includingSpaces: Bool = false) -> [Data] {
+        var res: [Data] = []
         let start = self.startIndex
         let end = self.endIndex
         var i = start
@@ -937,7 +948,7 @@ extension Data {
                         }
                     }
                 }
-                res.append(map(self[lastStart..<lastEnd]))
+                res.append(self[lastStart..<lastEnd])
                 if i == end { return res }
                 lastStart = i + 1
             }
@@ -945,7 +956,20 @@ extension Data {
         }
         return res
     }
-    
+}
+func parseInt(data: Data) -> Int? {
+	var i = data.startIndex
+	let end = data.endIndex
+	var ret: Int = 0
+	while i < end {
+		let c = data[i]
+		if !(c >= 0x30 && c <= 0x39) {
+			return nil
+		}
+		ret = (ret * 10) + Int(c - 0x30)
+		i += 1
+	}
+	return ret
 }
 
 struct RetiredYaml: Decodable {
@@ -966,41 +990,40 @@ struct TestResult {
         ]
         return components.joined(separator: ":")
     }
+
     static func parse(line: Data) throws -> TestResult? {
-        var components: [String] = line.splut(separator: 58 /* ':' */, includingSpaces: true, map: { String(data: $0, encoding: .utf8)! })
+        var components: [Data] = line.splut(separator: 58 /* ':' */, includingSpaces: true)
         var date: Date? = nil
+        var i = 0
         if components.count > 4 {
-            
-            let rawDate = components.remove(at: 0)
-            
-            date = Date(timeIntervalSince1970: try unwrapOrThrow(Double(rawDate),
-                                                                    err: MyError("invalid timestamp \(rawDate)")))
+            date = Date(timeIntervalSince1970: Double(try unwrapOrThrow(parseInt(data: components[0]),
+				err: MyError("invalid timestamp \(d2s(components[0]))"))))
             
         }
-        ensure(components.count >= 4)
-        if components.count > 4 {
+        ensure(components.count >= i + 4)
+        if components.count > i + 4 {
             warn("extra components")
         }
         
         // TODO: rawValue with substring?
-        let itemKind = try unwrapOrThrow(ItemKind(rawValue: String(components[1])),
-                                     err: MyError("invalid item kind \(components[1])"))
-        let name = String(components[2])
-        if Subete.instance.retired[itemKind]?.contains(name) == .some(true) {
+        let itemKind = try unwrapOrThrow(initWithRawValueData(components[i+1], type: ItemKind.self),
+                                     err: MyError("invalid item kind \(d2s(components[i+1]))"))
+        let name = components[i+2]
+        if Subete.instance.retiredByData[itemKind]?.contains(name) == .some(true) {
             return nil
         }
 
         let question = Question(
-            item: try unwrapOrThrow(Subete.instance.allByKind(itemKind).findByName(name),
-                                err: MyError("no such item kind \(components[1]) name \(name)")),
-            testKind: try unwrapOrThrow(TestKind(rawValue: String(components[0])),
-                                    err: MyError("invalid test kind \(components[0])"))
+            item: try unwrapOrThrow(Subete.instance.allByKind(itemKind).findByName(data: name),
+                                err: MyError("no such item kind \(d2s(components[i+1])) name \(d2s(name))")),
+			testKind: try unwrapOrThrow(initWithRawValueData(components[i], type: TestKind.self),
+                                    err: MyError("invalid test kind \(d2s(components[i]))"))
         )
         return TestResult(
             question: question,
             date: date,
-            outcome: try unwrapOrThrow(TestOutcome(rawValue: String(components[3])),
-                                   err: MyError("invalid outcome kind \(components[3])"))
+            outcome: try unwrapOrThrow(TestOutcome(rawValue: String(components[i+3])),
+                                   err: MyError("invalid outcome kind \(d2s(components[i+3]))"))
         )
     }
     static func readAllFromLog() throws -> [TestResult] {
