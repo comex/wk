@@ -260,12 +260,8 @@ class Subete {
         self.allConfusion = ItemList(allKanjiConfusion + allWordConfusion)
         self.allItems = self.allWords.items + self.allKanji.items + self.allConfusion.items
         print("loading srs")
-        self.srs = time(count: 20) { self.createSRSFromLog() }
-        let x = Date(timeIntervalSince1970: 42)
-        print("\(x)")
+        self.srs = self.createSRSFromLog()
         print("done loading")
-        exit(0)
-
     }
     func allByKind(_ kind: ItemKind) -> ItemListProtocol {
         switch kind {
