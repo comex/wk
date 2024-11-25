@@ -1053,6 +1053,15 @@ class Test {
         self.question = question
         self.testSession = testSession
     }
+    static func create(question: Question, testSession: TestSession) -> Test {
+        switch question.testKind {
+            case .meaningToReading: return MeaningToReadingTest(question: question, testSession: testSession)
+            case .readingToMeaning: return ReadingToMeaningTest(question: question, testSession: testSession)
+            case .characterToRM: return CharacterToRMTest(question: question, testSession: testSession)
+            case .confusion: return ConfusionTest(question: question, testSession: testSession)
+            case .flashcard: return FlashcardTest(question: question, testSession: testSession)
+        }
+    }
 
     func removeFromLog() throws {
         let toRemove = self.appendedStuff!
@@ -1085,6 +1094,116 @@ class Test {
             self.appendedStuff = toAppend
         }
     }
+    func maybeMarkResult(outcome: TestOutcome, final: Bool) throws -> SRSUpdate {
+        if outcome == .wrong || (self.result == nil && final) {
+            return try self.markResult(outcome: outcome)
+        } else {
+            return .noChangeOther
+        }
+    }
+    func markResult(outcome: TestOutcome?) throws -> SRSUpdate {
+        self.testSession.setQuestionCompleteness(question: self.question, complete: outcome == .some(.right))
+
+        if self.result != nil {
+            try self.removeFromLog()
+            Subete.instance.srs?.revert(forQuestion: self.question)
+        }
+        if let outcome = outcome {
+            self.result = TestResult(question: self.question, date: Int(Date().timeIntervalSince1970), outcome: outcome)
+            try self.addToLog()
+            return Subete.instance.srs!.update(forResult: self.result!)
+        } else {
+            self.result = nil
+            return .noChangeOther
+        }
+    }
+    func nextPrompt() -> Prompt {
+        fatalError("must override nextPrompt")
+    }
+}
+
+enum SemColor {
+    case normal
+    case kanjiMeaningPrompt
+    case otherMeaningPrompt
+}
+
+enum SemColorAttribute : AttributedStringKey {
+    typealias Value = SemColor
+    static let name = "SemColor"
+}
+
+struct SemAttributes : AttributeScope {
+    let color: SemColorAttribute
+}
+
+extension AttributeDynamicLookup {
+    subscript<T: AttributedStringKey>(dynamicMember keyPath: KeyPath<SemAttributes, T>) -> T {
+        return self[T.self]
+    }
+}
+
+func color(_ string: String, _ color: SemColor) -> AttributedString {
+    return AttributedString(string, attributes: SemAttributes(color: color)))
+}
+
+struct Prompt {
+    let text: AttributedString
+    let wantKana: true
+}
+
+struct PromptResponse {
+    let outcome: TestOutcome
+    let qual: Int
+    let currentItem
+}
+
+/*
+    case meaningToReading = "m2r"
+    case readingToMeaning = "r2m"
+    case characterToRM = "c2"
+    case confusion = "kc"
+    case flashcard = "fc"
+ */
+class MeaningToReadingTest: Test {
+    override func nextPrompt() -> Prompt {
+        var text = color(item.cliMeanings(colorful: false),
+                         item is Kanji ? .kanjiMeaningPrompt : .otherMeaningPrompt)
+        if item is Kanji {
+            text += " /k"
+        }
+        return Prompt(text: text, wantKana: true)
+    }
+    override func handlePromptResponse(response: String) {
+            let (outcome, qual, alternatives) = item.evaluateReadingAnswer(input: response, allowAlternatives: true)
+            let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: true)
+            var out: String = cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate)
+            out += " " + item.cliName + " " + item.cliReadings(colorful: false)
+            print(out)
+            cliPrintAlternatives(alternatives, label: "kana")
+            item.cliPrintSimilarMeaning()
+        
+            if outcome == .right { break }
+        }
+    }
+
+}
+
+struct ReadingToMeaningPrompt: Prompt {
+}
+class ReadingToMeaningTest: Test {
+
+}
+class CharacterToRMTest: Test {
+
+}
+class ConfusionTest: Test {
+
+}
+class FlashcardTest: Test {
+
+}
+/*
     func cliGo() throws {
         let item = self.question.item
         switch self.question.testKind {
@@ -1121,24 +1240,7 @@ class Test {
         return back(text) + srsUpdate.cliLabel
     }
 
-    func doCLIMeaningToReading(item: NormalItem) throws {
-        var prompt = item.cliMeanings(colorful: false)
-        if item is Kanji {
-            prompt = ANSI.purple(prompt) + " /k"
-        }
-        while true {
-            let k = try cliRead(prompt: prompt, kana: true)
-            let (outcome, qual, alternatives) = item.evaluateReadingAnswer(input: k, allowAlternatives: true)
-            let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: true)
-            var out: String = cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate)
-            out += " " + item.cliName + " " + item.cliReadings(colorful: false)
-            print(out)
-            cliPrintAlternatives(alternatives, label: "kana")
-            item.cliPrintSimilarMeaning()
-        
-            if outcome == .right { break }
-        }
-    }
+
     func doCLIReadingToMeaning(item: NormalItem) throws {
         var prompt = item.cliReadings(colorful: false)
         if item is Kanji {
@@ -1239,30 +1341,9 @@ class Test {
             return output
         }
     }
-    func maybeMarkResult(outcome: TestOutcome, final: Bool) throws -> SRSUpdate {
-        if outcome == .wrong || (self.result == nil && final) {
-            return try self.markResult(outcome: outcome)
-        } else {
-            return .noChangeOther
-        }
-    }
-    func markResult(outcome: TestOutcome?) throws -> SRSUpdate {
-        self.testSession.setQuestionCompleteness(question: self.question, complete: outcome == .some(.right))
 
-        if self.result != nil {
-            try self.removeFromLog()
-            Subete.instance.srs?.revert(forQuestion: self.question)
-        }
-        if let outcome = outcome {
-            self.result = TestResult(question: self.question, date: Int(Date().timeIntervalSince1970), outcome: outcome)
-            try self.addToLog()
-            return Subete.instance.srs!.update(forResult: self.result!)
-        } else {
-            self.result = nil
-            return .noChangeOther
-        }
-    }
 }
+*/
 
 enum SRSUpdate {
     case nextDays(Double)
