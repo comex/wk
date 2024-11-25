@@ -310,38 +310,6 @@ class Subete {
         srs.updateStales(date: Int(Date().timeIntervalSince1970))
         return srs
     }
-    func handleBang(_ input: String, curTest: Test) {
-        switch input {
-        case "!right":
-            handleChangeLast(outcome: .right, curTest: curTest)
-        case "!wrong":
-            handleChangeLast(outcome: .wrong, curTest: curTest)
-        case "!mu":
-            handleChangeLast(outcome: .mu, curTest: curTest)
-        default:
-            print("?bang? \(input)")
-        }
-    }
-    func handleChangeLast(outcome: TestOutcome, curTest: Test) {
-        let test: Test
-        var outcome: TestOutcome? = outcome
-        if curTest.didCliRead {
-            print("changing this test")
-            test = curTest
-            if outcome == .right { outcome = nil }
-        } else {
-            print("changing last test")
-            guard let t = self.lastAppendedTest else {
-                print("no last")
-                return
-            }
-            test = t
-        }
-        let srsUpdate = try! test.markResult(outcome: outcome)
-        if !srsUpdate.isNoChangeOther {
-            print(srsUpdate.cliLabel)
-        }
-    }
     var allQuestions: [Question] {
         return allItems.flatMap { $0.myQuestions }
     }
@@ -550,7 +518,7 @@ func evaluateMeaningAnswerInner(normalizedInput: String, meanings: [Ing], levens
 }
 
 struct CLI {
-    func formatIngs(ings: [Ing], colorful: Bool, tildify: (String) -> String) -> String {
+    func formatIngs(_ ings: [Ing], colorful: Bool, tildify: (String) -> String) -> String {
         var prev: Ing? = nil
         var out: String = ""
         for ing in (ings.sorted { $0.type < $1.type }) {
@@ -595,17 +563,17 @@ struct CLI {
             return "\(name) \(readings) \(meanings)"
         }
         if let fc = item as? Flashcard {
-            let backs = formatItemBacks(colorful: colorful)
+            let backs = formatItemBacks(fc, colorful: colorful)
             return "\(name) \(backs)"
         }
         fatalError("unknown item kind \(item)")
     }
 
     func formatAlternativesInner(_ items: [Item], label: String) -> String {
-        if items.isEmpty { return }
+        if items.isEmpty { return "" }
         let initial = "Entered \(label) matches"
         if items.count > 8 {
-            return " (\(initial) \(items.count) items)")
+            return " (\(initial) \(items.count) items)"
         } else {
             var ret = " \(initial):"
             for item in items {
@@ -615,26 +583,26 @@ struct CLI {
         }
     }
     func formatAlternativesSection(_ sect: AlternativesSection) -> String {
-        switch sect {
-            case .meaningAlternatives(let items):
-                return formatAlternativesInner(items, label: "kana")
-            case .readingAlternatives(let items):
-                return formatAlternativesInner(items, label: "meaning")
-            case .sameReading(let items):
-                if items.isEmpty { return }
-                if items.count > 6 { return }
-                var ret = " Same reading:"
-                for item in items {
-                    ret += "\n" + formatItem(item, colorful: false)
-                }
-                return ret
-            case .similarMeaning(let items):
-                if items.isEmpty { return }
-                var ret = " Similar meaning:"
-                for item in items {
-                    ret += "\n" + formatItem(item, colorful: false)
-                }
-                return ret
+        switch sect.kind {
+        case .meaningAlternatives:
+            return formatAlternativesInner(sect.items, label: "kana")
+        case .readingAlternatives:
+            return formatAlternativesInner(sect.items, label: "meaning")
+        case .sameReading:
+            if sect.items.isEmpty { return "" }
+            if sect.items.count > 6 { return "" }
+            var ret = " Same reading:"
+            for item in sect.items {
+                ret += "\n" + formatItemFull(item, colorful: false)
+            }
+            return ret
+        case .similarMeaning:
+            if sect.items.isEmpty { return "" }
+            var ret = " Similar meaning:"
+            for item in sect.items {
+                ret += "\n" + formatItemFull(item, colorful: false)
+            }
+            return ret
         }
     }
     func formatLabel(outcome: TestOutcome, qual: Int, srsUpdate: SRSUpdate) -> String {
@@ -648,10 +616,10 @@ struct CLI {
         case .right:
             (text, back) = ("YEP" + (qual == 1 ? "?" : ""), ANSI.yback)
         }
-        // THIS SUCKS
-        if self.result?.outcome == .wrong {
+        // THIS SUCKS (why?)
+        if outcome == .wrong {
             back = ANSI.rback
-        } else if self.result?.outcome == .mu {
+        } else if outcome == .mu {
             back = ANSI.cback
         }
         return back(text) + srsUpdate.cliLabel
@@ -678,6 +646,69 @@ struct CLI {
         }
         return out
     }
+
+    static let readingPrompt: String = ANSI.red("reading> ")
+    static let meaningPrompt: String = ANSI.blue("meaning> ")
+
+    enum PromptInnerResponse {
+        case answer(String)
+        case bang(String)
+    }
+
+    func promptInner(promptText: String, kana: Bool) throws -> PromptInnerResponse {
+        print("XXX self.testSession.save()")
+        while true {
+            print(promptText)
+            let args: [String]
+            if kana {
+                args = [Subete.instance.basePath + "/read-kana.zsh", CLI.readingPrompt]
+            } else {
+                args = [Subete.instance.basePath + "/read-english.zsh", CLI.meaningPrompt]
+            }
+            let output = trim(try runAndGetOutput(args))
+            if output == "" {
+                continue
+            }
+            if output.starts(with: "!") {
+                return .bang(output)
+            }
+            return .answer(output)
+        }
+    }
+    func handleBang(_ input: String, curTest: Test, gotAnswerAlready: Bool) {
+        switch input {
+        case "!right":
+            handleChangeLast(outcome: .right, curTest: curTest, gotAnswerAlready: gotAnswerAlready)
+        case "!wrong":
+            handleChangeLast(outcome: .wrong, curTest: curTest, gotAnswerAlready: gotAnswerAlready)
+        case "!mu":
+            handleChangeLast(outcome: .mu, curTest: curTest, gotAnswerAlready: gotAnswerAlready)
+        default:
+            print("?bang? \(input)")
+        }
+    }
+    func handleChangeLast(outcome: TestOutcome, curTest: Test, gotAnswerAlready: Bool) {
+        let test: Test
+        var outcome: TestOutcome? = outcome
+        if gotAnswerAlready {
+            print("changing this test")
+            test = curTest
+            if outcome == .right { outcome = nil }
+        } else {
+            print("changing last test")
+            // TODO: refactor
+            guard let t = Subete.instance.lastAppendedTest else {
+                print("no last")
+                return
+            }
+            test = t
+        }
+        let srsUpdate = try! test.markResult(outcome: outcome)
+        if !srsUpdate.isNoChangeOther {
+            print(srsUpdate.cliLabel)
+        }
+    }
+
 }
 
 struct Relaxed { let relaxed: Bool }
@@ -1097,24 +1128,42 @@ struct ANSI {
     static func cback(_ s: String) -> String { return color("106", s) }
 }
 
+enum TestState {
+    case done
+    case prompt(Prompt)
+    case shuffle(substates: [TestState], substateIdx: Int)
+
+    mutating func nextPrompt() -> Prompt {
+        switch self {
+        case .done:
+            fatalError("nextPrompt when already done")
+        case .prompt(let prompt):
+            self = .done
+            return prompt
+        case .shuffle(var substates, let substateIdx):
+            let ret = substates[substateIdx].nextPrompt()
+            if substateIdx + 1 == substates.count {
+                self = .done
+            } else {
+                self = .shuffle(substates: substates, substateIdx: substateIdx + 1)
+            }
+            return ret
+        }
+    }
+}
+
 class Test {
     let question: Question
     let testSession: TestSession
     var result: TestResult? = nil
     var finished: Bool = false
+    var state: TestState
     var appendedStuff: Data? = nil
+
     init(question: Question, testSession: TestSession) {
         self.question = question
         self.testSession = testSession
-    }
-    static func create(question: Question, testSession: TestSession) -> Test {
-        switch question.testKind {
-            case .meaningToReading: return MeaningToReadingTest(question: question, testSession: testSession)
-            case .readingToMeaning: return ReadingToMeaningTest(question: question, testSession: testSession)
-            case .characterToRM: return CharacterToRMTest(question: question, testSession: testSession)
-            case .confusion: return ConfusionTest(question: question, testSession: testSession)
-            case .flashcard: return FlashcardTest(question: question, testSession: testSession)
-        }
+        self.state = Test.initialState(item: question.item, testKind: question.testKind)
     }
 
     func removeFromLog() throws {
@@ -1149,7 +1198,7 @@ class Test {
         }
     }
     func maybeMarkResult(outcome: TestOutcome, final: Bool) throws -> SRSUpdate {
-        let ret
+        let ret: SRSUpdate
         if outcome == .wrong || (self.result == nil && final) {
             ret = try self.markResult(outcome: outcome)
         } else {
@@ -1176,14 +1225,96 @@ class Test {
             return .noChangeOther
         }
     }
-    func nextPrompt() -> Prompt {
-        fatalError("must override nextPrompt")
+
+    static func initialState(item: Item, testKind: TestKind) -> TestState {
+        switch testKind {
+        case .meaningToReading:
+            return .prompt(.reading(item as! NormalItem))
+        case .readingToMeaning:
+            return .prompt(.meaning(item as! NormalItem))
+        case .characterToRM:
+            return .shuffle(
+                substates: [
+                    initialState(item: item, testKind: .meaningToReading),
+                    initialState(item: item, testKind: .readingToMeaning)
+                ].shuffled(),
+                substateIdx: 0
+            )
+        case .confusion:
+            return .shuffle(
+                substates: (item as! Confusion).items.map {
+                    initialState(item: $0, testKind: .characterToRM)
+                }.shuffled(),
+                substateIdx: 0
+            )
+        case .flashcard:
+            return .prompt(.flashcardBack(item as! Flashcard))
+        }
     }
+
+    func nextPrompt() -> Prompt {
+        return self.state.nextPrompt()
+    }
+
+    // TODO: this function kind of sucks
+    func handlePromptResponse(prompt: Prompt, input: String) throws -> PromptResponse {
+        let outcome: TestOutcome
+        let qual: Int
+        var alternativesSections: [AlternativesSection]
+        let allowAlternatives: Bool // accept alternatives as answer?
+        switch self.question.testKind {
+        case .meaningToReading, .readingToMeaning, .flashcard:
+            allowAlternatives = true
+        case .characterToRM, .confusion:
+            allowAlternatives = false
+        }
+        let alternativeItems: [Item]
+        switch prompt {
+        case .meaning:
+            (outcome, qual, alternativeItems) = (self.question.item as! NormalItem).evaluateMeaningAnswer(input: input, allowAlternatives: allowAlternatives)
+            alternativesSections = [AlternativesSection(kind: .meaningAlternatives, items: alternativeItems)]
+        case .reading:
+            (outcome, qual, alternativeItems) = (self.question.item as! NormalItem).evaluateReadingAnswer(input: input, allowAlternatives: allowAlternatives)
+            alternativesSections = [AlternativesSection(kind: .readingAlternatives, items: alternativeItems)]
+        case .flashcardBack:
+            (outcome, qual, alternativeItems) = (self.question.item as! Flashcard).evaluateBackAnswer(input: input, allowAlternatives: allowAlternatives)
+            alternativesSections = [AlternativesSection(kind: .meaningAlternatives, items: alternativeItems)]
+        }
+
+        var final: Bool
+        // XXX: better way?
+        if case .done = self.state { final = true } else { final = false }
+        let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: final)
+
+        switch self.question.testKind {
+        case .meaningToReading, .flashcard:
+            alternativesSections.append(AlternativesSection(kind: .similarMeaning, items: (self.question.item as! NormalItem).similarMeaning()))
+        case .readingToMeaning:
+            alternativesSections.append(AlternativesSection(kind: .sameReading, items: (self.question.item as! NormalItem).sameReading()))
+        case .characterToRM, .confusion:
+            // Only print alternatives if wrong, to avoid spoilers both
+            // for later in the c2 and later in a confusion this might
+            // be part of
+            if outcome != .wrong {
+                alternativesSections = []
+            }
+        }
+
+        return PromptResponse(
+            question: self.question,
+            outcome: outcome,
+            qual: qual,
+            alternativesSections: alternativesSections,
+            srsUpdate: srsUpdate
+        )
+    }
+
 }
 
 enum Prompt {
-    case meaningToReading
-    case readingToMeaning
+    case meaning(NormalItem)
+    case reading(NormalItem)
+    case flashcardBack(Flashcard)
 }
 
 struct AlternativesSection {
@@ -1204,142 +1335,6 @@ struct PromptResponse {
     let alternativesSections: [AlternativesSection]
     let srsUpdate: SRSUpdate
 }
-
-/*
-    case meaningToReading = "m2r"
-    case readingToMeaning = "r2m"
-    case characterToRM = "c2"
-    case confusion = "kc"
-    case flashcard = "fc"
- */
-class MeaningToReadingTest: Test {
-    override func nextPrompt() -> Prompt {
-        return .meaningToReading(self.question.item)
-    }
-    override func handlePromptResponse(response: String) {
-        let (outcome, qual, alternatives) = self.question.item.evaluateReadingAnswer(input: response, allowAlternatives: true)
-        let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: true)
-        return PromptResponse(
-            question: self.question,
-            outcome: outcome,
-            qual: qual,
-            alternativesSections: [AlternativesSection(kind: .readingAlternatives, items: alternatives)],
-            srsUpdate: srsUpdate
-        )
-    }
-}
-
-class ReadingToMeaningTest: Test {
-    override func nextPrompt() -> Prompt {
-        return .readingToMeaning(self.question.item)
-    }
-    override func handlePromptResponse(input: String) {
-        let (outcome, qual, alternatives) = self.question.item.evaluateMeaningAnswer(input: input, allowAlternatives: true)
-        let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: true)
-        return PromptResponse(
-            question: self.question,
-            outcome: outcome,
-            qual: qual,
-            alternativesSections: [AlternativesSection(kind: .meaningAlternatives, items: alternatives)],
-            srsUpdate: srsUpdate
-        )
-    }
-
-}
-
-class CharacterToRMTest: Test {
-
-}
-
-class ConfusionTest: Test {
-
-}
-class FlashcardTest: Test {
-
-}
-/*
-
-    func doCLICharacterToRM(item: NormalItem, final: Bool) throws {
-        let prompt = item.cliName
-        enum Mode { case reading, meaning }
-        for (modeIdx, mode) in [Mode.reading, Mode.meaning].shuffled().enumerated() {
-            while true {
-                let k: String = try cliRead(prompt: prompt, kana: mode == .reading)
-                let outcome: TestOutcome
-                let qual: Int
-                let alternatives: [Item]
-                if mode == .meaning {
-                    (outcome, qual, alternatives) = item.evaluateMeaningAnswer(input: k, allowAlternatives: false)
-                    let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: final && modeIdx == 1)
-                    print(cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate))
-                    print(item.cliMeanings(colorful: true))
-                    // Only print alternatives if wrong, to avoid spoilers both
-                    // for later in the c2 and later in a confusion this might
-                    // be part of
-                    if outcome == .wrong {
-                        cliPrintAlternatives(alternatives, label: "meaning")
-                    }
-                } else {
-                    (outcome, qual, alternatives) = item.evaluateReadingAnswer(input: k, allowAlternatives: false)
-                    let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: final && modeIdx == 1)
-                    print(cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate))
-                    print(item.cliReadings(colorful: true))
-                    if outcome == .wrong { // See above
-                        cliPrintAlternatives(alternatives, label: "kana")
-                    }
-                }
-                if outcome == .right { break }
-            }
-        }
-    }
-    func doCLIConfusion(item: Confusion) throws {
-        let items = item.items.shuffled()
-        for (i, subitem) in items.enumerated() {
-            try doCLICharacterToRM(item: subitem as! NormalItem, final: i == items.count - 1)
-        }
-    }
-    func doCLIFlashcard(item: Flashcard) throws {
-        let prompt = item.cliPrompt(colorful: false)
-        while true {
-            let k: String = try cliRead(prompt: prompt, kana: false)
-            let (outcome, qual, alternatives) = item.evaluateBackAnswer(input: k, allowAlternatives: true)
-            let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: true)
-            print(cliLabel(outcome: outcome, qual: qual, srsUpdate: srsUpdate))
-            item.cliPrint(colorful: true)
-            cliPrintAlternatives(alternatives, label: "answer")
-            if outcome == .right {
-                break
-            }
-        }
-    }
-    static let readingPrompt: String = ANSI.red("reading> ")
-    static let meaningPrompt: String = ANSI.blue("meaning> ")
-
-    func cliRead(prompt: String, kana: Bool) throws -> String {
-        self.testSession.save()
-        while true {
-            print(prompt)
-            let args: [String]
-            if kana {
-                args = [Subete.instance.basePath + "/read-kana.zsh", Test.readingPrompt]
-            } else {
-                args = [Subete.instance.basePath + "/read-english.zsh", Test.meaningPrompt]
-            }
-            let output = trim(try runAndGetOutput(args))
-            
-            if output == "" {
-                continue
-            }
-            if output.starts(with: "!") {
-                Subete.instance.handleBang(output, curTest: self)
-                continue
-            }
-            return output
-        }
-    }
-
-}
-*/
 
 enum SRSUpdate {
     case nextDays(Double)
