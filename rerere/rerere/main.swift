@@ -169,9 +169,16 @@ func runAndGetOutput(_ args: [String]) throws -> String {
 
     
     var st: Int32 = 0
-    let waited = waitpid(pid, &st, 0)
-    if waited != pid {
-        throw MyError("runAndGetOutput(\(args)): waitpid() failed: \(strerror(errno)!)")
+    while true {
+        let waited = waitpid(pid, &st, 0)
+        if waited == -1 && errno == EINTR {
+            // for debugger's sake
+            continue
+        }
+        if waited != pid {
+            throw MyError("runAndGetOutput(\(args)): waitpid() failed: \(strerror(errno)!)")
+        }
+        break
     }
     let wstatus = st & 0o177
     let exitStatus = (st >> 8) & 0xff
@@ -212,7 +219,6 @@ func loadStudyMaterials(basePath: String) -> [Int: StudyMaterial] {
 
 func getWkDir() -> String {
     var path = FilePath(#filePath).removingLastComponent()
-    print(">>", path)
     while !(FileManager.default.fileExists(atPath: path.pushing("kanji.json").string)) {
         path.push("..")
         if path.length > 512 {
@@ -518,7 +524,7 @@ func evaluateMeaningAnswerInner(normalizedInput: String, meanings: [Ing], levens
 }
 
 struct CLI {
-    func formatIngs(_ ings: [Ing], colorful: Bool, tildify: (String) -> String) -> String {
+    func formatIngs(_ ings: [Ing], colorful: Bool, isMeaning: Bool, tildify: (String) -> String) -> String {
         var prev: Ing? = nil
         var out: String = ""
         for ing in (ings.sorted { $0.type < $1.type }) {
@@ -527,7 +533,16 @@ struct CLI {
                                 prev!.type == ing.type ? ", " :
                                 " >> "
                 var colored = ing.text
-                if colorful { colored = (ing.type == .primary ? ANSI.red : ANSI.dred)(colored) }
+                if colorful {
+                    let primaryColor: (String) -> String
+                    let otherColor: (String) -> String
+                    if isMeaning {
+                        (primaryColor, otherColor) = (ANSI.purple, ANSI.dpurple)
+                    } else {
+                        (primaryColor, otherColor) = (ANSI.red, ANSI.dred)
+                    }
+                    colored = (ing.type == .primary ? primaryColor : otherColor)(colored)
+                }
                 colored = tildify(colored)
                 out += separator + colored
             }
@@ -546,13 +561,13 @@ struct CLI {
         }
     }
     func formatItemReadings(_ normal: NormalItem, colorful: Bool) -> String {
-        return formatIngs(normal.readings, colorful: colorful, tildify: normal.tildify)
+        return formatIngs(normal.readings, colorful: colorful, isMeaning: false, tildify: normal.tildify)
     }
     func formatItemMeanings(_ normal: NormalItem, colorful: Bool) -> String {
-        return formatIngs(normal.meanings, colorful: colorful, tildify: normal.tildify)
+        return formatIngs(normal.meanings, colorful: colorful, isMeaning: true, tildify: normal.tildify)
     }
     func formatItemBacks(_ fc: Flashcard, colorful: Bool) -> String {
-        return formatIngs(fc.backs, colorful: colorful, tildify: { $0 })
+        return formatIngs(fc.backs, colorful: colorful, isMeaning: true, tildify: { $0 })
     }
 
     func formatItemFull(_ item: Item, colorful: Bool) -> String {
@@ -649,7 +664,7 @@ struct CLI {
     }
 
     func formatResponseAcknowledgement(_ ra: ResponseAcknowledgement) -> String {
-        let item = ra.question.item
+        let item = ra.prompt.item
         var out = formatLabel(outcome: ra.outcome, qual: ra.qual, srsUpdate: ra.srsUpdate)
         // should this be further abstracted?
         switch ra.question.testKind {
@@ -657,7 +672,17 @@ struct CLI {
             out += " " + formatItemName(item) + " " + formatItemReadings(item as! NormalItem, colorful: false)
         case .readingToMeaning:
             out += " " + formatItemName(item) + " " + formatItemMeanings(item as! NormalItem, colorful: true)
-        case .characterToRM, .confusion, .flashcard:
+
+        case .characterToRM, .confusion:
+            switch ra.prompt.expectedInput {
+            case .meaning:
+                out += " " + formatItemMeanings(item as! NormalItem, colorful: true)
+            case .reading:
+                out += " " + formatItemReadings(item as! NormalItem, colorful: true)
+            default: break
+            }
+
+        case .flashcard:
             out += " " + formatItemFull(item, colorful: true)
         }
         for section in ra.alternativesSections {
@@ -733,12 +758,14 @@ struct CLI {
         var gotAnswerAlready = false
         while !test.finished {
             test.testSession.save()
-            let prompt = test.nextPrompt()
+            let prompt = test.state.curPrompt!
+            test.state.nextPrompt()
+            let isLastOfItem = test.state.curPrompt?.item != prompt.item
             let promptText = formatPromptOutput(prompt) + formatKindSuffix(item: prompt.item)
             let resp = try promptInner(promptText: promptText, kana: prompt.expectedInput == .reading)
             switch resp {
             case .answer(let answerText):
-                let ra = try test.handlePromptResponse(prompt: prompt, input: answerText)
+                let ra = try test.handlePromptResponse(prompt: prompt, input: answerText, isLastOfItem: isLastOfItem)
                 print(formatResponseAcknowledgement(ra))
                 gotAnswerAlready = true
             case .bang(let bangText):
@@ -1168,6 +1195,7 @@ struct ANSI {
     static func green(_ s: String) -> String { return color("32;1", s) }
     static func blue(_ s: String) -> String { return color("34;1", s) }
     static func purple(_ s: String) -> String { return color("35;1", s) }
+    static func dpurple(_ s: String) -> String { return color("35", s) }
     static func yback(_ s: String) -> String { return color("43", s) }
     static func rback(_ s: String) -> String { return color("41", s) }
     static func cback(_ s: String) -> String { return color("106", s) }
@@ -1178,21 +1206,39 @@ enum TestState {
     case prompt(Prompt)
     case shuffle(substates: [TestState], substateIdx: Int)
 
-    mutating func nextPrompt() -> Prompt {
+    var curPrompt: Prompt? {
+        switch self {
+        case .done:
+            return nil
+        case .prompt(let prompt):
+            return prompt
+        case .shuffle(let substates, let substateIdx):
+            return substates[substateIdx].curPrompt
+        }
+    }
+
+    mutating func nextPrompt() {
         switch self {
         case .done:
             fatalError("nextPrompt when already done")
-        case .prompt(let prompt):
+        case .prompt(_):
             self = .done
-            return prompt
         case .shuffle(var substates, let substateIdx):
-            let ret = substates[substateIdx].nextPrompt()
-            if substateIdx + 1 == substates.count {
+            substates[substateIdx].nextPrompt()
+            if !substates[substateIdx].isDone {
+                self = .shuffle(substates: substates, substateIdx: substateIdx)
+            } else if substateIdx + 1 == substates.count {
                 self = .done
             } else {
                 self = .shuffle(substates: substates, substateIdx: substateIdx + 1)
             }
-            return ret
+        }
+    }
+
+    var isDone: Bool {
+        switch self {
+        case .done: return true
+        default: return false
         }
     }
 }
@@ -1300,12 +1346,8 @@ class Test {
         }
     }
 
-    func nextPrompt() -> Prompt {
-        return self.state.nextPrompt()
-    }
-
     // TODO: this function kind of sucks
-    func handlePromptResponse(prompt: Prompt, input: String) throws -> ResponseAcknowledgement {
+    func handlePromptResponse(prompt: Prompt, input: String, isLastOfItem: Bool) throws -> ResponseAcknowledgement {
         let outcome: TestOutcome
         let qual: Int
         var alternativesSections: [AlternativesSection]
@@ -1319,26 +1361,23 @@ class Test {
         let alternativeItems: [Item]
         switch prompt.expectedInput {
         case .meaning:
-            (outcome, qual, alternativeItems) = (self.question.item as! NormalItem).evaluateMeaningAnswer(input: input, allowAlternatives: allowAlternatives)
+            (outcome, qual, alternativeItems) = (prompt.item as! NormalItem).evaluateMeaningAnswer(input: input, allowAlternatives: allowAlternatives)
             alternativesSections = [AlternativesSection(kind: .meaningAlternatives, items: alternativeItems)]
         case .reading:
-            (outcome, qual, alternativeItems) = (self.question.item as! NormalItem).evaluateReadingAnswer(input: input, allowAlternatives: allowAlternatives)
+            (outcome, qual, alternativeItems) = (prompt.item as! NormalItem).evaluateReadingAnswer(input: input, allowAlternatives: allowAlternatives)
             alternativesSections = [AlternativesSection(kind: .readingAlternatives, items: alternativeItems)]
         case .flashcardBack:
-            (outcome, qual, alternativeItems) = (self.question.item as! Flashcard).evaluateBackAnswer(input: input, allowAlternatives: allowAlternatives)
+            (outcome, qual, alternativeItems) = (prompt.item as! Flashcard).evaluateBackAnswer(input: input, allowAlternatives: allowAlternatives)
             alternativesSections = [AlternativesSection(kind: .meaningAlternatives, items: alternativeItems)]
         }
 
-        var final: Bool
-        // XXX: better way?
-        if case .done = self.state { final = true } else { final = false }
-        let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: final)
+        let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: self.state.isDone)
 
         switch self.question.testKind {
         case .meaningToReading, .flashcard:
-            alternativesSections.append(AlternativesSection(kind: .similarMeaning, items: (self.question.item as! NormalItem).similarMeaning()))
+            alternativesSections.append(AlternativesSection(kind: .similarMeaning, items: (prompt.item as! NormalItem).similarMeaning()))
         case .readingToMeaning:
-            alternativesSections.append(AlternativesSection(kind: .sameReading, items: (self.question.item as! NormalItem).sameReading()))
+            alternativesSections.append(AlternativesSection(kind: .sameReading, items: (prompt.item as! NormalItem).sameReading()))
         case .characterToRM, .confusion:
             // Only print alternatives if wrong, to avoid spoilers both
             // for later in the c2 and later in a confusion this might
@@ -1350,10 +1389,12 @@ class Test {
 
         return ResponseAcknowledgement(
             question: self.question,
+            prompt: prompt,
             outcome: outcome,
             qual: qual,
             alternativesSections: alternativesSections,
-            srsUpdate: srsUpdate
+            srsUpdate: srsUpdate,
+            isLastOfItem: isLastOfItem
         )
     }
 
@@ -1392,10 +1433,12 @@ struct AlternativesSection {
 
 struct ResponseAcknowledgement {
     let question: Question
+    let prompt: Prompt
     let outcome: TestOutcome
     let qual: Int
     let alternativesSections: [AlternativesSection]
     let srsUpdate: SRSUpdate
+    let isLastOfItem: Bool
 }
 
 enum SRSUpdate {
