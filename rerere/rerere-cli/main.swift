@@ -348,7 +348,7 @@ struct ForecastCommand: ParsableCommand {
         commandName: "forecast")
     func run() {
         let _ = Subete()
-        let srs = Subete.instance.srs!
+        let srs = Subete.instance.createSRS()
         let now = Date().timeIntervalSince1970
         let srsItems: [(nextTestDate: Int, question: Question)] = Subete.instance.allQuestions.compactMap { (question) in
             guard let nextTestDate = srs.info(question: question).nextTestDate else { return nil }
@@ -460,9 +460,8 @@ struct Rerere: ParsableCommand {
                 return (minQuestions: _minQuestions, maxQuestions: _maxQuestions)
         }
     }
-    func gatherSRSQuestions() -> [(nextTestDate: Int, question: Question)] {
+    func gatherSRSQuestions(srs: SRS) -> [(nextTestDate: Int, question: Question)] {
         let now = Int(Date().timeIntervalSince1970)
-        let srs = Subete.instance.srs!
         return Subete.instance.allQuestions.compactMap { (question) in
             guard let nextTestDate = srs.info(question: question).nextTestDate else { return nil }
             return nextTestDate <= now ? (nextTestDate: nextTestDate, question: question) : nil
@@ -483,9 +482,9 @@ struct Rerere: ParsableCommand {
             )
         }
     }
-    func makeSerializableSession() -> SerializableTestSession {
+    func makeSerializableSession(srs: SRS) -> SerializableTestSession {
         let (minQuestions, maxQuestions) = resolveMinMax()
-        var srsQuestions = gatherSRSQuestions()
+        var srsQuestions = gatherSRSQuestions(srs)
         let (numSRSQuestions, numRandomQuestions) = calcQuestionSplit(minQuestions: minQuestions, maxQuestions: maxQuestions, availSRSQuestions: srsQuestions.count)
         print("got \(srsQuestions.count) SRS questions")
         if numSRSQuestions < srsQuestions.count {
@@ -502,6 +501,7 @@ struct Rerere: ParsableCommand {
 
     func run() throws {
         let _ = Subete()
+        let srs = Subete.instance.createSRS()
         let path = "\(Subete.instance.basePath)/sess.json"
         let url = URL(fileURLWithPath: path)
         let sess: TestSession
@@ -511,7 +511,7 @@ struct Rerere: ParsableCommand {
         } catch let e as NSError where e.domain == NSCocoaErrorDomain &&
                                        e.code == NSFileReadNoSuchFileError {
             print("Starting new session \(path)")
-            let ser = makeSerializableSession()
+            let ser = makeSerializableSession(srs)
             sess = TestSession(base: ser, saveURL: url)
         }
         runOrExit {

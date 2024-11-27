@@ -152,63 +152,46 @@ func getWkDir() -> String {
     return try! URL(fileURLWithPath: path.string).resourceValues(forKeys: [.canonicalPathKey]).canonicalPath!
 }
 
-class Subete {
-    nonisolated(unsafe) static var instance: Subete!
-    var allWords: ItemList<Word>! = nil
-    var allKanji: ItemList<Kanji>! = nil
-    var allConfusion: ItemList<Confusion>! = nil
-    var allFlashcards: ItemList<Flashcard>! = nil
-    var allItems: [Item]! = nil
-    var srs: SRS? = nil
-    var studyMaterials: [Int: StudyMaterial]! = nil
+final actor Appender {
+    var lastAppend: (test: Test, appendedData: Data)? = nil
 
-    var retired: [ItemKind: Set<String>]!
-    var replace: [ItemKind: [String: String]]!
-    
-    var lastAppendedTest: Test?
-    
-    let basePath = getWkDir()
-
-    var nextItemID = 0
-
-    init() {
-        Subete.instance = self
-
-        let retiredInfo: RetiredYaml = try! YAMLDecoder().decode(RetiredYaml.self, from: data(of: "\(basePath)/retired.yaml"))
-        retired = retiredInfo.retired.mapValues { Set($0) }
-        replace = retiredInfo.replace
-
-        print("loading json")
-        self.studyMaterials = loadStudyMaterials(basePath: basePath)
-        self.allWords = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "vocabulary", class: Word.self))
-        self.allKanji = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "kanji", class: Kanji.self))
-        self.allFlashcards = ItemList(loadFlashcardYAML(basePath: basePath))
-        print("loading confusion")
-        let allKanjiConfusion = loadConfusion(path: basePath + "/confusion.txt", isWord: false)
-        let allWordConfusion = loadConfusion(path: basePath + "/confusion-vocab.txt", isWord: true)
-        self.allConfusion = ItemList(allKanjiConfusion + allWordConfusion)
-        self.allItems = self.allWords.items + self.allKanji.items + self.allConfusion.items
-        print("loading srs")
-        self.srs = self.createSRSFromLog()
-        print("done loading")
-    }
-    func allByKind(_ kind: ItemKind) -> ItemListProtocol {
-        switch kind {
-        case .word: return self.allWords
-        case .kanji: return self.allKanji
-        case .confusion: return self.allConfusion
-        case .flashcard: return self.allFlashcards
+    func removeFromLog(test: Test) throws {
+        if self.lastAppend?.test !== test {
+            throw MyError("removeFromLog out of order")
+        }
+        let toRemove = self.lastAppend!.appendedData
+        try Subete.instance.openLogTxt(write: true) { (fh: FileHandle) throws in
+            let welp = MyError("log.txt did not end with what we just appended to it")
+            let len = fh.seekToEndOfFile()
+            if len < toRemove.count {
+                print("len=\(len) toRemove.count=\(toRemove.count)")
+                throw welp
+            }
+            let truncOffset = len - UInt64(toRemove.count)
+            fh.seek(toFileOffset: truncOffset)
+            let actualData = fh.readDataToEndOfFile()
+            if actualData != toRemove {
+                print(actualData)
+                print(toRemove)
+                throw welp
+            }
+            fh.truncateFile(atOffset: truncOffset)
+            self.lastAppend = nil
         }
     }
-    func loadConfusion(path: String, isWord: Bool) -> [Confusion] {
-        let text = try! String(contentsOfFile: path, encoding: .utf8)
-        return text.split(separator: "\n").map {
-            Confusion(line: String($0), isWord: isWord)
+
+    func addToLog(test: Test) throws {
+        let toAppend = Data((test.result!.getRecordLine() + "\n").utf8)
+        try self.openLogTxt(write: true) { (fh: FileHandle) throws in
+            fh.seekToEndOfFile()
+            fh.write(toAppend)
+            self.lastAppend = (test: test, appendedData: toAppend)
         }
     }
+
     func openLogTxt<R>(write: Bool, cb: (FileHandle) throws -> R) throws -> R {
         // todo: clowd!
-        let url = URL(fileURLWithPath: basePath + "/log.txt")
+        let url = URL(fileURLWithPath: Subete.instance.basePath + "/log.txt")
         let fh: FileHandle
         if write {
             fh = try FileHandle(forUpdating: url)
@@ -224,7 +207,60 @@ class Subete {
         fh.closeFile()
         return ret
     }
-    func createSRSFromLog() -> SRS {
+}
+
+final actor Subete: Sendable {
+    nonisolated(unsafe) static var instance: Subete!
+    let allWords: ItemList<Word>
+    let allKanji: ItemList<Kanji>
+    let allConfusion: ItemList<Confusion>
+    let allFlashcards: ItemList<Flashcard>
+    let allItems: [Item]
+    let studyMaterials: [Int: StudyMaterial]
+
+    let retired: [ItemKind: Set<String>]
+    let replace: [ItemKind: [String: String]]
+
+    let basePath = getWkDir()
+
+    var nextItemID = 0
+
+    init() {
+
+        let retiredInfo: RetiredYaml = try! YAMLDecoder().decode(RetiredYaml.self, from: data(of: "\(basePath)/retired.yaml"))
+        retired = retiredInfo.retired.mapValues { Set($0) }
+        replace = retiredInfo.replace
+
+        print("loading json...", terminator: "")
+        self.studyMaterials = loadStudyMaterials(basePath: basePath)
+        self.allWords = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "vocabulary", class: Word.self))
+        self.allKanji = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "kanji", class: Kanji.self))
+        self.allFlashcards = ItemList(loadFlashcardYAML(basePath: basePath))
+        print("done")
+        print("loading confusion...", terminator: "")
+        let allKanjiConfusion = loadConfusion(path: basePath + "/confusion.txt", isWord: false)
+        let allWordConfusion = loadConfusion(path: basePath + "/confusion-vocab.txt", isWord: true)
+        self.allConfusion = ItemList(allKanjiConfusion + allWordConfusion)
+        self.allItems = self.allWords.items + self.allKanji.items + self.allConfusion.items
+        print("done")
+        Subete.instance = self
+    }
+    func allByKind(_ kind: ItemKind) -> ItemListProtocol {
+        switch kind {
+        case .word: return self.allWords
+        case .kanji: return self.allKanji
+        case .confusion: return self.allConfusion
+        case .flashcard: return self.allFlashcards
+        }
+    }
+    func loadConfusion(path: String, isWord: Bool) -> [Confusion] {
+        let text = try! String(contentsOfFile: path, encoding: .utf8)
+        return text.split(separator: "\n").map {
+            Confusion(line: String($0), isWord: isWord)
+        }
+    }
+    func createSRS() -> SRS {
+        print("loading srs...", terminator: "")
         let results = try! TestResult.readAllFromLog()
         let srs = SRS()
         let srsEpoch = 1611966197
@@ -237,6 +273,7 @@ class Subete {
             let _ = srs.info(question: question) // allow items with no results to stale
         }
         srs.updateStales(date: Int(Date().timeIntervalSince1970))
+        print(" done")
         return srs
     }
     var allQuestions: [Question] {
@@ -262,8 +299,8 @@ struct DataToEnumCache<T>
         self.map[.unowned(d)]
     }
 }
-    
-class Item: Hashable, Equatable, Comparable {
+
+class Item: Hashable, Equatable, Comparable, Sendable {
     let name: String
     let birthday: Date?
     let id: Int
@@ -674,7 +711,7 @@ protocol ItemListProtocol {
     var names: [String] { get }
     var vagueItems: [Item] { get }
 }
-class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol {
+class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol, Sendable {
     let items: [X]
     let byName: [String: X]
     let byReading: [String: [X]]?
@@ -907,12 +944,11 @@ enum TestState {
     }
 }
 
-class Test {
+class Test: Sendable {
     let question: Question
     let testSession: TestSession
     var result: TestResult? = nil
     var state: TestState
-    var appendedStuff: Data? = nil
 
     init(question: Question, testSession: TestSession) {
         self.question = question
@@ -920,40 +956,6 @@ class Test {
         self.state = Test.initialState(item: question.item, testKind: question.testKind)
     }
 
-    func removeFromLog() throws {
-        if Subete.instance.lastAppendedTest !== self {
-            throw MyError("removeFromLog out of order")
-        }
-        let toRemove = self.appendedStuff!
-        try Subete.instance.openLogTxt(write: true) { (fh: FileHandle) throws in
-            let welp = MyError("log.txt did not end with what we just appended to it")
-            let len = fh.seekToEndOfFile()
-            if len < toRemove.count {
-                print("len=\(len) toRemove.count=\(toRemove.count)")
-                throw welp
-            }
-            let truncOffset = len - UInt64(toRemove.count)
-            fh.seek(toFileOffset: truncOffset)
-            let actualData = fh.readDataToEndOfFile()
-            if actualData != toRemove {
-                print(actualData)
-                print(toRemove)
-                throw welp
-            }
-            fh.truncateFile(atOffset: truncOffset)
-            Subete.instance.lastAppendedTest = nil
-            self.appendedStuff = nil
-        }
-    }
-    func addToLog() throws {
-        let toAppend = Data((self.result!.getRecordLine() + "\n").utf8)
-        try Subete.instance.openLogTxt(write: true) { (fh: FileHandle) throws in
-            fh.seekToEndOfFile()
-            fh.write(toAppend)
-            Subete.instance.lastAppendedTest = self
-            self.appendedStuff = toAppend
-        }
-    }
     func maybeMarkResult(outcome: TestOutcome, final: Bool) throws -> SRSUpdate {
         let ret: SRSUpdate
         if outcome == .wrong || (self.result == nil && final) {
@@ -973,7 +975,7 @@ class Test {
         if let outcome = outcome {
             self.result = TestResult(question: self.question, date: Int(Date().timeIntervalSince1970), outcome: outcome)
             try self.addToLog()
-            return Subete.instance.srs!.update(forResult: self.result!)
+            return Subete.instance.srs.update(forResult: self.result!)
         } else {
             self.result = nil
             return .noChangeOther
@@ -1132,7 +1134,7 @@ enum SRSUpdate {
     }
 }
 
-class SRS {
+final class SRS {
     enum ItemInfo {
         case active((lastSeen: Int, points: Double, urgentRetest: Bool))
         case burned
@@ -1469,8 +1471,10 @@ class TestSession {
     var lottery: WeightedList<Question>
     var pulledQuestionToIndex: [Question: Int] = [:]
     var saveURL: URL? = nil
-    init(base: SerializableTestSession, saveURL: URL? = nil) {
+    let srs: SRS?
+    init(base: SerializableTestSession, srs: SRS?, saveURL: URL? = nil) {
         self.base = base
+        self.srs = srs
         self.saveURL = saveURL
         self.lottery = TestSession.makeLottery(randomMode: base.randomMode,
                                                excluding: Set(base.pulledCompleteQuestions).union(Set(base.pulledIncompleteQuestions)))
