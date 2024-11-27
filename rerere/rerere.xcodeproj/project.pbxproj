@@ -3,13 +3,13 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 50;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
-		8006208122B8389500C49F3F /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8006208022B8389500C49F3F /* main.swift */; };
-		803B6CB22CF72A900077D801 /* buffers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 803B6CB12CF72A900077D801 /* buffers.swift */; };
-		80B02D6722B9FCF1009AA9F0 /* Levenshtein.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80B02D6622B9FCF1009AA9F0 /* Levenshtein.swift */; };
+		803B6CF02CF72C0E0077D801 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = 803B6CEF2CF72C0E0077D801 /* Yams */; };
+		803B6CF32CF72C1E0077D801 /* ArgumentParser in Frameworks */ = {isa = PBXBuildFile; productRef = 803B6CF22CF72C1E0077D801 /* ArgumentParser */; };
+		803B6CF62CF72C3A0077D801 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = 803B6CF52CF72C3A0077D801 /* Yams */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -30,7 +30,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		8006207B22B8389500C49F3F /* CopyFiles */ = {
+		803B6CE42CF72B4F0077D801 /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = /usr/share/man/man1/;
@@ -42,12 +42,12 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		8006207D22B8389500C49F3F /* rerere */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = rerere; sourceTree = BUILT_PRODUCTS_DIR; };
-		8006208022B8389500C49F3F /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		8006208022B8389500C49F3F /* rerere.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rerere.swift; sourceTree = "<group>"; };
 		803B6CB12CF72A900077D801 /* buffers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = buffers.swift; sourceTree = "<group>"; };
 		803B6CB72CF72A9C0077D801 /* rerere-gui.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "rerere-gui.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		803B6CC72CF72A9C0077D801 /* rerere-guiTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "rerere-guiTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		803B6CD12CF72A9C0077D801 /* rerere-guiUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "rerere-guiUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		803B6CE62CF72B4F0077D801 /* rerere-cli */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "rerere-cli"; sourceTree = BUILT_PRODUCTS_DIR; };
 		80B02D6622B9FCF1009AA9F0 /* Levenshtein.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Levenshtein.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -55,20 +55,15 @@
 		803B6CB82CF72A9C0077D801 /* rerere-gui */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "rerere-gui"; sourceTree = "<group>"; };
 		803B6CCA2CF72A9C0077D801 /* rerere-guiTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "rerere-guiTests"; sourceTree = "<group>"; };
 		803B6CD42CF72A9C0077D801 /* rerere-guiUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "rerere-guiUITests"; sourceTree = "<group>"; };
+		803B6CE72CF72B4F0077D801 /* rerere-cli */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "rerere-cli"; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		8006207A22B8389500C49F3F /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		803B6CB42CF72A9C0077D801 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				803B6CF62CF72C3A0077D801 /* Yams in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -86,6 +81,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		803B6CE32CF72B4F0077D801 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				803B6CF32CF72C1E0077D801 /* ArgumentParser in Frameworks */,
+				803B6CF02CF72C0E0077D801 /* Yams in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -96,6 +100,8 @@
 				803B6CB82CF72A9C0077D801 /* rerere-gui */,
 				803B6CCA2CF72A9C0077D801 /* rerere-guiTests */,
 				803B6CD42CF72A9C0077D801 /* rerere-guiUITests */,
+				803B6CE72CF72B4F0077D801 /* rerere-cli */,
+				803B6CF42CF72C3A0077D801 /* Frameworks */,
 				8006207E22B8389500C49F3F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -103,10 +109,10 @@
 		8006207E22B8389500C49F3F /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				8006207D22B8389500C49F3F /* rerere */,
 				803B6CB72CF72A9C0077D801 /* rerere-gui.app */,
 				803B6CC72CF72A9C0077D801 /* rerere-guiTests.xctest */,
 				803B6CD12CF72A9C0077D801 /* rerere-guiUITests.xctest */,
+				803B6CE62CF72B4F0077D801 /* rerere-cli */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -115,32 +121,22 @@
 			isa = PBXGroup;
 			children = (
 				803B6CB12CF72A900077D801 /* buffers.swift */,
-				8006208022B8389500C49F3F /* main.swift */,
+				8006208022B8389500C49F3F /* rerere.swift */,
 				80B02D6622B9FCF1009AA9F0 /* Levenshtein.swift */,
 			);
 			path = rerere;
 			sourceTree = "<group>";
 		};
+		803B6CF42CF72C3A0077D801 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		8006207C22B8389500C49F3F /* rerere */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 8006208422B8389500C49F3F /* Build configuration list for PBXNativeTarget "rerere" */;
-			buildPhases = (
-				8006207922B8389500C49F3F /* Sources */,
-				8006207A22B8389500C49F3F /* Frameworks */,
-				8006207B22B8389500C49F3F /* CopyFiles */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			name = rerere;
-			productName = rerere;
-			productReference = 8006207D22B8389500C49F3F /* rerere */;
-			productType = "com.apple.product-type.tool";
-		};
 		803B6CB62CF72A9C0077D801 /* rerere-gui */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 803B6CD92CF72A9C0077D801 /* Build configuration list for PBXNativeTarget "rerere-gui" */;
@@ -158,6 +154,7 @@
 			);
 			name = "rerere-gui";
 			packageProductDependencies = (
+				803B6CF52CF72C3A0077D801 /* Yams */,
 			);
 			productName = "rerere-gui";
 			productReference = 803B6CB72CF72A9C0077D801 /* rerere-gui.app */;
@@ -209,6 +206,30 @@
 			productReference = 803B6CD12CF72A9C0077D801 /* rerere-guiUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		803B6CE52CF72B4F0077D801 /* rerere-cli */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 803B6CEA2CF72B4F0077D801 /* Build configuration list for PBXNativeTarget "rerere-cli" */;
+			buildPhases = (
+				803B6CE22CF72B4F0077D801 /* Sources */,
+				803B6CE32CF72B4F0077D801 /* Frameworks */,
+				803B6CE42CF72B4F0077D801 /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				803B6CE72CF72B4F0077D801 /* rerere-cli */,
+			);
+			name = "rerere-cli";
+			packageProductDependencies = (
+				803B6CEF2CF72C0E0077D801 /* Yams */,
+				803B6CF22CF72C1E0077D801 /* ArgumentParser */,
+			);
+			productName = "rerere-cli";
+			productReference = 803B6CE62CF72B4F0077D801 /* rerere-cli */;
+			productType = "com.apple.product-type.tool";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -219,9 +240,6 @@
 				LastUpgradeCheck = 1100;
 				ORGANIZATIONNAME = "Nicholas Allegra";
 				TargetAttributes = {
-					8006207C22B8389500C49F3F = {
-						CreatedOnToolsVersion = 11.0;
-					};
 					803B6CB62CF72A9C0077D801 = {
 						CreatedOnToolsVersion = 16.1;
 					};
@@ -233,6 +251,9 @@
 						CreatedOnToolsVersion = 16.1;
 						TestTargetID = 803B6CB62CF72A9C0077D801;
 					};
+					803B6CE52CF72B4F0077D801 = {
+						CreatedOnToolsVersion = 16.1;
+					};
 				};
 			};
 			buildConfigurationList = 8006207822B8389500C49F3F /* Build configuration list for PBXProject "rerere" */;
@@ -243,14 +264,18 @@
 				en,
 			);
 			mainGroup = 8006207422B8389500C49F3F;
+			packageReferences = (
+				803B6CEE2CF72C0E0077D801 /* XCRemoteSwiftPackageReference "Yams" */,
+				803B6CF12CF72C1E0077D801 /* XCRemoteSwiftPackageReference "swift-argument-parser" */,
+			);
 			productRefGroup = 8006207E22B8389500C49F3F /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				8006207C22B8389500C49F3F /* rerere */,
 				803B6CB62CF72A9C0077D801 /* rerere-gui */,
 				803B6CC62CF72A9C0077D801 /* rerere-guiTests */,
 				803B6CD02CF72A9C0077D801 /* rerere-guiUITests */,
+				803B6CE52CF72B4F0077D801 /* rerere-cli */,
 			);
 		};
 /* End PBXProject section */
@@ -280,16 +305,6 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		8006207922B8389500C49F3F /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				8006208122B8389500C49F3F /* main.swift in Sources */,
-				80B02D6722B9FCF1009AA9F0 /* Levenshtein.swift in Sources */,
-				803B6CB22CF72A900077D801 /* buffers.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		803B6CB32CF72A9C0077D801 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -305,6 +320,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		803B6CCD2CF72A9C0077D801 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		803B6CE22CF72B4F0077D801 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -439,24 +461,6 @@
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
-			};
-			name = Release;
-		};
-		8006208522B8389500C49F3F /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_VERSION = 5.0;
-			};
-			name = Debug;
-		};
-		8006208622B8389500C49F3F /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
 		};
@@ -659,6 +663,39 @@
 			};
 			name = Release;
 		};
+		803B6CEB2CF72B4F0077D801 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.1;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		803B6CEC2CF72B4F0077D801 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.1;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -667,15 +704,6 @@
 			buildConfigurations = (
 				8006208222B8389500C49F3F /* Debug */,
 				8006208322B8389500C49F3F /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		8006208422B8389500C49F3F /* Build configuration list for PBXNativeTarget "rerere" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				8006208522B8389500C49F3F /* Debug */,
-				8006208622B8389500C49F3F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -707,7 +735,53 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		803B6CEA2CF72B4F0077D801 /* Build configuration list for PBXNativeTarget "rerere-cli" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				803B6CEB2CF72B4F0077D801 /* Debug */,
+				803B6CEC2CF72B4F0077D801 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		803B6CEE2CF72C0E0077D801 /* XCRemoteSwiftPackageReference "Yams" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/jpsim/Yams.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.1.3;
+			};
+		};
+		803B6CF12CF72C1E0077D801 /* XCRemoteSwiftPackageReference "swift-argument-parser" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-argument-parser.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.5.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		803B6CEF2CF72C0E0077D801 /* Yams */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 803B6CEE2CF72C0E0077D801 /* XCRemoteSwiftPackageReference "Yams" */;
+			productName = Yams;
+		};
+		803B6CF22CF72C1E0077D801 /* ArgumentParser */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 803B6CF12CF72C1E0077D801 /* XCRemoteSwiftPackageReference "swift-argument-parser" */;
+			productName = ArgumentParser;
+		};
+		803B6CF52CF72C3A0077D801 /* Yams */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 803B6CEE2CF72C0E0077D801 /* XCRemoteSwiftPackageReference "Yams" */;
+			productName = Yams;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 8006207522B8389500C49F3F /* Project object */;
 }

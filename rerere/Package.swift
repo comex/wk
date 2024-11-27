@@ -3,7 +3,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "rerere",
+    name: "rerere-cli",
     platforms: [
         .macOS(.v15),
     ],
@@ -13,19 +13,25 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "rerere",
+            name: "rerere-cli",
             dependencies: [
                 .product(name: "Yams", package: "Yams"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
-            path: "rerere/",
+            path: ".",
+            exclude: [
+                "rerere-gui",
+                "rerere-guiTests",
+                "rerere-guiUITests",
+            ],
             sources: [
-                "main.swift",
-                "buffers.swift",
-                "Levenshtein.swift",
+                "rerere/rerere.swift",
+                "rerere/buffers.swift",
+                "rerere/Levenshtein.swift",
+                "rerere-cli/main.swift",
             ],
             cSettings: [
-                .headerSearchPath("../rerere-c"),
+                .headerSearchPath("rerere-c"),
             ]
         ),
     ]
