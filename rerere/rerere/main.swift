@@ -574,7 +574,7 @@ struct CLI {
         let name = formatItemName(item)
         if let normal = item as? NormalItem {
             let readings = formatItemReadings(normal, colorful: colorful)
-            let meanings = formatItemMeanings(normal, colorful: false)
+            let meanings = formatItemMeanings(normal, colorful: colorful)
             return "\(name) \(readings) \(meanings)"
         }
         if let fc = item as? Flashcard {
