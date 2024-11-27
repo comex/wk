@@ -3,3 +3,6 @@
 *.pyc
 target
 jmdict.lmdb
+.DS_Store
+/.build
+/Packages
