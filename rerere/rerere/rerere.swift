@@ -14,6 +14,7 @@ import Foundation
 import Yams
 import XCTest
 import System
+import Synchronization
 
 // TODO: ~ is broken for r2m
 // TODO: !wrong doesn't act as expected when halfway through a k2rm
@@ -152,7 +153,7 @@ func getWkDir() -> String {
     return try! URL(fileURLWithPath: path.string).resourceValues(forKeys: [.canonicalPathKey]).canonicalPath!
 }
 
-final actor Appender {
+final actor LogTxtManager {
     var lastAppend: (test: Test, appendedData: Data)? = nil
 
     func removeFromLog(test: Test) throws {
@@ -160,7 +161,7 @@ final actor Appender {
             throw MyError("removeFromLog out of order")
         }
         let toRemove = self.lastAppend!.appendedData
-        try Subete.instance.openLogTxt(write: true) { (fh: FileHandle) throws in
+        try self.openLogTxt(write: true) { (fh: FileHandle) throws in
             let welp = MyError("log.txt did not end with what we just appended to it")
             let len = fh.seekToEndOfFile()
             if len < toRemove.count {
@@ -209,7 +210,7 @@ final actor Appender {
     }
 }
 
-final actor Subete: Sendable {
+struct Subete: Sendable, ~Copyable {
     nonisolated(unsafe) static var instance: Subete!
     let allWords: ItemList<Word>
     let allKanji: ItemList<Kanji>
@@ -223,10 +224,15 @@ final actor Subete: Sendable {
 
     let basePath = getWkDir()
 
-    var nextItemID = 0
+    let nextItemID: Mutex<Int> = Mutex(0)
 
+    let srs: Mutex<SRS>
+    let logTxtManager: LogTxtManager = LogTxtManager()
+
+    static func initialize() {
+        Subete.instance = Subete()
+    }
     init() {
-
         let retiredInfo: RetiredYaml = try! YAMLDecoder().decode(RetiredYaml.self, from: data(of: "\(basePath)/retired.yaml"))
         retired = retiredInfo.retired.mapValues { Set($0) }
         replace = retiredInfo.replace
@@ -243,7 +249,7 @@ final actor Subete: Sendable {
         self.allConfusion = ItemList(allKanjiConfusion + allWordConfusion)
         self.allItems = self.allWords.items + self.allKanji.items + self.allConfusion.items
         print("done")
-        Subete.instance = self
+        self.srs = Mutex(await createSRS())
     }
     func allByKind(_ kind: ItemKind) -> ItemListProtocol {
         switch kind {
@@ -259,9 +265,9 @@ final actor Subete: Sendable {
             Confusion(line: String($0), isWord: isWord)
         }
     }
-    func createSRS() -> SRS {
+    func createSRS() async -> SRS {
         print("loading srs...", terminator: "")
-        let results = try! TestResult.readAllFromLog()
+        let results = try! TestResult.readAllFromLog(manager: self.logTxtManager)
         let srs = SRS()
         let srsEpoch = 1611966197
         for result in results {
@@ -300,7 +306,10 @@ struct DataToEnumCache<T>
     }
 }
 
-class Item: Hashable, Equatable, Comparable, Sendable {
+// NOTE: for some crazy reason Swift does not allow class hierarchies to be
+// non-unchecked Sendable, nor actors.  So use unchecked.  The safety invariant
+// is that all the properties are immutable.
+class Item: Hashable, Equatable, Comparable, @unchecked Sendable {
     let name: String
     let birthday: Date?
     let id: Int
@@ -311,8 +320,11 @@ class Item: Hashable, Equatable, Comparable, Sendable {
     init(_ initializer: ItemInitializer) {
         self.name = initializer.name
         self.birthday = initializer.birthday
-        self.id = Subete.instance.nextItemID
-        Subete.instance.nextItemID = self.id + 1
+        self.id = Subete.instance.nextItemID.withLock {
+            let myId = $0
+            $0 = myId + 1
+            return myId
+        }
     }
     static func initializer(name: String, from dec: any Decoder) throws -> ItemInitializer {
         enum K: CodingKey { case birth }
@@ -485,7 +497,7 @@ func evaluateMeaningAnswerInner(normalizedInput: String, meanings: [Ing], levens
 
 
 struct Relaxed { let relaxed: Bool }
-class NormalItem: Item, DecodableWithConfiguration, Decodable {
+class NormalItem: Item, DecodableWithConfiguration, Decodable, @unchecked Sendable {
     let meanings: [Ing]
     let readings: [Ing]
     let character: String
@@ -616,19 +628,19 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable {
     }
     override var availableTests: [TestKind] { return [.characterToRM, .meaningToReading, .readingToMeaning] }
 }
-final class Word : NormalItem, CustomStringConvertible {
+final class Word : NormalItem, CustomStringConvertible, @unchecked Sendable {
     var description: String {
         return "<Word \(self.character)>"
     }
     override class var kind: ItemKind { return .word }
 }
-final class Kanji : NormalItem, CustomStringConvertible {
+final class Kanji : NormalItem, CustomStringConvertible, @unchecked Sendable {
     var description: String {
         return "<Kanji \(self.character)>"
     }
     override class var kind: ItemKind { return .kanji }
 }
-final class Confusion: Item, CustomStringConvertible {
+final class Confusion: Item, CustomStringConvertible, @unchecked Sendable {
     let characters: [String]
     let items: [Item]
     let isWord: Bool
@@ -675,9 +687,9 @@ final class Confusion: Item, CustomStringConvertible {
     override class var kind: ItemKind { return .confusion }
     override var availableTests: [TestKind] { return [.confusion] }
 }
-final class Flashcard: Item, CustomStringConvertible, Decodable {
+final class Flashcard: Item, CustomStringConvertible, Decodable, @unchecked Sendable {
     let front: String
-    var backs: [Ing]
+    let backs: [Ing]
     init(from dec: any Decoder) throws {
         enum K: CodingKey { case front, backs }
         let container = try dec.container(keyedBy: K.self)
@@ -711,7 +723,7 @@ protocol ItemListProtocol {
     var names: [String] { get }
     var vagueItems: [Item] { get }
 }
-class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol, Sendable {
+final class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol, Sendable {
     let items: [X]
     let byName: [String: X]
     let byReading: [String: [X]]?
@@ -873,8 +885,8 @@ struct TestResult {
             )
         }
     }
-    static func readAllFromLog() throws -> [TestResult] {
-        let data = try Subete.instance.openLogTxt(write: false) { (fh: FileHandle) in fh.readDataToEndOfFile() }
+    static func readAllFromLog(manager: LogTxtManager) async throws -> [TestResult] {
+        let data = try await manager.openLogTxt(write: false) { (fh: FileHandle) in fh.readDataToEndOfFile() }
         var parser = TestResultParser()
         return data.split(separator: 10 /*"\n"*/).compactMap {
             do {
@@ -944,7 +956,7 @@ enum TestState {
     }
 }
 
-class Test: Sendable {
+final class Test: Sendable {
     let question: Question
     let testSession: TestSession
     var result: TestResult? = nil
@@ -1471,10 +1483,8 @@ class TestSession {
     var lottery: WeightedList<Question>
     var pulledQuestionToIndex: [Question: Int] = [:]
     var saveURL: URL? = nil
-    let srs: SRS?
-    init(base: SerializableTestSession, srs: SRS?, saveURL: URL? = nil) {
+    init(base: SerializableTestSession, saveURL: URL? = nil) {
         self.base = base
-        self.srs = srs
         self.saveURL = saveURL
         self.lottery = TestSession.makeLottery(randomMode: base.randomMode,
                                                excluding: Set(base.pulledCompleteQuestions).union(Set(base.pulledIncompleteQuestions)))

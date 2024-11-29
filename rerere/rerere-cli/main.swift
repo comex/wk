@@ -347,12 +347,13 @@ struct ForecastCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "forecast")
     func run() {
-        let _ = Subete()
-        let srs = Subete.instance.createSRS()
+        Subete.initialize()
         let now = Date().timeIntervalSince1970
-        let srsItems: [(nextTestDate: Int, question: Question)] = Subete.instance.allQuestions.compactMap { (question) in
-            guard let nextTestDate = srs.info(question: question).nextTestDate else { return nil }
-            return (nextTestDate: nextTestDate, question: question)
+        let srsItems: [(nextTestDate: Int, question: Question)] = Subete.instance.srs.withLock { (srs: inout SRS) in
+            Subete.instance.allQuestions.compactMap { (question) in
+                guard let nextTestDate = srs.info(question: question).nextTestDate else { return nil }
+                return (nextTestDate: nextTestDate, question: question)
+            }
         }
         let maxDays = 20
         let secondsPerDay: Double = 60 * 60 * 24
@@ -383,7 +384,7 @@ struct TestOneCommand: ParsableCommand {
         runOrExit { try runImpl() }
     }
     func runImpl() throws {
-        let _ = Subete()
+        Subete.initialize()
         let item = try unwrapOrThrow(Subete.instance.allByKind(itemKind).findByName(name),
                                      err: MyError("no such item kind \(itemKind) name \(name)"))
         let question = Question(item: item, testKind: testKind)
@@ -401,7 +402,7 @@ struct BenchSTSCommand: ParsableCommand {
         commandName: "bench-sts")
     @Flag() var deser: Bool = false
     func run() {
-        let _ = Subete()
+        Subete.initialize()
         let sts = SerializableTestSession(
             pulledIncompleteQuestions: IndexableSet(Subete.instance.allQuestions[..<500]),
             randomMode: .all
@@ -423,7 +424,7 @@ struct BenchStartupCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "bench-startup")
     func run() {
-        let _ = Subete()
+        Subete.initialize()
     }
 }
 
@@ -460,11 +461,13 @@ struct Rerere: ParsableCommand {
                 return (minQuestions: _minQuestions, maxQuestions: _maxQuestions)
         }
     }
-    func gatherSRSQuestions(srs: SRS) -> [(nextTestDate: Int, question: Question)] {
+    func gatherSRSQuestions() -> [(nextTestDate: Int, question: Question)] {
         let now = Int(Date().timeIntervalSince1970)
-        return Subete.instance.allQuestions.compactMap { (question) in
-            guard let nextTestDate = srs.info(question: question).nextTestDate else { return nil }
-            return nextTestDate <= now ? (nextTestDate: nextTestDate, question: question) : nil
+        return Subete.instance.srs.withLock { (srs: inout SRS) in
+            Subete.instance.allQuestions.compactMap { (question) in
+                guard let nextTestDate = srs.info(question: question).nextTestDate else { return nil }
+                return nextTestDate <= now ? (nextTestDate: nextTestDate, question: question) : nil
+            }
         }
     }
     func calcQuestionSplit(minQuestions: Int, maxQuestions: Int, availSRSQuestions: Int) -> (numSRSQuestions: Int, numRandomQuestions: Int) {
@@ -482,9 +485,9 @@ struct Rerere: ParsableCommand {
             )
         }
     }
-    func makeSerializableSession(srs: SRS) -> SerializableTestSession {
+    func makeSerializableSession() -> SerializableTestSession {
         let (minQuestions, maxQuestions) = resolveMinMax()
-        var srsQuestions = gatherSRSQuestions(srs)
+        var srsQuestions = gatherSRSQuestions()
         let (numSRSQuestions, numRandomQuestions) = calcQuestionSplit(minQuestions: minQuestions, maxQuestions: maxQuestions, availSRSQuestions: srsQuestions.count)
         print("got \(srsQuestions.count) SRS questions")
         if numSRSQuestions < srsQuestions.count {
@@ -500,8 +503,7 @@ struct Rerere: ParsableCommand {
     }
 
     func run() throws {
-        let _ = Subete()
-        let srs = Subete.instance.createSRS()
+        Subete.initialize()
         let path = "\(Subete.instance.basePath)/sess.json"
         let url = URL(fileURLWithPath: path)
         let sess: TestSession
@@ -511,7 +513,7 @@ struct Rerere: ParsableCommand {
         } catch let e as NSError where e.domain == NSCocoaErrorDomain &&
                                        e.code == NSFileReadNoSuchFileError {
             print("Starting new session \(path)")
-            let ser = makeSerializableSession(srs)
+            let ser = makeSerializableSession()
             sess = TestSession(base: ser, saveURL: url)
         }
         runOrExit {
