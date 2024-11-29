@@ -129,3 +129,17 @@ struct StableArray<T>: ~Copyable {
         set(newValue) { self.buf[i] = newValue }
     }
 }
+
+actor AsyncMutex<Value: ~Copyable> {
+    var value: Value?
+    init(_ value: consuming sending Value) {
+        self.value = consume value
+    }
+    func withLock<Result: ~Copyable>(_ body: (inout sending Value) async throws -> sending Result) async rethrows -> sending Result {
+        guard var tempVal = exchange(&self.value, with: nil) else {
+            fatalError("AsyncMutex deadlock")
+        }
+        defer { self.value = consume tempVal }
+        return try await body(&tempVal)
+    }
+}

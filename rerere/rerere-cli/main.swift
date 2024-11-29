@@ -263,9 +263,9 @@ struct CLI {
             print(promptText)
             let args: [String]
             if kana {
-                args = [Subete.instance.basePath + "/read-kana.zsh", CLI.readingPrompt]
+                args = [Subete.basePath + "/read-kana.zsh", CLI.readingPrompt]
             } else {
-                args = [Subete.instance.basePath + "/read-english.zsh", CLI.meaningPrompt]
+                args = [Subete.basePath + "/read-english.zsh", CLI.meaningPrompt]
             }
             let output = trim(try runAndGetOutput(args))
             if output == "" {
@@ -349,8 +349,8 @@ struct ForecastCommand: ParsableCommand {
     func run() {
         Subete.initialize()
         let now = Date().timeIntervalSince1970
-        let srsItems: [(nextTestDate: Int, question: Question)] = Subete.instance.srs.withLock { (srs: inout SRS) in
-            Subete.instance.allQuestions.compactMap { (question) in
+        let srsItems: [(nextTestDate: Int, question: Question)] = Subete.withSRS { (srs: inout SRS) in
+            Subete.itemData.allQuestions.compactMap { (question) in
                 guard let nextTestDate = srs.info(question: question).nextTestDate else { return nil }
                 return (nextTestDate: nextTestDate, question: question)
             }
@@ -385,7 +385,7 @@ struct TestOneCommand: ParsableCommand {
     }
     func runImpl() throws {
         Subete.initialize()
-        let item = try unwrapOrThrow(Subete.instance.allByKind(itemKind).findByName(name),
+        let item = try unwrapOrThrow(Subete.itemData.allByKind(itemKind).findByName(name),
                                      err: MyError("no such item kind \(itemKind) name \(name)"))
         let question = Question(item: item, testKind: testKind)
         let testSession = TestSession(base: SerializableTestSession(
@@ -404,7 +404,7 @@ struct BenchSTSCommand: ParsableCommand {
     func run() {
         Subete.initialize()
         let sts = SerializableTestSession(
-            pulledIncompleteQuestions: IndexableSet(Subete.instance.allQuestions[..<500]),
+            pulledIncompleteQuestions: IndexableSet(Subete.itemData.allQuestions[..<500]),
             randomMode: .all
         )
         if self.deser {
@@ -461,10 +461,10 @@ struct Rerere: ParsableCommand {
                 return (minQuestions: _minQuestions, maxQuestions: _maxQuestions)
         }
     }
-    func gatherSRSQuestions() -> [(nextTestDate: Int, question: Question)] {
+    async func gatherSRSQuestions() -> [(nextTestDate: Int, question: Question)] {
         let now = Int(Date().timeIntervalSince1970)
-        return Subete.instance.srs.withLock { (srs: inout SRS) in
-            Subete.instance.allQuestions.compactMap { (question) in
+        return Subete.withSRS { (srs: inout SRS) in
+            Subete.itemData.allQuestions.compactMap { (question) in
                 guard let nextTestDate = srs.info(question: question).nextTestDate else { return nil }
                 return nextTestDate <= now ? (nextTestDate: nextTestDate, question: question) : nil
             }
@@ -504,7 +504,7 @@ struct Rerere: ParsableCommand {
 
     func run() throws {
         Subete.initialize()
-        let path = "\(Subete.instance.basePath)/sess.json"
+        let path = "\(Subete.basePath)/sess.json"
         let url = URL(fileURLWithPath: path)
         let sess: TestSession
         do {

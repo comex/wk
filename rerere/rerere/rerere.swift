@@ -95,20 +95,40 @@ func unwrapOrThrow<T>(_ t: T?, err: @autoclosure () -> Error) throws -> T {
     return t
 }
 
-func loadJSONAndExtraYAML<T>(basePath: String, stem: String, class: T.Type) -> [T]
-    where T: DecodableWithConfiguration, T.DecodingConfiguration == Relaxed, T: Decodable
+func loadJSONAndExtraYAML<T>(basePath: String, stem: String, class: T.Type, itemLoader: ItemLoader) -> [T]
+    where T: DecodableWithConfiguration, T.DecodingConfiguration == NormalItem.DecodingConfiguration, T: Decodable
 {
     let jsonData = try! data(of: "\(basePath)/\(stem).json")
-    let base = try! JSONDecoder().decode([T].self, from: jsonData, configuration: Relaxed(relaxed: false))
+    let base = try! JSONDecoder().decode(
+        [T].self, from: jsonData,
+        configuration: NormalItem.DecodingConfiguration(
+            relaxed: false,
+            itemLoader: itemLoader
+        )
+    )
     let yamlData = try! data(of: "\(basePath)/extra-\(stem).yaml")
-    let extra = try! YAMLDecoder().decode([T].self, from: yamlData,
-                                          userInfo: [CodingUserInfoKey(rawValue: "relaxed")!: true])
+    let extra = try! YAMLDecoder().decode(
+        [T].self, from: yamlData,
+        userInfo: [CodingUserInfoKey(rawValue: "decodingConfiguration")!:
+            NormalItem.DecodingConfiguration(
+                relaxed: true,
+                itemLoader: itemLoader
+            )
+        ]
+    )
     return base + extra
 }
 
-func loadFlashcardYAML(basePath: String) -> [Flashcard] {
+func loadFlashcardYAML(basePath: String, itemLoader: ItemLoader) -> [Flashcard] {
     let yamlData = try! data(of: "\(basePath)/flashcards.yaml")
-    return try! YAMLDecoder().decode([Flashcard].self, from: yamlData)
+    return try! YAMLDecoder().decode(
+        [Flashcard].self, from: yamlData,
+        userInfo: [CodingUserInfoKey(rawValue: "decodingConfiguration")!:
+            Flashcard.DecodingConfiguration(
+                itemLoader: itemLoader
+            )
+        ]
+    )
 }
 
 let startupDate: Date = Date()
@@ -192,7 +212,7 @@ final actor LogTxtManager {
 
     func openLogTxt<R>(write: Bool, cb: (FileHandle) throws -> R) throws -> R {
         // todo: clowd!
-        let url = URL(fileURLWithPath: Subete.instance.basePath + "/log.txt")
+        let url = URL(fileURLWithPath: Subete.basePath + "/log.txt")
         let fh: FileHandle
         if write {
             fh = try FileHandle(forUpdating: url)
@@ -210,8 +230,7 @@ final actor LogTxtManager {
     }
 }
 
-struct Subete: Sendable, ~Copyable {
-    nonisolated(unsafe) static var instance: Subete!
+struct ItemData {
     let allWords: ItemList<Word>
     let allKanji: ItemList<Kanji>
     let allConfusion: ItemList<Confusion>
@@ -219,37 +238,27 @@ struct Subete: Sendable, ~Copyable {
     let allItems: [Item]
     let studyMaterials: [Int: StudyMaterial]
 
-    let retired: [ItemKind: Set<String>]
-    let replace: [ItemKind: [String: String]]
-
-    let basePath = getWkDir()
-
-    let nextItemID: Mutex<Int> = Mutex(0)
-
-    let srs: Mutex<SRS>
-    let logTxtManager: LogTxtManager = LogTxtManager()
-
-    static func initialize() {
-        Subete.instance = Subete()
-    }
     init() {
-        let retiredInfo: RetiredYaml = try! YAMLDecoder().decode(RetiredYaml.self, from: data(of: "\(basePath)/retired.yaml"))
-        retired = retiredInfo.retired.mapValues { Set($0) }
-        replace = retiredInfo.replace
-
+        let itemLoader = ItemLoader()
+        let basePath = Subete.basePath
         print("loading json...", terminator: "")
         self.studyMaterials = loadStudyMaterials(basePath: basePath)
-        self.allWords = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "vocabulary", class: Word.self))
-        self.allKanji = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "kanji", class: Kanji.self))
-        self.allFlashcards = ItemList(loadFlashcardYAML(basePath: basePath))
+        self.allWords = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "vocabulary", class: Word.self, itemLoader: itemLoader))
+        self.allKanji = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "kanji", class: Kanji.self, itemLoader: itemLoader))
+        self.allFlashcards = ItemList(loadFlashcardYAML(basePath: basePath, itemLoader: itemLoader))
         print("done")
         print("loading confusion...", terminator: "")
-        let allKanjiConfusion = loadConfusion(path: basePath + "/confusion.txt", isWord: false)
-        let allWordConfusion = loadConfusion(path: basePath + "/confusion-vocab.txt", isWord: true)
+        let allKanjiConfusion = loadConfusion(path: basePath + "/confusion.txt", isWord: false, itemLoader: itemLoader)
+        let allWordConfusion = loadConfusion(path: basePath + "/confusion-vocab.txt", isWord: true, itemLoader: itemLoader)
         self.allConfusion = ItemList(allKanjiConfusion + allWordConfusion)
         self.allItems = self.allWords.items + self.allKanji.items + self.allConfusion.items
         print("done")
-        self.srs = Mutex(await createSRS())
+    }
+    func loadConfusion(path: String, isWord: Bool, itemLoader: ItemLoader) -> [Confusion] {
+        let text = try! String(contentsOfFile: path, encoding: .utf8)
+        return text.split(separator: "\n").map {
+            Confusion(line: String($0), isWord: isWord, itemLoader: itemLoader)
+        }
     }
     func allByKind(_ kind: ItemKind) -> ItemListProtocol {
         switch kind {
@@ -259,15 +268,27 @@ struct Subete: Sendable, ~Copyable {
         case .flashcard: return self.allFlashcards
         }
     }
-    func loadConfusion(path: String, isWord: Bool) -> [Confusion] {
-        let text = try! String(contentsOfFile: path, encoding: .utf8)
-        return text.split(separator: "\n").map {
-            Confusion(line: String($0), isWord: isWord)
-        }
+    var allQuestions: [Question] {
+        return allItems.flatMap { $0.myQuestions }
     }
-    func createSRS() async -> SRS {
+}
+
+struct RetiredReplace {
+    let retired: [ItemKind: Set<String>]
+    let replace: [ItemKind: [String: String]]
+    init() {
+        let retiredInfo: RetiredYaml = try! YAMLDecoder().decode(RetiredYaml.self, from: data(of: "\(Subete.basePath)/retired.yaml"))
+        self.retired = retiredInfo.retired.mapValues { Set($0) }
+        self.replace = retiredInfo.replace
+    }
+}
+
+
+actor SRSManager {
+    var asyncSRS: AsyncMutex<SRS>?
+    static func createSRS() async -> SRS {
         print("loading srs...", terminator: "")
-        let results = try! TestResult.readAllFromLog(manager: self.logTxtManager)
+        let results = try! await TestResult.readAllFromLog(manager: Subete.logTxtManager)
         let srs = SRS()
         let srsEpoch = 1611966197
         for result in results {
@@ -275,15 +296,40 @@ struct Subete: Sendable, ~Copyable {
             if date < srsEpoch { continue }
             let _ = srs.update(forResult: result)
         }
-        for question in self.allQuestions {
+        for question in Subete.itemData.allQuestions {
             let _ = srs.info(question: question) // allow items with no results to stale
         }
         srs.updateStales(date: Int(Date().timeIntervalSince1970))
         print(" done")
         return srs
     }
-    var allQuestions: [Question] {
-        return allItems.flatMap { $0.myQuestions }
+
+    func withSRS<R>(cb: (inout SRS) async throws -> sending R) async rethrows -> R {
+        if asyncSRS == nil {
+            asyncSRS = AsyncMutex(await SRSManager.createSRS())
+        }
+        return try await asyncSRS!.withLock(cb)
+    }
+}
+
+struct Subete: Sendable, ~Copyable {
+    nonisolated(unsafe) static var instance: Subete!
+
+    static let itemData = ItemData()
+    static let retrep = RetiredReplace()
+    static let basePath = getWkDir()
+    static let srsManager = SRSManager()
+
+    static let nextItemID: Mutex<Int> = Mutex(0)
+
+    static let logTxtManager: LogTxtManager = LogTxtManager()
+
+    static func initialize() {
+        Subete.instance = Subete()
+    }
+
+    static func withSRS<R>(cb: (inout SRS) async throws -> sending R) async rethrows -> R {
+        return try await Subete.srsManager.withSRS(cb: cb)
     }
 }
 
@@ -317,14 +363,11 @@ class Item: Hashable, Equatable, Comparable, @unchecked Sendable {
     // ItemInitializer is a workaround for convenience inits not interacting
     // well with subclassing
     typealias ItemInitializer = (name: String, birthday: Date?)
-    init(_ initializer: ItemInitializer) {
+    init(_ initializer: ItemInitializer, itemLoader: ItemLoader) {
         self.name = initializer.name
         self.birthday = initializer.birthday
-        self.id = Subete.instance.nextItemID.withLock {
-            let myId = $0
-            $0 = myId + 1
-            return myId
-        }
+        self.id = itemLoader.nextId
+        itemLoader.nextId += 1
     }
     static func initializer(name: String, from dec: any Decoder) throws -> ItemInitializer {
         enum K: CodingKey { case birth }
@@ -332,7 +375,8 @@ class Item: Hashable, Equatable, Comparable, @unchecked Sendable {
         // I can't delegate to the other init because that requires being a
         // convenience init, yet convenience inits are inherited so they can't
         // be called from the subclass??
-        return (name: name, birthday: try container.decodeIfPresent(Date.self, forKey: .birth))
+        return (name: name,
+                birthday: try container.decodeIfPresent(Date.self, forKey: .birth))
     }
     func hash(into hasher: inout Hasher) {
         hasher.combine(self.name)
@@ -362,11 +406,11 @@ class Item: Hashable, Equatable, Comparable, @unchecked Sendable {
         let normalizedMeaning = normalizeMeaningTrimmed(trim(meaning))
         /*
         var levenshtein = Levenshtein()
-        return Subete.instance.allByKind(Self.kind).vagueItems.filter { (other: Item) -> Bool in
+        return Subete.itemData.allByKind(Self.kind).vagueItems.filter { (other: Item) -> Bool in
             return other != self && (other as! NormalItem).meaningMatches(normalizedInput: normalizedMeaning, levenshtein: &levenshtein)
         }
         */
-        let ret = Subete.instance.allByKind(Self.kind).findByMeaning(normalizedMeaning).filter { $0 != self }
+        let ret = Subete.itemData.allByKind(Self.kind).findByMeaning(normalizedMeaning).filter { $0 != self }
         return ret
     }
 }
@@ -495,20 +539,27 @@ func evaluateMeaningAnswerInner(normalizedInput: String, meanings: [Ing], levens
     return bestQual
 }
 
+class ItemLoader {
+    var nextId: Int = 0
+}
 
 struct Relaxed { let relaxed: Bool }
 class NormalItem: Item, DecodableWithConfiguration, Decodable, @unchecked Sendable {
     let meanings: [Ing]
     let readings: [Ing]
     let character: String
-    typealias DecodingConfiguration = Relaxed
 
-    required convenience init(from dec: any Decoder) throws {
-        try self.init(from: dec, configuration: Relaxed(relaxed:
-            dec.userInfo[CodingUserInfoKey(rawValue: "relaxed")!] as! Bool))
+    struct DecodingConfiguration {
+        let relaxed: Bool
+        let itemLoader: ItemLoader
     }
 
-    required init(from dec: any Decoder, configuration: Relaxed) throws {
+    required convenience init(from dec: any Decoder) throws {
+        try self.init(from: dec,
+                      configuration: dec.userInfo[CodingUserInfoKey(rawValue: "decodingConfiguration")!] as! DecodingConfiguration)
+    }
+
+    required init(from dec: any Decoder, configuration: DecodingConfiguration) throws {
         let relaxed = configuration.relaxed
         enum K: CodingKey { case data, id, characters, readings, meanings, auxiliary_meanings }
         let topC = try dec.container(keyedBy: K.self)
@@ -536,15 +587,16 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable, @unchecked Sendab
                 try Ing(auxiliaryMeaningFrom: $0)
             }
         }
-        if let wkId, let material = Subete.instance.studyMaterials[wkId] {
+        if let wkId, let material = Subete.itemData.studyMaterials[wkId] {
             meanings += material.meaningSynonyms.map { Ing(synonymWithText: $0) }
         }
         self.meanings = meanings
-        super.init(try Item.initializer(name: self.character, from: dataDec))
+        super.init(try Item.initializer(name: self.character, from: dataDec),
+                   itemLoader: configuration.itemLoader)
     }
     func readingAlternatives(reading: String) -> [Item] {
         let normalizedReading = normalizeReadingTrimmed(trim(reading))
-        return Subete.instance.allByKind(Self.kind).findByReading(normalizedReading).filter { $0 != self }
+        return Subete.itemData.allByKind(Self.kind).findByReading(normalizedReading).filter { $0 != self }
     }
     func meaningMatches(normalizedInput: String, levenshtein: inout Levenshtein) -> Bool {
         return evaluateMeaningAnswerInner(normalizedInput: normalizedInput,
@@ -554,7 +606,7 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable, @unchecked Sendab
     func similarMeaning() -> [Item] {
         var set: Set<Item> = []
         for meaning in self.meanings {
-            set.formUnion(Subete.instance.allByKind(Self.kind).findByMeaning(meaning.text))
+            set.formUnion(Subete.itemData.allByKind(Self.kind).findByMeaning(meaning.text))
         }
         set.remove(self)
         return Array(set).sorted()
@@ -562,7 +614,7 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable, @unchecked Sendab
     func sameReading() -> [Item] {
         var set: Set<Item> = []
         for reading in self.readings {
-            set.formUnion(Subete.instance.allByKind(Self.kind).findByReading(reading.text))
+            set.formUnion(Subete.itemData.allByKind(Self.kind).findByReading(reading.text))
         }
         set.remove(self)
         return Array(set).sorted()
@@ -644,7 +696,7 @@ final class Confusion: Item, CustomStringConvertible, @unchecked Sendable {
     let characters: [String]
     let items: [Item]
     let isWord: Bool
-    init(line: String, isWord: Bool) {
+    init(line: String, isWord: Bool, itemLoader: ItemLoader) {
         let allXs: ItemListProtocol
         let bits = trim(line).split(separator: " ")
         if bits.count > 3 { fatalError("too many spaces in '\(line)'") }
@@ -662,10 +714,10 @@ final class Confusion: Item, CustomStringConvertible, @unchecked Sendable {
         let characters: [String]
         if isWord {
             characters = spec.split(separator: "/").map { trim($0) }
-            allXs = Subete.instance.allWords
+            allXs = Subete.itemData.allWords
         } else {
             characters = spec.map { String($0) }
-            allXs = Subete.instance.allKanji
+            allXs = Subete.itemData.allKanji
         }
         var birthday: Date? = nil
         if bits.count > bitsIdx + 1 {
@@ -679,7 +731,7 @@ final class Confusion: Item, CustomStringConvertible, @unchecked Sendable {
         self.isWord = isWord
         let name = nameOpt ?? characters[0]
         self.characters = characters
-        super.init((name: name, birthday: birthday))
+        super.init((name: name, birthday: birthday), itemLoader: itemLoader)
     }
     var description: String {
         return "<Confusion \(self.items)>"
@@ -687,17 +739,26 @@ final class Confusion: Item, CustomStringConvertible, @unchecked Sendable {
     override class var kind: ItemKind { return .confusion }
     override var availableTests: [TestKind] { return [.confusion] }
 }
-final class Flashcard: Item, CustomStringConvertible, Decodable, @unchecked Sendable {
+final class Flashcard: Item, CustomStringConvertible, DecodableWithConfiguration, Decodable, @unchecked Sendable {
     let front: String
     let backs: [Ing]
-    init(from dec: any Decoder) throws {
+
+    struct DecodingConfiguration {
+        let itemLoader: ItemLoader
+    }
+
+    required convenience init(from dec: any Decoder) throws {
+        try self.init(from: dec,
+                      configuration: dec.userInfo[CodingUserInfoKey(rawValue: "decodingConfiguration")!] as! DecodingConfiguration)
+    }
+    required init(from dec: any Decoder, configuration: DecodingConfiguration) throws {
         enum K: CodingKey { case front, backs }
         let container = try dec.container(keyedBy: K.self)
         self.front = try container.decode(String.self, forKey: .front)
         self.backs = try decodeArray(container.nestedUnkeyedContainer(forKey: .backs)) {
             try Ing(from: $0, isMeaning: true, relaxed: true)
         }
-        super.init(try Item.initializer(name: self.front, from: dec))
+        super.init(try Item.initializer(name: self.front, from: dec), itemLoader: configuration.itemLoader)
     }
     var description: String {
         return "<Flashcard \(self.front)>"
@@ -818,7 +879,7 @@ struct TestResultParser : ~Copyable {
         Set(stringList.map { MaybeOwnedData.owned(Data($0.utf8)) })
     }
     let itemsByName: [ItemKind: [MaybeOwnedData: Item]] = Dictionary(uniqueKeysWithValues: ItemKind.allCases.map { (itemKind) in
-        let itemList = Subete.instance.allByKind(itemKind)
+        let itemList = Subete.itemData.allByKind(itemKind)
         return (itemKind, Dictionary(uniqueKeysWithValues: itemList.names.map {
             (MaybeOwnedData.owned(Data($0.utf8)), itemList.findByName($0)!)
         }))
@@ -977,17 +1038,17 @@ final class Test: Sendable {
         }
         return ret
     }
-    func markResult(outcome: TestOutcome?) throws -> SRSUpdate {
+    async func markResult(outcome: TestOutcome?) throws -> SRSUpdate {
         self.testSession.setQuestionCompleteness(question: self.question, complete: outcome == .some(.right))
 
         if self.result != nil {
             try self.removeFromLog()
-            Subete.instance.srs?.revert(forQuestion: self.question)
+            await Subete.withSRS { $0.revert(forQuestion: self.question) }
         }
         if let outcome = outcome {
             self.result = TestResult(question: self.question, date: Int(Date().timeIntervalSince1970), outcome: outcome)
             try self.addToLog()
-            return Subete.instance.srs.update(forResult: self.result!)
+            return await Subete.withSRS { $0.update(forResult: self.result!) }
         } else {
             self.result = nil
             return .noChangeOther
@@ -1384,7 +1445,7 @@ struct ItemRef: Codable, Hashable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let kind = try container.decode(ItemKind.self, forKey: .kind)
         let name = try container.decode(String.self, forKey: .name)
-        item = try unwrapOrThrow(Subete.instance.allByKind(kind).findByName(name),
+        item = try unwrapOrThrow(Subete.itemData.allByKind(kind).findByName(name),
                                  err: MyError("no such item kind \(kind) name \(name)"))
     }
     func encode(to encoder: Encoder) throws {
@@ -1500,14 +1561,14 @@ class TestSession {
         var availRandomQuestions: [(question: Question, weight: Double)] = []
         switch randomMode {
             case .all:
-                availRandomQuestions += (Subete.instance.allWords.questions + Subete.instance.allKanji.questions).map {
+                availRandomQuestions += (Subete.itemData.allWords.questions + Subete.itemData.allKanji.questions).map {
                     (question: $0, weight: 1.0)
                 }
-                availRandomQuestions += Subete.instance.allConfusion.questions.map {
+                availRandomQuestions += Subete.itemData.allConfusion.questions.map {
                     (question: $0, weight: 10.0)
                 }
             case .confusion:
-                availRandomQuestions += Subete.instance.allConfusion.questions.map {
+                availRandomQuestions += Subete.itemData.allConfusion.questions.map {
                     (question: $0, weight: 1.0)
                 }
         }
