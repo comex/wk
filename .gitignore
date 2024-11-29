@@ -1,8 +1,11 @@
 *.sw[op]
+.sw?
 .swiftpm
+.build
 *.pyc
 target
 jmdict.lmdb
 .DS_Store
-/.build
 /Packages
+xcuserdata
+sess.json
