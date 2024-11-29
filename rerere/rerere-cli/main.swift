@@ -277,19 +277,19 @@ struct CLI {
             return .answer(output)
         }
     }
-    func handleBang(_ input: String, curTest: Test, gotAnswerAlready: Bool, lastTest: Test?) {
+    func handleBang(_ input: String, curTest: Test, gotAnswerAlready: Bool, lastTest: Test?) async {
         switch input {
         case "!right":
-            handleChangeLast(outcome: .right, curTest: curTest, gotAnswerAlready: gotAnswerAlready, lastTest: lastTest)
+            await handleChangeLast(outcome: .right, curTest: curTest, gotAnswerAlready: gotAnswerAlready, lastTest: lastTest)
         case "!wrong":
-            handleChangeLast(outcome: .wrong, curTest: curTest, gotAnswerAlready: gotAnswerAlready, lastTest: lastTest)
+            await handleChangeLast(outcome: .wrong, curTest: curTest, gotAnswerAlready: gotAnswerAlready, lastTest: lastTest)
         case "!mu":
-            handleChangeLast(outcome: .mu, curTest: curTest, gotAnswerAlready: gotAnswerAlready, lastTest: lastTest)
+            await handleChangeLast(outcome: .mu, curTest: curTest, gotAnswerAlready: gotAnswerAlready, lastTest: lastTest)
         default:
             print("?bang? \(input)")
         }
     }
-    func handleChangeLast(outcome: TestOutcome, curTest: Test, gotAnswerAlready: Bool, lastTest: Test?) {
+    func handleChangeLast(outcome: TestOutcome, curTest: Test, gotAnswerAlready: Bool, lastTest: Test?) async {
         let test: Test
         var outcome: TestOutcome? = outcome
         if gotAnswerAlready {
@@ -304,38 +304,38 @@ struct CLI {
             }
             test = t
         }
-        let srsUpdate = try! test.markResult(outcome: outcome)
+        let srsUpdate = try! await test.markResult(outcome: outcome)
         if !srsUpdate.isNoChangeOther {
             print(srsUpdate.cliLabel)
         }
     }
 
-    func doOneTest(_ test: Test, lastTest: Test?) throws {
+    func doOneTest(_ test: Test, lastTest: Test?) async throws {
         var gotAnswerAlready = false
-        while !test.state.isDone {
-            test.testSession.save()
-            let prompt = test.state.curPrompt!
-            let nextState = test.state.nextState
+        while await !test.state.isDone {
+            await test.testSession.save()
+            let prompt = await test.state.curPrompt!
+            let nextState = await test.state.nextState
             let promptText = formatPromptOutput(prompt) + formatKindSuffix(item: prompt.item)
             let resp = try promptInner(promptText: promptText, kana: prompt.expectedInput == .reading)
             switch resp {
             case .answer(let answerText):
-                let ra = try test.handlePromptResponse(prompt: prompt, input: answerText, final: nextState.isDone)
+                let ra = try await test.handlePromptResponse(prompt: prompt, input: answerText, final: nextState.isDone)
                 print(formatResponseAcknowledgement(ra))
                 gotAnswerAlready = true
                 if ra.outcome == .right {
-                    test.state = nextState
+                    await test.setState(nextState)
                 }
             case .bang(let bangText):
-                handleBang(bangText, curTest: test, gotAnswerAlready: gotAnswerAlready, lastTest: lastTest)
+                await handleBang(bangText, curTest: test, gotAnswerAlready: gotAnswerAlready, lastTest: lastTest)
             }
         }
 
     }
 
-    func doTestInSession(test: Test, lastTest: Test?, session: TestSession) throws {
+    func doTestInSession(test: Test, lastTest: Test?, session: isolated TestSession) async throws {
         print("[\(session.base.numDone) | \(session.numRemainingQuestions())]")
-        try doOneTest(test, lastTest: lastTest)
+        try await doOneTest(test, lastTest: lastTest)
     }
 }
 
@@ -343,13 +343,13 @@ extension TestKind: ExpressibleByArgument {}
 extension RandomMode: ExpressibleByArgument {}
 extension ItemKind: ExpressibleByArgument {}
 
-struct ForecastCommand: ParsableCommand {
+struct ForecastCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "forecast")
-    func run() {
+    func run() async {
         Subete.initialize()
         let now = Date().timeIntervalSince1970
-        let srsItems: [(nextTestDate: Int, question: Question)] = Subete.withSRS { (srs: inout SRS) in
+        let srsItems: [(nextTestDate: Int, question: Question)] = await Subete.withSRS { (srs: inout SRS) in
             Subete.itemData.allQuestions.compactMap { (question) in
                 guard let nextTestDate = srs.info(question: question).nextTestDate else { return nil }
                 return (nextTestDate: nextTestDate, question: question)
@@ -371,7 +371,7 @@ struct ForecastCommand: ParsableCommand {
     }
 }
 
-struct TestOneCommand: ParsableCommand {
+struct TestOneCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "test-one")
     @Argument()
@@ -380,10 +380,10 @@ struct TestOneCommand: ParsableCommand {
     var itemKind: ItemKind
     @Argument()
     var name: String
-    func run() {
-        runOrExit { try runImpl() }
+    func run() async {
+        await runOrExit { try await runImpl() }
     }
-    func runImpl() throws {
+    func runImpl() async throws {
         Subete.initialize()
         let item = try unwrapOrThrow(Subete.itemData.allByKind(itemKind).findByName(name),
                                      err: MyError("no such item kind \(itemKind) name \(name)"))
@@ -393,15 +393,15 @@ struct TestOneCommand: ParsableCommand {
             randomMode: .all
         ))
         let test = Test(question: question, testSession: testSession)
-        try CLI().doOneTest(test, lastTest: nil)
+        try await CLI().doOneTest(test, lastTest: nil)
     }
 }
 
-struct BenchSTSCommand: ParsableCommand {
+struct BenchSTSCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "bench-sts")
     @Flag() var deser: Bool = false
-    func run() {
+    func run() async {
         Subete.initialize()
         let sts = SerializableTestSession(
             pulledIncompleteQuestions: IndexableSet(Subete.itemData.allQuestions[..<500]),
@@ -420,16 +420,17 @@ struct BenchSTSCommand: ParsableCommand {
     }
 }
 
-struct BenchStartupCommand: ParsableCommand {
+struct BenchStartupCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "bench-startup")
-    func run() {
+    func run() async {
         Subete.initialize()
     }
 }
 
 
-struct Rerere: ParsableCommand {
+@main
+struct Rerere: AsyncParsableCommand {
     @Option() var minQuestions: Int?
     @Option() var maxQuestions: Int?
     @Option() var minRandomQuestionsFraction: Double = 0.33
@@ -461,9 +462,9 @@ struct Rerere: ParsableCommand {
                 return (minQuestions: _minQuestions, maxQuestions: _maxQuestions)
         }
     }
-    async func gatherSRSQuestions() -> [(nextTestDate: Int, question: Question)] {
+    func gatherSRSQuestions() async -> [(nextTestDate: Int, question: Question)] {
         let now = Int(Date().timeIntervalSince1970)
-        return Subete.withSRS { (srs: inout SRS) in
+        return await Subete.withSRS { (srs: inout SRS) in
             Subete.itemData.allQuestions.compactMap { (question) in
                 guard let nextTestDate = srs.info(question: question).nextTestDate else { return nil }
                 return nextTestDate <= now ? (nextTestDate: nextTestDate, question: question) : nil
@@ -485,9 +486,9 @@ struct Rerere: ParsableCommand {
             )
         }
     }
-    func makeSerializableSession() -> SerializableTestSession {
+    func makeSerializableSession() async -> SerializableTestSession {
         let (minQuestions, maxQuestions) = resolveMinMax()
-        var srsQuestions = gatherSRSQuestions()
+        var srsQuestions = await gatherSRSQuestions()
         let (numSRSQuestions, numRandomQuestions) = calcQuestionSplit(minQuestions: minQuestions, maxQuestions: maxQuestions, availSRSQuestions: srsQuestions.count)
         print("got \(srsQuestions.count) SRS questions")
         if numSRSQuestions < srsQuestions.count {
@@ -502,7 +503,8 @@ struct Rerere: ParsableCommand {
         )
     }
 
-    func run() throws {
+    func run() async throws {
+        Levenshtein.test()
         Subete.initialize()
         let path = "\(Subete.basePath)/sess.json"
         let url = URL(fileURLWithPath: path)
@@ -513,23 +515,20 @@ struct Rerere: ParsableCommand {
         } catch let e as NSError where e.domain == NSCocoaErrorDomain &&
                                        e.code == NSFileReadNoSuchFileError {
             print("Starting new session \(path)")
-            let ser = makeSerializableSession()
+            let ser = await makeSerializableSession()
             sess = TestSession(base: ser, saveURL: url)
         }
-        runOrExit {
-            sess.save()
+        await runOrExit {
+            await sess.save()
             var lastTest: Test? = nil
             let cli = CLI()
-            while let question = sess.randomQuestion() {
+            while let question = await sess.randomQuestion() {
                 let test = Test(question: question, testSession: sess)
-                try cli.doTestInSession(test: test, lastTest: lastTest, session: sess)
-                sess.base.numDone += 1
+                try await cli.doTestInSession(test: test, lastTest: lastTest, session: sess)
+                await sess.bumpNumDone()
                 lastTest = test
             }
-            sess.trashSave()
+            await sess.trashSave()
         }
     }
 }
-
-Levenshtein.test()
-Rerere.main()

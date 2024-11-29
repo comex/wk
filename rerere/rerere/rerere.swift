@@ -12,7 +12,6 @@ got 53 SRS items
 import rerere_c
 import Foundation
 import Yams
-import XCTest
 import System
 import Synchronization
 
@@ -131,14 +130,6 @@ func loadFlashcardYAML(basePath: String, itemLoader: ItemLoader) -> [Flashcard] 
     )
 }
 
-let startupDate: Date = Date()
-let myDateFormatter: DateFormatter = {
-    let mdf = DateFormatter()
-    mdf.locale = Locale(identifier: "en_US_POSIX")
-    mdf.dateFormat = "yyyy-MM-dd"
-    return mdf
-}()
-
 struct StudyMaterial {
     let meaningSynonyms: [String]
 }
@@ -201,8 +192,8 @@ final actor LogTxtManager {
         }
     }
 
-    func addToLog(test: Test) throws {
-        let toAppend = Data((test.result!.getRecordLine() + "\n").utf8)
+    func addToLog(test: Test) async throws {
+        let toAppend = Data((await test.result!.getRecordLine() + "\n").utf8)
         try self.openLogTxt(write: true) { (fh: FileHandle) throws in
             fh.seekToEndOfFile()
             fh.write(toAppend)
@@ -248,13 +239,13 @@ struct ItemData {
         self.allFlashcards = ItemList(loadFlashcardYAML(basePath: basePath, itemLoader: itemLoader))
         print("done")
         print("loading confusion...", terminator: "")
-        let allKanjiConfusion = loadConfusion(path: basePath + "/confusion.txt", isWord: false, itemLoader: itemLoader)
-        let allWordConfusion = loadConfusion(path: basePath + "/confusion-vocab.txt", isWord: true, itemLoader: itemLoader)
+        let allKanjiConfusion = ItemData.loadConfusion(path: basePath + "/confusion.txt", isWord: false, itemLoader: itemLoader)
+        let allWordConfusion = ItemData.loadConfusion(path: basePath + "/confusion-vocab.txt", isWord: true, itemLoader: itemLoader)
         self.allConfusion = ItemList(allKanjiConfusion + allWordConfusion)
         self.allItems = self.allWords.items + self.allKanji.items + self.allConfusion.items
         print("done")
     }
-    func loadConfusion(path: String, isWord: Bool, itemLoader: ItemLoader) -> [Confusion] {
+    static func loadConfusion(path: String, isWord: Bool, itemLoader: ItemLoader) -> [Confusion] {
         let text = try! String(contentsOfFile: path, encoding: .utf8)
         return text.split(separator: "\n").map {
             Confusion(line: String($0), isWord: isWord, itemLoader: itemLoader)
@@ -286,7 +277,7 @@ struct RetiredReplace {
 
 actor SRSManager {
     var asyncSRS: AsyncMutex<SRS>?
-    static func createSRS() async -> SRS {
+    static func createSRS() async -> sending SRS {
         print("loading srs...", terminator: "")
         let results = try! await TestResult.readAllFromLog(manager: Subete.logTxtManager)
         let srs = SRS()
@@ -304,7 +295,7 @@ actor SRSManager {
         return srs
     }
 
-    func withSRS<R>(cb: (inout SRS) async throws -> sending R) async rethrows -> R {
+    func withSRS<R>(cb: sending (inout SRS) async throws -> sending R) async rethrows -> sending R {
         if asyncSRS == nil {
             asyncSRS = AsyncMutex(await SRSManager.createSRS())
         }
@@ -313,8 +304,6 @@ actor SRSManager {
 }
 
 struct Subete: Sendable, ~Copyable {
-    nonisolated(unsafe) static var instance: Subete!
-
     static let itemData = ItemData()
     static let retrep = RetiredReplace()
     static let basePath = getWkDir()
@@ -323,12 +312,20 @@ struct Subete: Sendable, ~Copyable {
     static let nextItemID: Mutex<Int> = Mutex(0)
 
     static let logTxtManager: LogTxtManager = LogTxtManager()
+    nonisolated(unsafe) static var startupDate: Date! = nil
+    static let myDateFormatter: DateFormatter = {
+        let mdf = DateFormatter()
+        mdf.locale = Locale(identifier: "en_US_POSIX")
+        mdf.dateFormat = "yyyy-MM-dd"
+        return mdf
+    }()
+
 
     static func initialize() {
-        Subete.instance = Subete()
+        Subete.startupDate = Date()
     }
 
-    static func withSRS<R>(cb: (inout SRS) async throws -> sending R) async rethrows -> R {
+    static func withSRS<R>(cb: sending (inout SRS) async throws -> sending R) async rethrows -> sending R {
         return try await Subete.srsManager.withSRS(cb: cb)
     }
 }
@@ -721,7 +718,7 @@ final class Confusion: Item, CustomStringConvertible, @unchecked Sendable {
         }
         var birthday: Date? = nil
         if bits.count > bitsIdx + 1 {
-            birthday = myDateFormatter.date(from: String(bits[bitsIdx + 1]))
+            birthday = Subete.myDateFormatter.date(from: String(bits[bitsIdx + 1]))
         }
         self.items = characters.map {
             let item = allXs.findByName($0)
@@ -820,7 +817,7 @@ final class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol, Sendab
         }
 
         let kind: ItemKind = X.kind
-        for (old, new) in Subete.instance.replace[kind] ?? [:] {
+        for (old, new) in Subete.retrep.replace[kind] ?? [:] {
             byName[old] = byName[new]!
         }
 
@@ -875,7 +872,7 @@ struct TestResultParser : ~Copyable {
     let itemKindDataToEnumCache: DataToEnumCache<ItemKind> = DataToEnumCache()
     let testKindDataToEnumCache: DataToEnumCache<TestKind> = DataToEnumCache()
     let testOutcomeDataToEnumCache: DataToEnumCache<TestOutcome> = DataToEnumCache()
-    let retiredByName: [ItemKind: Set<MaybeOwnedData>] = Subete.instance.retired.mapValues { (stringList) in
+    let retiredByName: [ItemKind: Set<MaybeOwnedData>] = Subete.retrep.retired.mapValues { (stringList) in
         Set(stringList.map { MaybeOwnedData.owned(Data($0.utf8)) })
     }
     let itemsByName: [ItemKind: [MaybeOwnedData: Item]] = Dictionary(uniqueKeysWithValues: ItemKind.allCases.map { (itemKind) in
@@ -1017,7 +1014,7 @@ enum TestState {
     }
 }
 
-final class Test: Sendable {
+actor Test {
     let question: Question
     let testSession: TestSession
     var result: TestResult? = nil
@@ -1028,27 +1025,31 @@ final class Test: Sendable {
         self.testSession = testSession
         self.state = Test.initialState(item: question.item, testKind: question.testKind)
     }
+    
+    func setState(_ state: TestState) {
+        self.state = state
+    }
 
-    func maybeMarkResult(outcome: TestOutcome, final: Bool) throws -> SRSUpdate {
+    func maybeMarkResult(outcome: TestOutcome, final: Bool) async throws -> SRSUpdate {
         let ret: SRSUpdate
         if outcome == .wrong || (self.result == nil && final) {
-            ret = try self.markResult(outcome: outcome)
+            ret = try await self.markResult(outcome: outcome)
         } else {
             ret = .noChangeOther
         }
         return ret
     }
-    async func markResult(outcome: TestOutcome?) throws -> SRSUpdate {
-        self.testSession.setQuestionCompleteness(question: self.question, complete: outcome == .some(.right))
+    func markResult(outcome: TestOutcome?) async throws -> SRSUpdate {
+        await self.testSession.setQuestionCompleteness(question: self.question, complete: outcome == .some(.right))
 
         if self.result != nil {
-            try self.removeFromLog()
+            try await Subete.logTxtManager.removeFromLog(test: self)
             await Subete.withSRS { $0.revert(forQuestion: self.question) }
         }
         if let outcome = outcome {
             self.result = TestResult(question: self.question, date: Int(Date().timeIntervalSince1970), outcome: outcome)
-            try self.addToLog()
-            return await Subete.withSRS { $0.update(forResult: self.result!) }
+            try await Subete.logTxtManager.addToLog(test: self)
+            return await Subete.withSRS { await $0.update(forResult: self.result!) }
         } else {
             self.result = nil
             return .noChangeOther
@@ -1083,7 +1084,7 @@ final class Test: Sendable {
 
     // TODO: this function kind of sucks
     // and passing `final` is an abstraction violation
-    func handlePromptResponse(prompt: Prompt, input: String, final: Bool) throws -> ResponseAcknowledgement {
+    func handlePromptResponse(prompt: Prompt, input: String, final: Bool) async throws -> ResponseAcknowledgement {
         let outcome: TestOutcome
         let qual: Int
         var alternativesSections: [AlternativesSection]
@@ -1107,7 +1108,7 @@ final class Test: Sendable {
             alternativesSections = [AlternativesSection(kind: .meaningAlternatives, items: alternativeItems)]
         }
 
-        let srsUpdate = try self.maybeMarkResult(outcome: outcome, final: final)
+        let srsUpdate = try await self.maybeMarkResult(outcome: outcome, final: final)
 
         switch self.question.testKind {
         case .meaningToReading, .flashcard:
@@ -1322,7 +1323,7 @@ final class SRS {
     }
     private func defaultInfo(question: Question) -> ItemInfo {
         if let birthday = question.item.birthday {
-            return .active((lastSeen: Int(min(birthday, startupDate).timeIntervalSince1970), points: 0, urgentRetest: false))
+            return .active((lastSeen: Int(min(birthday, Subete.startupDate).timeIntervalSince1970), points: 0, urgentRetest: false))
         } else {
             return .burned
         }
@@ -1330,7 +1331,8 @@ final class SRS {
 }
 
 func testSRS() {
-    let item = Item((name: "test", birthday: nil))
+    let itemLoader = ItemLoader()
+    let item = Item((name: "test", birthday: nil), itemLoader: itemLoader)
     let question = Question(item: item, testKind: .confusion)
     var info: SRS.ItemInfo = .burned
     let _ = info.update(
@@ -1421,9 +1423,9 @@ enum RandomMode: String, CaseIterable, Codable {
     case confusion
 }
 
-func runOrExit(_ f: () throws -> Void) {
+func runOrExit(_ f: () async throws -> Void) async {
     do {
-        try f()
+        try await f()
     } catch let es as ExitStatusError {
         exit(Int32(es.exitStatus))
     } catch let e {
@@ -1539,7 +1541,7 @@ struct SerializableTestSession: Codable {
     }
 }
 
-class TestSession {
+actor TestSession {
     var base: SerializableTestSession
     var lottery: WeightedList<Question>
     var pulledQuestionToIndex: [Question: Int] = [:]
@@ -1550,7 +1552,7 @@ class TestSession {
         self.lottery = TestSession.makeLottery(randomMode: base.randomMode,
                                                excluding: Set(base.pulledCompleteQuestions).union(Set(base.pulledIncompleteQuestions)))
     }
-    convenience init(fromSaveURL url: URL) throws {
+    init(fromSaveURL url: URL) throws {
         let data = try Data(contentsOf: url)
         self.init(
             base: try SerializableTestSession.deserialize(data),
@@ -1626,6 +1628,10 @@ class TestSession {
         } catch let e {
             print("!Failed to trash save! \(e)")
         }
+    }
+    
+    func bumpNumDone() {
+        self.base.numDone += 1
     }
 }
 

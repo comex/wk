@@ -130,16 +130,37 @@ struct StableArray<T>: ~Copyable {
     }
 }
 
+
 actor AsyncMutex<Value: ~Copyable> {
     var value: Value?
+    var waiters: [CheckedContinuation<Void, Never>] = []
     init(_ value: consuming sending Value) {
         self.value = consume value
     }
     func withLock<Result: ~Copyable>(_ body: (inout sending Value) async throws -> sending Result) async rethrows -> sending Result {
-        guard var tempVal = exchange(&self.value, with: nil) else {
-            fatalError("AsyncMutex deadlock")
+        while self.value == nil {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                self.waiters.append(continuation)
+            }
         }
-        defer { self.value = consume tempVal }
-        return try await body(&tempVal)
+        nonisolated(unsafe) var tempVal = exchange(&self.value, with: nil)!
+        do {
+            let ret = try await body(&tempVal)
+            returnValue(newVal: consume tempVal)
+            return ret
+        } catch let e {
+            returnValue(newVal: consume tempVal)
+            throw e
+        }
+     
     }
+     
+    private func returnValue(newVal: consuming Value) {
+        self.value = consume newVal
+        if !self.waiters.isEmpty {
+            self.waiters.removeFirst().resume()
+        }
+    }
+          
+
 }
