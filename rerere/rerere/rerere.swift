@@ -221,21 +221,31 @@ final actor LogTxtManager {
     }
 }
 
+class ItemLoader {
+    var nextId: Int = 0
+    let studyMaterials: [Int: StudyMaterial]
+    var allWords: ItemList<Word>? = nil
+    var allKanji: ItemList<Kanji>? = nil
+    init() {
+        self.studyMaterials = loadStudyMaterials(basePath: Subete.basePath)
+    }
+}
+
 struct ItemData {
     let allWords: ItemList<Word>
     let allKanji: ItemList<Kanji>
     let allConfusion: ItemList<Confusion>
     let allFlashcards: ItemList<Flashcard>
     let allItems: [Item]
-    let studyMaterials: [Int: StudyMaterial]
 
     init() {
-        let itemLoader = ItemLoader()
         let basePath = Subete.basePath
         print("loading json...", terminator: "")
-        self.studyMaterials = loadStudyMaterials(basePath: basePath)
-        self.allWords = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "vocabulary", class: Word.self, itemLoader: itemLoader))
-        self.allKanji = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "kanji", class: Kanji.self, itemLoader: itemLoader))
+        let itemLoader = ItemLoader()
+        itemLoader.allWords = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "vocabulary", class: Word.self, itemLoader: itemLoader))
+        self.allWords = itemLoader.allWords!
+        itemLoader.allKanji = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "kanji", class: Kanji.self, itemLoader: itemLoader))
+        self.allKanji = itemLoader.allKanji!
         self.allFlashcards = ItemList(loadFlashcardYAML(basePath: basePath, itemLoader: itemLoader))
         print("done")
         print("loading confusion...", terminator: "")
@@ -536,10 +546,6 @@ func evaluateMeaningAnswerInner(normalizedInput: String, meanings: [Ing], levens
     return bestQual
 }
 
-class ItemLoader {
-    var nextId: Int = 0
-}
-
 struct Relaxed { let relaxed: Bool }
 class NormalItem: Item, DecodableWithConfiguration, Decodable, @unchecked Sendable {
     let meanings: [Ing]
@@ -584,7 +590,7 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable, @unchecked Sendab
                 try Ing(auxiliaryMeaningFrom: $0)
             }
         }
-        if let wkId, let material = Subete.itemData.studyMaterials[wkId] {
+        if let wkId, let material = configuration.itemLoader.studyMaterials[wkId] {
             meanings += material.meaningSynonyms.map { Ing(synonymWithText: $0) }
         }
         self.meanings = meanings
@@ -711,10 +717,10 @@ final class Confusion: Item, CustomStringConvertible, @unchecked Sendable {
         let characters: [String]
         if isWord {
             characters = spec.split(separator: "/").map { trim($0) }
-            allXs = Subete.itemData.allWords
+            allXs = itemLoader.allWords!
         } else {
             characters = spec.map { String($0) }
-            allXs = Subete.itemData.allKanji
+            allXs = itemLoader.allKanji!
         }
         var birthday: Date? = nil
         if bits.count > bitsIdx + 1 {

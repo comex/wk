@@ -28,7 +28,7 @@ let package = Package(
                 "rerere/rerere.swift",
                 "rerere/buffers.swift",
                 "rerere/Levenshtein.swift",
-                "rerere-cli/main.swift",
+                "rerere-cli/cli.swift",
             ],
             cSettings: [
                 .headerSearchPath("rerere-c"),
