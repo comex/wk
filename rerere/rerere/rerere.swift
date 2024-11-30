@@ -221,10 +221,11 @@ final actor LogTxtManager {
     }
 }
 
-class ItemLoader {
-    var nextId: Int = 0
+final class ItemLoader: Sendable {
     let studyMaterials: [Int: StudyMaterial]
+    nonisolated(unsafe)
     var allWords: ItemList<Word>? = nil
+    nonisolated(unsafe)
     var allKanji: ItemList<Kanji>? = nil
     init() {
         self.studyMaterials = loadStudyMaterials(basePath: Subete.basePath)
@@ -238,13 +239,19 @@ struct ItemData {
     let allFlashcards: ItemList<Flashcard>
     let allItems: [Item]
 
-    init() {
+    init() async {
         let basePath = Subete.basePath
         print("loading json...", terminator: "")
         let itemLoader = ItemLoader()
-        itemLoader.allWords = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "vocabulary", class: Word.self, itemLoader: itemLoader))
+        await withDiscardingTaskGroup { taskGroup in
+            taskGroup.addTask {
+                itemLoader.allWords = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "vocabulary", class: Word.self, itemLoader: itemLoader))
+            }
+            taskGroup.addTask {
+                itemLoader.allKanji = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "kanji", class: Kanji.self, itemLoader: itemLoader))
+            }
+        }
         self.allWords = itemLoader.allWords!
-        itemLoader.allKanji = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "kanji", class: Kanji.self, itemLoader: itemLoader))
         self.allKanji = itemLoader.allKanji!
         self.allFlashcards = ItemList(loadFlashcardYAML(basePath: basePath, itemLoader: itemLoader))
         print("done")
@@ -314,7 +321,8 @@ actor SRSManager {
 }
 
 struct Subete: Sendable, ~Copyable {
-    static let itemData = ItemData()
+    //static let itemDataOnce = AsyncOnce<ItemData>()
+    nonisolated(unsafe) static var itemData: ItemData! = nil
     static let retrep = RetiredReplace()
     static let basePath = getWkDir()
     static let srsManager = SRSManager()
@@ -331,8 +339,9 @@ struct Subete: Sendable, ~Copyable {
     }()
 
 
-    static func initialize() {
+    static func initialize() async {
         Subete.startupDate = Date()
+        Subete.itemData = await ItemData()
     }
 
     static func withSRS<R>(cb: sending (inout SRS) async throws -> sending R) async rethrows -> sending R {
@@ -340,8 +349,12 @@ struct Subete: Sendable, ~Copyable {
     }
 }
 
-enum ItemKind: String, Codable, CodingKeyRepresentable, CaseIterable {
+enum ItemKind: String, Codable, CodingKeyRepresentable, CaseIterable, Comparable {
     case word, kanji, confusion, flashcard
+    static func < (lhs: ItemKind, rhs: ItemKind) -> Bool {
+        // this sucks
+        return lhs.rawValue < rhs.rawValue
+    }
 }
 
 struct DataToEnumCache<T>
@@ -365,7 +378,6 @@ struct DataToEnumCache<T>
 class Item: Hashable, Equatable, Comparable, @unchecked Sendable {
     let name: String
     let birthday: Date?
-    let id: Int
 
     // ItemInitializer is a workaround for convenience inits not interacting
     // well with subclassing
@@ -373,8 +385,6 @@ class Item: Hashable, Equatable, Comparable, @unchecked Sendable {
     init(_ initializer: ItemInitializer, itemLoader: ItemLoader) {
         self.name = initializer.name
         self.birthday = initializer.birthday
-        self.id = itemLoader.nextId
-        itemLoader.nextId += 1
     }
     static func initializer(name: String, from dec: any Decoder) throws -> ItemInitializer {
         enum K: CodingKey { case birth }
@@ -392,7 +402,22 @@ class Item: Hashable, Equatable, Comparable, @unchecked Sendable {
         return lhs === rhs
     }
     static func < (lhs: Item, rhs: Item) -> Bool {
-        return lhs.id < rhs.id
+        if lhs === rhs {
+            return false
+        } else if lhs.name < rhs.name {
+            return true
+        } else if lhs.name > rhs.name {
+            return false
+        }
+        let lhsKind = type(of: lhs).kind
+        let rhsKind = type(of: rhs).kind
+        if lhsKind < rhsKind {
+            return true
+        } else if lhsKind > rhsKind {
+            return false
+        } else {
+            fatalError("should not have two items with same kind and name \(lhs.name)")
+        }
     }
 
     // trying to turn this into a protocol has issues

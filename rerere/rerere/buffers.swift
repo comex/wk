@@ -143,6 +143,7 @@ actor AsyncMutex<Value: ~Copyable> {
                 self.waiters.append(continuation)
             }
         }
+        // Safety: self.value is always disconnected
         nonisolated(unsafe) var tempVal = exchange(&self.value, with: nil)!
         do {
             let ret = try await body(&tempVal)
@@ -161,6 +162,17 @@ actor AsyncMutex<Value: ~Copyable> {
             self.waiters.removeFirst().resume()
         }
     }
-          
-
 }
+
+struct AsyncOnce<T: Sendable> {
+    let mtx: AsyncMutex<T?> = AsyncMutex(nil)
+    func get(_ cb: sending () async -> T) async -> T {
+        await mtx.withLock { (val: inout T?) async -> T in
+            if val == nil {
+                val = await cb()
+            }
+            return val!
+        }
+    }
+}
+

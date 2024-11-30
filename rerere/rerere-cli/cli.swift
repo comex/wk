@@ -347,7 +347,7 @@ struct ForecastCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "forecast")
     func run() async {
-        Subete.initialize()
+        await Subete.initialize()
         let now = Date().timeIntervalSince1970
         let srsItems: [(nextTestDate: Int, question: Question)] = await Subete.withSRS { (srs: inout SRS) in
             Subete.itemData.allQuestions.compactMap { (question) in
@@ -384,7 +384,7 @@ struct TestOneCommand: AsyncParsableCommand {
         await runOrExit { try await runImpl() }
     }
     func runImpl() async throws {
-        Subete.initialize()
+        await Subete.initialize()
         let item = try unwrapOrThrow(Subete.itemData.allByKind(itemKind).findByName(name),
                                      err: MyError("no such item kind \(itemKind) name \(name)"))
         let question = Question(item: item, testKind: testKind)
@@ -402,7 +402,7 @@ struct BenchSTSCommand: AsyncParsableCommand {
         commandName: "bench-sts")
     @Flag() var deser: Bool = false
     func run() async {
-        Subete.initialize()
+        await Subete.initialize()
         let sts = SerializableTestSession(
             pulledIncompleteQuestions: IndexableSet(Subete.itemData.allQuestions[..<500]),
             randomMode: .all
@@ -424,7 +424,7 @@ struct BenchStartupCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "bench-startup")
     func run() async {
-        Subete.initialize()
+        await Subete.initialize()
     }
 }
 
@@ -505,7 +505,7 @@ struct Rerere: AsyncParsableCommand {
 
     func run() async throws {
         Levenshtein.test()
-        Subete.initialize()
+        await Subete.initialize()
         let path = "\(Subete.basePath)/sess.json"
         let url = URL(fileURLWithPath: path)
         let sess: TestSession
