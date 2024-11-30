@@ -55,10 +55,6 @@ struct Levenshtein {
         return v0[target.count]
     }
 
-    static func test() {
-        var l = Levenshtein()
-        assert(l.distance(between: "xcheese", and: "cheesex") == 2)
-    }
-}
+ }
 
 

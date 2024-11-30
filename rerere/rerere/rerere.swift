@@ -223,7 +223,9 @@ final actor LogTxtManager {
 
 final class ItemLoader: Sendable {
     let studyMaterials: [Int: StudyMaterial]
-    // Safety: Always initialized before being used
+    // Safety: Always initialized before being used.  No easy way to abstract
+    // this pattern without allocation overhead because Swift has no concept of
+    // interior mutability.
     nonisolated(unsafe)
     var allWords: ItemList<Word>? = nil
     nonisolated(unsafe)
@@ -255,9 +257,9 @@ struct ItemData {
         self.allFlashcards = ItemList(loadFlashcardYAML(basePath: basePath, itemLoader: itemLoader))
         print("done")
         print("loading confusion...", terminator: "")
-        let allKanjiConfusion = ItemData.loadConfusion(path: basePath + "/confusion.txt", isWord: false, itemLoader: itemLoader)
-        let allWordConfusion = ItemData.loadConfusion(path: basePath + "/confusion-vocab.txt", isWord: true, itemLoader: itemLoader)
-        self.allConfusion = ItemList(allKanjiConfusion + allWordConfusion)
+        async let allKanjiConfusion = ItemData.loadConfusion(path: basePath + "/confusion.txt", isWord: false, itemLoader: itemLoader)
+        async let allWordConfusion = ItemData.loadConfusion(path: basePath + "/confusion-vocab.txt", isWord: true, itemLoader: itemLoader)
+        self.allConfusion = ItemList(await allKanjiConfusion + allWordConfusion)
         self.allItems = self.allWords.items + self.allKanji.items + self.allConfusion.items
         print("done")
     }

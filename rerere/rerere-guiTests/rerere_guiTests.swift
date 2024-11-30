@@ -7,11 +7,13 @@
 //
 
 import Testing
+@testable import rerere_gui
 
 struct rerere_guiTests {
 
-    @Test func example() async throws {
-        // Write your test here and use APIs like `#expect(...)` to check expected conditions.
+    @Test func testLevenshtein() async throws {
+        var l = Levenshtein()
+        #expect(l.distance(between: "xcheese", and: "cheesex") == 2)
     }
 
 }
