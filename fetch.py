@@ -2,7 +2,7 @@
 import requests, json
 s = requests.Session()
 s.headers['Wanikani-Revision'] = '20170710'
-s.headers['Authorization'] = 'Bearer a2344c7b-6d09-4aca-bd14-1945105c35b4'
+s.headers['Authorization'] = 'Bearer ' + open('wk-api-key.txt').read().strip()
 
 def fetch_paginated(url):
     data = []
