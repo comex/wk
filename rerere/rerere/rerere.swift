@@ -223,6 +223,7 @@ final actor LogTxtManager {
 
 final class ItemLoader: Sendable {
     let studyMaterials: [Int: StudyMaterial]
+    // Safety: Always initialized before being used
     nonisolated(unsafe)
     var allWords: ItemList<Word>? = nil
     nonisolated(unsafe)
@@ -243,16 +244,14 @@ struct ItemData {
         let basePath = Subete.basePath
         print("loading json...", terminator: "")
         let itemLoader = ItemLoader()
-        await withDiscardingTaskGroup { taskGroup in
-            taskGroup.addTask {
-                itemLoader.allWords = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "vocabulary", class: Word.self, itemLoader: itemLoader))
-            }
-            taskGroup.addTask {
-                itemLoader.allKanji = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "kanji", class: Kanji.self, itemLoader: itemLoader))
-            }
-        }
-        self.allWords = itemLoader.allWords!
-        self.allKanji = itemLoader.allKanji!
+        async let allWords = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "vocabulary", class: Word.self, itemLoader: itemLoader))
+        async let allKanji = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "kanji", class: Kanji.self, itemLoader: itemLoader))
+        
+        self.allWords = await allWords
+        self.allKanji = await allKanji
+        itemLoader.allWords = self.allWords
+        itemLoader.allKanji = self.allKanji
+        
         self.allFlashcards = ItemList(loadFlashcardYAML(basePath: basePath, itemLoader: itemLoader))
         print("done")
         print("loading confusion...", terminator: "")
