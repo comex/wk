@@ -1,7 +1,8 @@
 import Foundation
+
 struct UnsafeData: Hashable, CustomStringConvertible {
     let ubp: UnsafeRawBufferPointer
-    
+
     init() {
         self.ubp = UnsafeRawBufferPointer(start: nil, count: 0)
     }
@@ -13,18 +14,18 @@ struct UnsafeData: Hashable, CustomStringConvertible {
     }
 
     static func == (lhs: UnsafeData, rhs: UnsafeData) -> Bool {
-        return lhs.ubp.count == rhs.ubp.count &&
-                0 == memcmp(lhs.ubp.baseAddress, rhs.ubp.baseAddress, lhs.ubp.count)
+        return lhs.ubp.count == rhs.ubp.count
+            && 0 == memcmp(lhs.ubp.baseAddress, rhs.ubp.baseAddress, lhs.ubp.count)
     }
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(bytes: self.ubp)
     }
-    
+
     var description: String {
         return "UnsafeData{\(d2s(self))}"
     }
-    
+
     subscript(idx: Int) -> UInt8 {
         ubp.load(fromByteOffset: idx, as: UInt8.self)
     }
@@ -34,9 +35,11 @@ struct UnsafeData: Hashable, CustomStringConvertible {
     var count: Int {
         self.ubp.count
     }
-    func split(separator: Int, into buffer: UnsafeMutableBufferPointer<UnsafeData>, includingSpaces: Bool) -> Int {
-        let start = 0//self.startIndex
-        let end = count//self.endIndex
+    func split(
+        separator: Int, into buffer: UnsafeMutableBufferPointer<UnsafeData>, includingSpaces: Bool
+    ) -> Int {
+        let start = 0  //self.startIndex
+        let end = count  //self.endIndex
         var i = start
         var lastStart = i
         var outIdx = 0
@@ -81,7 +84,7 @@ enum MaybeOwnedData: Hashable {
             }
         }
     }
-    
+
     func hash(into hasher: inout Hasher) {
         self.borrow { $0.hash(into: &hasher) }
     }
@@ -130,14 +133,15 @@ struct StableArray<T>: ~Copyable {
     }
 }
 
-
 actor AsyncMutex<Value: ~Copyable> {
     var value: Value?
     var waiters: [CheckedContinuation<Void, Never>] = []
     init(_ value: consuming sending Value) {
         self.value = consume value
     }
-    func withLock<Result: ~Copyable>(_ body: (inout sending Value) async throws -> sending Result) async rethrows -> sending Result {
+    func withLock<Result: ~Copyable>(_ body: (inout sending Value) async throws -> sending Result)
+        async rethrows -> sending Result
+    {
         while self.value == nil {
             await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                 self.waiters.append(continuation)
@@ -153,9 +157,9 @@ actor AsyncMutex<Value: ~Copyable> {
             returnValue(newVal: consume tempVal)
             throw e
         }
-     
+
     }
-     
+
     private func returnValue(newVal: consuming Value) {
         self.value = consume newVal
         if !self.waiters.isEmpty {
@@ -175,4 +179,3 @@ struct AsyncOnce<T: Sendable> {
         }
     }
 }
-

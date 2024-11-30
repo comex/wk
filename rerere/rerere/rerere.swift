@@ -1,3 +1,7 @@
+import Foundation
+import Synchronization
+import System
+import Yams
 // TODO: right after mu should probably not count
 // TODO: mark items (newborns) as needing intensive SRS
 /*
@@ -10,10 +14,6 @@ got 53 SRS items
 // TODO FIX BANGS ON CONFUSION
 // TODO why didn't I get a reading match for 挟む
 import rerere_c
-import Foundation
-import Yams
-import System
-import Synchronization
 
 // TODO: ~ is broken for r2m
 // TODO: !wrong doesn't act as expected when halfway through a k2rm
@@ -73,7 +73,7 @@ func trim(_ s: String) -> String {
     }
 }
 func trim(_ s: Substring) -> String {
-  return trim(String(s))
+    return trim(String(s))
 }
 func d2s(_ d: Data) -> String {
     String(data: d, encoding: .utf8)!
@@ -84,7 +84,10 @@ func d2s(_ ud: UnsafeData) -> String {
 func commaSplitNoTrim(_ s: String) -> [String] {
     return s.split(separator: ",").map { String($0) }
 }
-func ensure(_ condition: Bool, _ message: @autoclosure () -> String = String(), file: StaticString = #file, line: UInt = #line) {
+func ensure(
+    _ condition: Bool, _ message: @autoclosure () -> String = String(), file: StaticString = #file,
+    line: UInt = #line
+) {
     if !condition {
         fatalError(message(), file: file, line: line)
     }
@@ -94,8 +97,11 @@ func unwrapOrThrow<T>(_ t: T?, err: @autoclosure () -> Error) throws -> T {
     return t
 }
 
-func loadJSONAndExtraYAML<T>(basePath: String, stem: String, class: T.Type, itemLoader: ItemLoader) -> [T]
-    where T: DecodableWithConfiguration, T.DecodingConfiguration == NormalItem.DecodingConfiguration, T: Decodable
+func loadJSONAndExtraYAML<T>(basePath: String, stem: String, class: T.Type, itemLoader: ItemLoader)
+    -> [T]
+where
+    T: DecodableWithConfiguration, T.DecodingConfiguration == NormalItem.DecodingConfiguration,
+    T: Decodable
 {
     let jsonData = try! data(of: "\(basePath)/\(stem).json")
     let base = try! JSONDecoder().decode(
@@ -108,11 +114,12 @@ func loadJSONAndExtraYAML<T>(basePath: String, stem: String, class: T.Type, item
     let yamlData = try! data(of: "\(basePath)/extra-\(stem).yaml")
     let extra = try! YAMLDecoder().decode(
         [T].self, from: yamlData,
-        userInfo: [CodingUserInfoKey(rawValue: "decodingConfiguration")!:
-            NormalItem.DecodingConfiguration(
-                relaxed: true,
-                itemLoader: itemLoader
-            )
+        userInfo: [
+            CodingUserInfoKey(rawValue: "decodingConfiguration")!:
+                NormalItem.DecodingConfiguration(
+                    relaxed: true,
+                    itemLoader: itemLoader
+                )
         ]
     )
     return base + extra
@@ -122,10 +129,11 @@ func loadFlashcardYAML(basePath: String, itemLoader: ItemLoader) -> [Flashcard] 
     let yamlData = try! data(of: "\(basePath)/flashcards.yaml")
     return try! YAMLDecoder().decode(
         [Flashcard].self, from: yamlData,
-        userInfo: [CodingUserInfoKey(rawValue: "decodingConfiguration")!:
-            Flashcard.DecodingConfiguration(
-                itemLoader: itemLoader
-            )
+        userInfo: [
+            CodingUserInfoKey(rawValue: "decodingConfiguration")!:
+                Flashcard.DecodingConfiguration(
+                    itemLoader: itemLoader
+                )
         ]
     )
 }
@@ -141,7 +149,8 @@ func loadStudyMaterials(basePath: String) -> [Int: StudyMaterial] {
         }
         let data: Data
     }
-    let entries = try! JSONDecoder().decode([StudyMaterialsJSONEntry].self, from: data(of: "\(basePath)/study_materials.json"))
+    let entries = try! JSONDecoder().decode(
+        [StudyMaterialsJSONEntry].self, from: data(of: "\(basePath)/study_materials.json"))
     var ret: [Int: StudyMaterial] = [:]
     for entry in entries {
         let subjectId = entry.data.subject_id
@@ -161,7 +170,8 @@ func getWkDir() -> String {
         }
     }
 
-    return try! URL(fileURLWithPath: path.string).resourceValues(forKeys: [.canonicalPathKey]).canonicalPath!
+    return try! URL(fileURLWithPath: path.string).resourceValues(forKeys: [.canonicalPathKey])
+        .canonicalPath!
 }
 
 final actor LogTxtManager {
@@ -227,9 +237,9 @@ final class ItemLoader: Sendable {
     // this pattern without allocation overhead because Swift has no concept of
     // interior mutability.
     nonisolated(unsafe)
-    var allWords: ItemList<Word>? = nil
+        var allWords: ItemList<Word>? = nil
     nonisolated(unsafe)
-    var allKanji: ItemList<Kanji>? = nil
+        var allKanji: ItemList<Kanji>? = nil
     init() {
         self.studyMaterials = loadStudyMaterials(basePath: Subete.basePath)
     }
@@ -246,19 +256,25 @@ struct ItemData {
         let basePath = Subete.basePath
         print("loading json...", terminator: "")
         let itemLoader = ItemLoader()
-        async let allWords = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "vocabulary", class: Word.self, itemLoader: itemLoader))
-        async let allKanji = ItemList(loadJSONAndExtraYAML(basePath: basePath, stem: "kanji", class: Kanji.self, itemLoader: itemLoader))
-        
+        async let allWords = ItemList(
+            loadJSONAndExtraYAML(
+                basePath: basePath, stem: "vocabulary", class: Word.self, itemLoader: itemLoader))
+        async let allKanji = ItemList(
+            loadJSONAndExtraYAML(
+                basePath: basePath, stem: "kanji", class: Kanji.self, itemLoader: itemLoader))
+
         self.allWords = await allWords
         self.allKanji = await allKanji
         itemLoader.allWords = self.allWords
         itemLoader.allKanji = self.allKanji
-        
+
         self.allFlashcards = ItemList(loadFlashcardYAML(basePath: basePath, itemLoader: itemLoader))
         print("done")
         print("loading confusion...", terminator: "")
-        async let allKanjiConfusion = ItemData.loadConfusion(path: basePath + "/confusion.txt", isWord: false, itemLoader: itemLoader)
-        async let allWordConfusion = ItemData.loadConfusion(path: basePath + "/confusion-vocab.txt", isWord: true, itemLoader: itemLoader)
+        async let allKanjiConfusion = ItemData.loadConfusion(
+            path: basePath + "/confusion.txt", isWord: false, itemLoader: itemLoader)
+        async let allWordConfusion = ItemData.loadConfusion(
+            path: basePath + "/confusion-vocab.txt", isWord: true, itemLoader: itemLoader)
         self.allConfusion = ItemList(await allKanjiConfusion + allWordConfusion)
         self.allItems = self.allWords.items + self.allKanji.items + self.allConfusion.items
         print("done")
@@ -286,12 +302,12 @@ struct RetiredReplace {
     let retired: [ItemKind: Set<String>]
     let replace: [ItemKind: [String: String]]
     init() {
-        let retiredInfo: RetiredYaml = try! YAMLDecoder().decode(RetiredYaml.self, from: data(of: "\(Subete.basePath)/retired.yaml"))
+        let retiredInfo: RetiredYaml = try! YAMLDecoder().decode(
+            RetiredYaml.self, from: data(of: "\(Subete.basePath)/retired.yaml"))
         self.retired = retiredInfo.retired.mapValues { Set($0) }
         self.replace = retiredInfo.replace
     }
 }
-
 
 actor SRSManager {
     var asyncSRS: AsyncMutex<SRS>?
@@ -299,14 +315,14 @@ actor SRSManager {
         print("loading srs...", terminator: "")
         let results = try! await TestResult.readAllFromLog(manager: Subete.logTxtManager)
         let srs = SRS()
-        let srsEpoch = 1611966197
+        let srsEpoch = 1_611_966_197
         for result in results {
             guard let date = result.date else { continue }
             if date < srsEpoch { continue }
             let _ = srs.update(forResult: result)
         }
         for question in Subete.itemData.allQuestions {
-            let _ = srs.info(question: question) // allow items with no results to stale
+            let _ = srs.info(question: question)  // allow items with no results to stale
         }
         srs.updateStales(date: Int(Date().timeIntervalSince1970))
         print(" done")
@@ -339,13 +355,14 @@ struct Subete: Sendable, ~Copyable {
         return mdf
     }()
 
-
     static func initialize() async {
         Subete.startupDate = Date()
         Subete.itemData = await ItemData()
     }
 
-    static func withSRS<R>(cb: sending (inout SRS) async throws -> sending R) async rethrows -> sending R {
+    static func withSRS<R>(cb: sending (inout SRS) async throws -> sending R) async rethrows
+        -> sending R
+    {
         return try await Subete.srsManager.withSRS(cb: cb)
     }
 }
@@ -359,14 +376,16 @@ enum ItemKind: String, Codable, CodingKeyRepresentable, CaseIterable, Comparable
 }
 
 struct DataToEnumCache<T>
-    where T: CaseIterable & RawRepresentable,
-          T.RawValue == String
+where
+    T: CaseIterable & RawRepresentable,
+    T.RawValue == String
 {
     let map: [MaybeOwnedData: T]
     init() {
-        self.map = Dictionary(uniqueKeysWithValues: T.allCases.map { (t: T) -> (MaybeOwnedData, T) in
-            (MaybeOwnedData.owned(Data(t.rawValue.utf8)), t)
-        })
+        self.map = Dictionary(
+            uniqueKeysWithValues: T.allCases.map { (t: T) -> (MaybeOwnedData, T) in
+                (MaybeOwnedData.owned(Data(t.rawValue.utf8)), t)
+            })
     }
     subscript(d: UnsafeData) -> T? {
         self.map[.unowned(d)]
@@ -393,8 +412,10 @@ class Item: Hashable, Equatable, Comparable, @unchecked Sendable {
         // I can't delegate to the other init because that requires being a
         // convenience init, yet convenience inits are inherited so they can't
         // be called from the subclass??
-        return (name: name,
-                birthday: try container.decodeIfPresent(Date.self, forKey: .birth))
+        return (
+            name: name,
+            birthday: try container.decodeIfPresent(Date.self, forKey: .birth)
+        )
     }
     func hash(into hasher: inout Hasher) {
         hasher.combine(self.name)
@@ -443,11 +464,12 @@ class Item: Hashable, Equatable, Comparable, @unchecked Sendable {
             return other != self && (other as! NormalItem).meaningMatches(normalizedInput: normalizedMeaning, levenshtein: &levenshtein)
         }
         */
-        let ret = Subete.itemData.allByKind(Self.kind).findByMeaning(normalizedMeaning).filter { $0 != self }
+        let ret = Subete.itemData.allByKind(Self.kind).findByMeaning(normalizedMeaning).filter {
+            $0 != self
+        }
         return ret
     }
 }
-
 
 struct Question: Codable, Hashable, Equatable {
     let item: Item
@@ -478,7 +500,7 @@ func normalizeMeaningTrimmed(_ meaning: String) -> String {
 }
 func normalizeReadingTrimmed(_ input: String) -> String {
     // TODO katakana to hiragana
-    var reading: String = input //trim(input)
+    var reading: String = input  //trim(input)
     if reading.contains("-") {
         reading = String(reading.replacingOccurrences(of: "-", with: "ー"))
     }
@@ -543,7 +565,9 @@ struct Ing {
     }
 }
 
-func decodeArray<T>(_ dec: any UnkeyedDecodingContainer, _ callback: (Decoder) throws -> T) throws -> [T] {
+func decodeArray<T>(_ dec: any UnkeyedDecodingContainer, _ callback: (Decoder) throws -> T) throws
+    -> [T]
+{
     var dec = dec
     var ret: [T] = []
     while !dec.isAtEnd {
@@ -554,7 +578,9 @@ func decodeArray<T>(_ dec: any UnkeyedDecodingContainer, _ callback: (Decoder) t
 }
 
 // without alternatives, without normalization, just return qual
-func evaluateMeaningAnswerInner(normalizedInput: String, meanings: [Ing], levenshtein: inout Levenshtein) -> Int {
+func evaluateMeaningAnswerInner(
+    normalizedInput: String, meanings: [Ing], levenshtein: inout Levenshtein
+) -> Int {
     var bestQual: Int = 0
     for meaning in meanings {
         let text = meaning.text
@@ -584,8 +610,10 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable, @unchecked Sendab
     }
 
     required convenience init(from dec: any Decoder) throws {
-        try self.init(from: dec,
-                      configuration: dec.userInfo[CodingUserInfoKey(rawValue: "decodingConfiguration")!] as! DecodingConfiguration)
+        try self.init(
+            from: dec,
+            configuration: dec.userInfo[CodingUserInfoKey(rawValue: "decodingConfiguration")!]
+                as! DecodingConfiguration)
     }
 
     required init(from dec: any Decoder, configuration: DecodingConfiguration) throws {
@@ -620,17 +648,21 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable, @unchecked Sendab
             meanings += material.meaningSynonyms.map { Ing(synonymWithText: $0) }
         }
         self.meanings = meanings
-        super.init(try Item.initializer(name: self.character, from: dataDec),
-                   itemLoader: configuration.itemLoader)
+        super.init(
+            try Item.initializer(name: self.character, from: dataDec),
+            itemLoader: configuration.itemLoader)
     }
     func readingAlternatives(reading: String) -> [Item] {
         let normalizedReading = normalizeReadingTrimmed(trim(reading))
-        return Subete.itemData.allByKind(Self.kind).findByReading(normalizedReading).filter { $0 != self }
+        return Subete.itemData.allByKind(Self.kind).findByReading(normalizedReading).filter {
+            $0 != self
+        }
     }
     func meaningMatches(normalizedInput: String, levenshtein: inout Levenshtein) -> Bool {
-        return evaluateMeaningAnswerInner(normalizedInput: normalizedInput,
-                                          meanings: self.meanings,
-                                          levenshtein: &levenshtein) > 0
+        return evaluateMeaningAnswerInner(
+            normalizedInput: normalizedInput,
+            meanings: self.meanings,
+            levenshtein: &levenshtein) > 0
     }
     func similarMeaning() -> [Item] {
         var set: Set<Item> = []
@@ -660,39 +692,50 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable, @unchecked Sendab
         return bestQual
     }
 
-    func evaluateReadingAnswer(input: String, allowAlternatives: Bool) -> (outcome: TestOutcome, qual: Int, alternatives: [Item]) {
+    func evaluateReadingAnswer(input: String, allowAlternatives: Bool) -> (
+        outcome: TestOutcome, qual: Int, alternatives: [Item]
+    ) {
         // TODO this sucks
         let normalizedInput = normalizeReadingTrimmed(trim(input))
         let qual = evaluateReadingAnswerInner(normalizedInput: normalizedInput)
         var outcome: TestOutcome = qual > 0 ? .right : .wrong
         let alternatives = readingAlternatives(reading: normalizedInput)
-        if outcome == .wrong && allowAlternatives && alternatives.contains(where: { (alternative: Item) in
-            (alternative as! NormalItem).meanings.contains(where: { (meaning: Ing) in
-                meaning.acceptedAnswerForMe && self.meanings.contains(where: { (meaning2: Ing) in
-                    meaning2.acceptedAnswerForMe && meaning.text == meaning2.text
+        if outcome == .wrong && allowAlternatives
+            && alternatives.contains(where: { (alternative: Item) in
+                (alternative as! NormalItem).meanings.contains(where: { (meaning: Ing) in
+                    meaning.acceptedAnswerForMe
+                        && self.meanings.contains(where: { (meaning2: Ing) in
+                            meaning2.acceptedAnswerForMe && meaning.text == meaning2.text
+                        })
                 })
             })
-        }) {
+        {
             outcome = .mu
         }
         return (outcome, qual, alternatives)
 
     }
-    func evaluateMeaningAnswer(input: String, allowAlternatives: Bool) -> (outcome: TestOutcome, qual: Int, alternatives: [Item]) {
+    func evaluateMeaningAnswer(input: String, allowAlternatives: Bool) -> (
+        outcome: TestOutcome, qual: Int, alternatives: [Item]
+    ) {
         let normalizedInput = normalizeMeaningTrimmed(trim(input))
         var levenshtein = Levenshtein()
-        let qual = evaluateMeaningAnswerInner(normalizedInput: normalizedInput,
-                                              meanings: self.meanings,
-                                              levenshtein: &levenshtein)
+        let qual = evaluateMeaningAnswerInner(
+            normalizedInput: normalizedInput,
+            meanings: self.meanings,
+            levenshtein: &levenshtein)
         var outcome: TestOutcome = qual > 0 ? .right : .wrong
         let alternatives = meaningAlternatives(meaning: normalizedInput)
-        if outcome == .wrong && allowAlternatives && alternatives.contains(where: { (alternative: Item) in
-            (alternative as! NormalItem).readings.contains(where: { (reading: Ing) in
-                reading.acceptedAnswerForMe && self.readings.contains(where: { (reading2: Ing) in
-                    reading2.acceptedAnswerForMe && reading.text == reading2.text
+        if outcome == .wrong && allowAlternatives
+            && alternatives.contains(where: { (alternative: Item) in
+                (alternative as! NormalItem).readings.contains(where: { (reading: Ing) in
+                    reading.acceptedAnswerForMe
+                        && self.readings.contains(where: { (reading2: Ing) in
+                            reading2.acceptedAnswerForMe && reading.text == reading2.text
+                        })
                 })
             })
-        }) {
+        {
             outcome = .mu
         }
         return (outcome, qual, alternatives)
@@ -707,15 +750,17 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable, @unchecked Sendab
             return prompt
         }
     }
-    override var availableTests: [TestKind] { return [.characterToRM, .meaningToReading, .readingToMeaning] }
+    override var availableTests: [TestKind] {
+        return [.characterToRM, .meaningToReading, .readingToMeaning]
+    }
 }
-final class Word : NormalItem, CustomStringConvertible, @unchecked Sendable {
+final class Word: NormalItem, CustomStringConvertible, @unchecked Sendable {
     var description: String {
         return "<Word \(self.character)>"
     }
     override class var kind: ItemKind { return .word }
 }
-final class Kanji : NormalItem, CustomStringConvertible, @unchecked Sendable {
+final class Kanji: NormalItem, CustomStringConvertible, @unchecked Sendable {
     var description: String {
         return "<Kanji \(self.character)>"
     }
@@ -768,7 +813,9 @@ final class Confusion: Item, CustomStringConvertible, @unchecked Sendable {
     override class var kind: ItemKind { return .confusion }
     override var availableTests: [TestKind] { return [.confusion] }
 }
-final class Flashcard: Item, CustomStringConvertible, DecodableWithConfiguration, Decodable, @unchecked Sendable {
+final class Flashcard: Item, CustomStringConvertible, DecodableWithConfiguration, Decodable,
+    @unchecked Sendable
+{
     let front: String
     let backs: [Ing]
 
@@ -777,8 +824,10 @@ final class Flashcard: Item, CustomStringConvertible, DecodableWithConfiguration
     }
 
     required convenience init(from dec: any Decoder) throws {
-        try self.init(from: dec,
-                      configuration: dec.userInfo[CodingUserInfoKey(rawValue: "decodingConfiguration")!] as! DecodingConfiguration)
+        try self.init(
+            from: dec,
+            configuration: dec.userInfo[CodingUserInfoKey(rawValue: "decodingConfiguration")!]
+                as! DecodingConfiguration)
     }
     required init(from dec: any Decoder, configuration: DecodingConfiguration) throws {
         enum K: CodingKey { case front, backs }
@@ -787,17 +836,21 @@ final class Flashcard: Item, CustomStringConvertible, DecodableWithConfiguration
         self.backs = try decodeArray(container.nestedUnkeyedContainer(forKey: .backs)) {
             try Ing(from: $0, isMeaning: true, relaxed: true)
         }
-        super.init(try Item.initializer(name: self.front, from: dec), itemLoader: configuration.itemLoader)
+        super.init(
+            try Item.initializer(name: self.front, from: dec), itemLoader: configuration.itemLoader)
     }
     var description: String {
         return "<Flashcard \(self.front)>"
     }
-    func evaluateBackAnswer(input: String, allowAlternatives: Bool) -> (outcome: TestOutcome, qual: Int, alternatives: [Item]) {
+    func evaluateBackAnswer(input: String, allowAlternatives: Bool) -> (
+        outcome: TestOutcome, qual: Int, alternatives: [Item]
+    ) {
         let normalizedInput = normalizeMeaningTrimmed(trim(input))
         var levenshtein = Levenshtein()
-        let qual = evaluateMeaningAnswerInner(normalizedInput: normalizedInput,
-                                              meanings: self.backs,
-                                              levenshtein: &levenshtein)
+        let qual = evaluateMeaningAnswerInner(
+            normalizedInput: normalizedInput,
+            meanings: self.backs,
+            levenshtein: &levenshtein)
         let outcome: TestOutcome = qual > 0 ? .right : .wrong
         let alternatives = meaningAlternatives(meaning: normalizedInput)
         return (outcome, qual, alternatives)
@@ -894,25 +947,30 @@ enum TestOutcome: String, CaseIterable {
     case mu
 }
 
-
 struct RetiredYaml: Decodable {
     let retired: [ItemKind: [String]]
     let replace: [ItemKind: [String: String]]
 }
 
-struct TestResultParser : ~Copyable {
+struct TestResultParser: ~Copyable {
     let itemKindDataToEnumCache: DataToEnumCache<ItemKind> = DataToEnumCache()
     let testKindDataToEnumCache: DataToEnumCache<TestKind> = DataToEnumCache()
     let testOutcomeDataToEnumCache: DataToEnumCache<TestOutcome> = DataToEnumCache()
-    let retiredByName: [ItemKind: Set<MaybeOwnedData>] = Subete.retrep.retired.mapValues { (stringList) in
+    let retiredByName: [ItemKind: Set<MaybeOwnedData>] = Subete.retrep.retired.mapValues {
+        (stringList) in
         Set(stringList.map { MaybeOwnedData.owned(Data($0.utf8)) })
     }
-    let itemsByName: [ItemKind: [MaybeOwnedData: Item]] = Dictionary(uniqueKeysWithValues: ItemKind.allCases.map { (itemKind) in
-        let itemList = Subete.itemData.allByKind(itemKind)
-        return (itemKind, Dictionary(uniqueKeysWithValues: itemList.names.map {
-            (MaybeOwnedData.owned(Data($0.utf8)), itemList.findByName($0)!)
-        }))
-    })
+    let itemsByName: [ItemKind: [MaybeOwnedData: Item]] = Dictionary(
+        uniqueKeysWithValues: ItemKind.allCases.map { (itemKind) in
+            let itemList = Subete.itemData.allByKind(itemKind)
+            return (
+                itemKind,
+                Dictionary(
+                    uniqueKeysWithValues: itemList.names.map {
+                        (MaybeOwnedData.owned(Data($0.utf8)), itemList.findByName($0)!)
+                    })
+            )
+        })
     let splutBuffer: StableArray<UnsafeData> = StableArray(repeating: UnsafeData(), count: 8)
 }
 
@@ -926,7 +984,7 @@ struct TestResult {
             self.question.testKind.rawValue,
             type(of: self.question.item).kind.rawValue,
             self.question.item.name,
-            self.outcome.rawValue
+            self.outcome.rawValue,
         ]
         return components.joined(separator: ":")
     }
@@ -934,11 +992,13 @@ struct TestResult {
     static func parse(line: Data, parser: inout TestResultParser) throws -> TestResult? {
         try UnsafeData.withData(line) { (unsafeLine: UnsafeData) -> TestResult? in
             let components = parser.splutBuffer.buf
-            let componentsCount = unsafeLine.split(separator: 58 /* ':' */, into: components, includingSpaces: true)
+            let componentsCount = unsafeLine.split(
+                separator: 58 /* ':' */, into: components, includingSpaces: true)
             var date: Int? = nil
             var i = 0
             if componentsCount > 4 {
-                date = try unwrapOrThrow(parseNonnegativeInt(data: components[0]),
+                date = try unwrapOrThrow(
+                    parseNonnegativeInt(data: components[0]),
                     err: MyError("invalid timestamp \(d2s(parser.splutBuffer[0]))"))
                 i = 1
             }
@@ -946,15 +1006,16 @@ struct TestResult {
             if componentsCount > i + 4 {
                 warn("extra components")
             }
-            
+
             let testKindData = components[i]
-            let itemKindData = components[i+1]
-            let nameData = components[i+2]
-            let outcomeData = components[i+3]
-            
+            let itemKindData = components[i + 1]
+            let nameData = components[i + 2]
+            let outcomeData = components[i + 3]
+
             // TODO: rawValue with substring?
-            let itemKind = try unwrapOrThrow(parser.itemKindDataToEnumCache[itemKindData],
-                                         err: MyError("invalid item kind \(d2s(itemKindData))"))
+            let itemKind = try unwrapOrThrow(
+                parser.itemKindDataToEnumCache[itemKindData],
+                err: MyError("invalid item kind \(d2s(itemKindData))"))
             guard let item = parser.itemsByName[itemKind]?[.unowned(nameData)] else {
                 if parser.retiredByName[itemKind]?.contains(.unowned(nameData)) == .some(true) {
                     return nil
@@ -964,19 +1025,23 @@ struct TestResult {
 
             let question = Question(
                 item: item,
-                testKind: try unwrapOrThrow(parser.testKindDataToEnumCache[testKindData],
-                                        err: MyError("invalid test kind \(d2s(testKindData))"))
+                testKind: try unwrapOrThrow(
+                    parser.testKindDataToEnumCache[testKindData],
+                    err: MyError("invalid test kind \(d2s(testKindData))"))
             )
             return TestResult(
                 question: question,
                 date: date,
-                outcome: try unwrapOrThrow(parser.testOutcomeDataToEnumCache[outcomeData],
-                                       err: MyError("invalid outcome kind \(d2s(outcomeData))"))
+                outcome: try unwrapOrThrow(
+                    parser.testOutcomeDataToEnumCache[outcomeData],
+                    err: MyError("invalid outcome kind \(d2s(outcomeData))"))
             )
         }
     }
     static func readAllFromLog(manager: LogTxtManager) async throws -> [TestResult] {
-        let data = try await manager.openLogTxt(write: false) { (fh: FileHandle) in fh.readDataToEndOfFile() }
+        let data = try await manager.openLogTxt(write: false) { (fh: FileHandle) in
+            fh.readDataToEndOfFile()
+        }
         var parser = TestResultParser()
         return data.split(separator: 10 /*"\n"*/).compactMap {
             do {
@@ -1057,7 +1122,7 @@ actor Test {
         self.testSession = testSession
         self.state = Test.initialState(item: question.item, testKind: question.testKind)
     }
-    
+
     func setState(_ state: TestState) {
         self.state = state
     }
@@ -1072,14 +1137,16 @@ actor Test {
         return ret
     }
     func markResult(outcome: TestOutcome?) async throws -> SRSUpdate {
-        await self.testSession.setQuestionCompleteness(question: self.question, complete: outcome == .some(.right))
+        await self.testSession.setQuestionCompleteness(
+            question: self.question, complete: outcome == .some(.right))
 
         if self.result != nil {
             try await Subete.logTxtManager.removeFromLog(test: self)
             await Subete.withSRS { $0.revert(forQuestion: self.question) }
         }
         if let outcome = outcome {
-            self.result = TestResult(question: self.question, date: Int(Date().timeIntervalSince1970), outcome: outcome)
+            self.result = TestResult(
+                question: self.question, date: Int(Date().timeIntervalSince1970), outcome: outcome)
             try await Subete.logTxtManager.addToLog(test: self)
             return await Subete.withSRS { await $0.update(forResult: self.result!) }
         } else {
@@ -1110,17 +1177,20 @@ actor Test {
                 substateIdx: 0
             )
         case .flashcard:
-            return .prompt(Prompt(item: item, output: .flashcardFront, expectedInput: .flashcardBack))
+            return .prompt(
+                Prompt(item: item, output: .flashcardFront, expectedInput: .flashcardBack))
         }
     }
 
     // TODO: this function kind of sucks
     // and passing `final` is an abstraction violation
-    func handlePromptResponse(prompt: Prompt, input: String, final: Bool) async throws -> ResponseAcknowledgement {
+    func handlePromptResponse(prompt: Prompt, input: String, final: Bool) async throws
+        -> ResponseAcknowledgement
+    {
         let outcome: TestOutcome
         let qual: Int
         var alternativesSections: [AlternativesSection]
-        let allowAlternatives: Bool // accept alternatives as answer?
+        let allowAlternatives: Bool  // accept alternatives as answer?
         switch self.question.testKind {
         case .meaningToReading, .readingToMeaning, .flashcard:
             allowAlternatives = true
@@ -1130,23 +1200,36 @@ actor Test {
         let alternativeItems: [Item]
         switch prompt.expectedInput {
         case .meaning:
-            (outcome, qual, alternativeItems) = (prompt.item as! NormalItem).evaluateMeaningAnswer(input: input, allowAlternatives: allowAlternatives)
-            alternativesSections = [AlternativesSection(kind: .meaningAlternatives, items: alternativeItems)]
+            (outcome, qual, alternativeItems) = (prompt.item as! NormalItem).evaluateMeaningAnswer(
+                input: input, allowAlternatives: allowAlternatives)
+            alternativesSections = [
+                AlternativesSection(kind: .meaningAlternatives, items: alternativeItems)
+            ]
         case .reading:
-            (outcome, qual, alternativeItems) = (prompt.item as! NormalItem).evaluateReadingAnswer(input: input, allowAlternatives: allowAlternatives)
-            alternativesSections = [AlternativesSection(kind: .readingAlternatives, items: alternativeItems)]
+            (outcome, qual, alternativeItems) = (prompt.item as! NormalItem).evaluateReadingAnswer(
+                input: input, allowAlternatives: allowAlternatives)
+            alternativesSections = [
+                AlternativesSection(kind: .readingAlternatives, items: alternativeItems)
+            ]
         case .flashcardBack:
-            (outcome, qual, alternativeItems) = (prompt.item as! Flashcard).evaluateBackAnswer(input: input, allowAlternatives: allowAlternatives)
-            alternativesSections = [AlternativesSection(kind: .meaningAlternatives, items: alternativeItems)]
+            (outcome, qual, alternativeItems) = (prompt.item as! Flashcard).evaluateBackAnswer(
+                input: input, allowAlternatives: allowAlternatives)
+            alternativesSections = [
+                AlternativesSection(kind: .meaningAlternatives, items: alternativeItems)
+            ]
         }
 
         let srsUpdate = try await self.maybeMarkResult(outcome: outcome, final: final)
 
         switch self.question.testKind {
         case .meaningToReading, .flashcard:
-            alternativesSections.append(AlternativesSection(kind: .similarMeaning, items: (prompt.item as! NormalItem).similarMeaning()))
+            alternativesSections.append(
+                AlternativesSection(
+                    kind: .similarMeaning, items: (prompt.item as! NormalItem).similarMeaning()))
         case .readingToMeaning:
-            alternativesSections.append(AlternativesSection(kind: .sameReading, items: (prompt.item as! NormalItem).sameReading()))
+            alternativesSections.append(
+                AlternativesSection(
+                    kind: .sameReading, items: (prompt.item as! NormalItem).sameReading()))
         case .characterToRM, .confusion:
             // Only print alternatives if wrong, to avoid spoilers both
             // for later in the c2 and later in a confusion this might
@@ -1182,7 +1265,6 @@ enum PromptExpectedInput {
     case flashcardBack
 }
 
-
 struct Prompt {
     let item: Item
     let output: PromptOutput
@@ -1215,8 +1297,8 @@ enum SRSUpdate {
     case burned
     case lockedOut
     case noChangeOther
-    case anachronism // ignore update before birthday (which I can use to force an item to be re-tested)
-    
+    case anachronism  // ignore update before birthday (which I can use to force an item to be re-tested)
+
     var isNoChangeOther: Bool {
         if case .noChangeOther = self {
             return true
@@ -1226,16 +1308,16 @@ enum SRSUpdate {
     }
     var cliLabel: String {
         switch self {
-            case .nextDays(let days):
-                return String(format: " +%.1fd", days)
-            case .burned:
-                return " 🔥"
-            case .lockedOut:
-                return " ⟳"
-            case .noChangeOther:
-                return ""
-            case .anachronism:
-                return " [anachronism]"
+        case .nextDays(let days):
+            return String(format: " +%.1fd", days)
+        case .burned:
+            return " 🔥"
+        case .lockedOut:
+            return " ⟳"
+        case .noChangeOther:
+            return ""
+        case .anachronism:
+            return " [anachronism]"
         }
     }
 }
@@ -1247,23 +1329,23 @@ final class SRS {
 
         var nextTestDays: Double? {
             switch self {
-                case .active(let info):
-                    if info.urgentRetest || info.points == 0 {
-                        return 0.5
-                    } else {
-                        return pow(2.5, log2(info.points + 0.5))
-                    }
-                case .burned:
-                    return nil
+            case .active(let info):
+                if info.urgentRetest || info.points == 0 {
+                    return 0.5
+                } else {
+                    return pow(2.5, log2(info.points + 0.5))
+                }
+            case .burned:
+                return nil
             }
         }
         var nextTestDate: Int? {
             //print("points=\(self.points) nextTestDays=\(self.nextTestDays)")
             switch self {
-                case let .active(info):
-                    return info.lastSeen + Int(self.nextTestDays! * 60 * 60 * 24)
-                case .burned:
-                    return nil
+            case let .active(info):
+                return info.lastSeen + Int(self.nextTestDays! * 60 * 60 * 24)
+            case .burned:
+                return nil
             }
         }
         var timePastDue: Int? {
@@ -1282,44 +1364,46 @@ final class SRS {
         mutating func update(forResult result: TestResult) -> SRSUpdate {
             let date = result.date ?? 0
 
-            if let birthday = result.question.item.birthday, TimeInterval(date) < birthday.timeIntervalSince1970 {
+            if let birthday = result.question.item.birthday,
+                TimeInterval(date) < birthday.timeIntervalSince1970
+            {
                 return .anachronism
             }
             self.updateIfStale(date: date)
             //print("updating \(String(describing: self)) for result \(result) at date \(date) birthday=\(String(describing: result.question.item.birthday))")
-            
+
             switch self {
-                case .active(var info):
-                    let sinceLast = date - info.lastSeen
-                    info.lastSeen = date
-                    //print("sinceLast=\(sinceLast)")
-                    var update: SRSUpdate? = nil
-                    if sinceLast < 60*60*6 {
-                        update = .lockedOut
-                    } else {
-                        switch result.outcome {
-                        case .mu:
-                            update = .noChangeOther
-                        case .right:
-                            info.points += max(Double(sinceLast) / (60*60*24), 1.0)
-                            info.urgentRetest = false
-                            if info.points >= 60 {
-                                update = .burned
-                            }
-                        case .wrong:
-                            info.points /= 2
-                            info.urgentRetest = true
+            case .active(var info):
+                let sinceLast = date - info.lastSeen
+                info.lastSeen = date
+                //print("sinceLast=\(sinceLast)")
+                var update: SRSUpdate? = nil
+                if sinceLast < 60 * 60 * 6 {
+                    update = .lockedOut
+                } else {
+                    switch result.outcome {
+                    case .mu:
+                        update = .noChangeOther
+                    case .right:
+                        info.points += max(Double(sinceLast) / (60 * 60 * 24), 1.0)
+                        info.urgentRetest = false
+                        if info.points >= 60 {
+                            update = .burned
                         }
+                    case .wrong:
+                        info.points /= 2
+                        info.urgentRetest = true
                     }
-                    //print("outcome=\(result.outcome) newInfo.points = \(newInfo.points)")
-                    self = .active(info)
-                    return update ?? .nextDays(self.nextTestDays!)
-                case .burned:
-                    if result.outcome == .wrong {
-                        self = .active((lastSeen: date, points: 0, urgentRetest: false))
-                        return .nextDays(self.nextTestDays!)
-                    }
-                    return .noChangeOther
+                }
+                //print("outcome=\(result.outcome) newInfo.points = \(newInfo.points)")
+                self = .active(info)
+                return update ?? .nextDays(self.nextTestDays!)
+            case .burned:
+                if result.outcome == .wrong {
+                    self = .active((lastSeen: date, points: 0, urgentRetest: false))
+                    return .nextDays(self.nextTestDays!)
+                }
+                return .noChangeOther
             }
         }
 
@@ -1355,7 +1439,11 @@ final class SRS {
     }
     private func defaultInfo(question: Question) -> ItemInfo {
         if let birthday = question.item.birthday {
-            return .active((lastSeen: Int(min(birthday, Subete.startupDate).timeIntervalSince1970), points: 0, urgentRetest: false))
+            return .active(
+                (
+                    lastSeen: Int(min(birthday, Subete.startupDate).timeIntervalSince1970),
+                    points: 0, urgentRetest: false
+                ))
         } else {
             return .burned
         }
@@ -1368,14 +1456,16 @@ func testSRS() {
     let question = Question(item: item, testKind: .confusion)
     var info: SRS.ItemInfo = .burned
     let _ = info.update(
-        forResult: TestResult(question: question,
-                              date: 0,
-                              outcome: .wrong))
+        forResult: TestResult(
+            question: question,
+            date: 0,
+            outcome: .wrong))
     for i in 0... {
         let srsUpdate = info.update(
-            forResult: TestResult(question: question,
-                                  date: info.nextTestDate,
-                                  outcome: .right))
+            forResult: TestResult(
+                question: question,
+                date: info.nextTestDate,
+                outcome: .right))
         print("\(i). \(info)\(srsUpdate.cliLabel)")
     }
 }
@@ -1401,13 +1491,15 @@ struct WeightedList<T> {
         return entries.last?.cumulativeWeight ?? 0
     }
     var isEmpty: Bool { return entries.isEmpty }
-    
+
     mutating func add(_ value: T, weight: Double) {
-        entries.append(Entry(value: value, weight: weight, cumulativeWeight: totalWeight + weight, taken: false))
+        entries.append(
+            Entry(
+                value: value, weight: weight, cumulativeWeight: totalWeight + weight, taken: false))
         totalUntakenWeight += weight
     }
     func indexOfRandomElement() -> Int {
-        let target = Double.random(in: 0.0 ..< totalWeight)
+        let target = Double.random(in: 0.0..<totalWeight)
         var lo: Int = 0
         var hi: Int = entries.count - 1
         while lo <= hi {
@@ -1479,8 +1571,9 @@ struct ItemRef: Codable, Hashable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let kind = try container.decode(ItemKind.self, forKey: .kind)
         let name = try container.decode(String.self, forKey: .name)
-        item = try unwrapOrThrow(Subete.itemData.allByKind(kind).findByName(name),
-                                 err: MyError("no such item kind \(kind) name \(name)"))
+        item = try unwrapOrThrow(
+            Subete.itemData.allByKind(kind).findByName(name),
+            err: MyError("no such item kind \(kind) name \(name)"))
     }
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
@@ -1498,7 +1591,7 @@ struct IndexableSet<Element>: Codable, Sequence where Element: Hashable & Equata
         self.values = []
         self.valueToIndex = [:]
     }
-    init<S>(_ sequence: S) where S : Sequence, S.Element == Element {
+    init<S>(_ sequence: S) where S: Sequence, S.Element == Element {
         self.init()
         for value in sequence {
             self.update(with: value)
@@ -1508,7 +1601,7 @@ struct IndexableSet<Element>: Codable, Sequence where Element: Hashable & Equata
         self.values = try Array(from: decoder)
         self.valueToIndex = [:]
         for (i, value) in self.values.enumerated() {
-            if let _ = self.valueToIndex[value] {
+            if self.valueToIndex[value] != nil {
                 throw MyError("duplicate element \(value)")
             }
             self.valueToIndex[value] = i
@@ -1560,7 +1653,7 @@ struct IndexableSet<Element>: Codable, Sequence where Element: Hashable & Equata
 struct SerializableTestSession: Codable {
     var pulledIncompleteQuestions: IndexableSet<Question> = IndexableSet()
     var pulledCompleteQuestions: IndexableSet<Question> = IndexableSet()
-    var numCompletedQuestions: Int = 0 // first n elements of pulledQuestions are completed
+    var numCompletedQuestions: Int = 0  // first n elements of pulledQuestions are completed
     var numUnpulledRandomQuestions: Int = 0
     var numDone: Int = 0
     let randomMode: RandomMode
@@ -1581,8 +1674,9 @@ actor TestSession {
     init(base: SerializableTestSession, saveURL: URL? = nil) {
         self.base = base
         self.saveURL = saveURL
-        self.lottery = TestSession.makeLottery(randomMode: base.randomMode,
-                                               excluding: Set(base.pulledCompleteQuestions).union(Set(base.pulledIncompleteQuestions)))
+        self.lottery = TestSession.makeLottery(
+            randomMode: base.randomMode,
+            excluding: Set(base.pulledCompleteQuestions).union(Set(base.pulledIncompleteQuestions)))
     }
     init(fromSaveURL url: URL) throws {
         let data = try Data(contentsOf: url)
@@ -1591,28 +1685,31 @@ actor TestSession {
             saveURL: url
         )
     }
-    static func makeLottery(randomMode: RandomMode, excluding excl: Set<Question>) -> WeightedList<Question> {
+    static func makeLottery(randomMode: RandomMode, excluding excl: Set<Question>) -> WeightedList<
+        Question
+    > {
         var availRandomQuestions: [(question: Question, weight: Double)] = []
         switch randomMode {
-            case .all:
-                availRandomQuestions += (Subete.itemData.allWords.questions + Subete.itemData.allKanji.questions).map {
+        case .all:
+            availRandomQuestions +=
+                (Subete.itemData.allWords.questions + Subete.itemData.allKanji.questions).map {
                     (question: $0, weight: 1.0)
                 }
-                availRandomQuestions += Subete.itemData.allConfusion.questions.map {
-                    (question: $0, weight: 10.0)
-                }
-            case .confusion:
-                availRandomQuestions += Subete.itemData.allConfusion.questions.map {
-                    (question: $0, weight: 1.0)
-                }
+            availRandomQuestions += Subete.itemData.allConfusion.questions.map {
+                (question: $0, weight: 10.0)
+            }
+        case .confusion:
+            availRandomQuestions += Subete.itemData.allConfusion.questions.map {
+                (question: $0, weight: 1.0)
+            }
         }
         let filteredRandomQuestions = availRandomQuestions.filter { !excl.contains($0.question) }
         return WeightedList(filteredRandomQuestions)
     }
 
     func randomQuestion() -> Question? {
-        let numPulled = self.base.pulledIncompleteQuestions.count,
-            numUnpulled = self.base.numUnpulledRandomQuestions
+        let numPulled = self.base.pulledIncompleteQuestions.count
+        let numUnpulled = self.base.numUnpulledRandomQuestions
         if numPulled + numUnpulled == 0 {
             return nil
         }
@@ -1633,7 +1730,6 @@ actor TestSession {
     func numCompleteQuestions() -> Int {
         self.base.pulledCompleteQuestions.count
     }
-
 
     func setQuestionCompleteness(question: Question, complete: Bool) {
         if complete {
@@ -1661,9 +1757,8 @@ actor TestSession {
             print("!Failed to trash save! \(e)")
         }
     }
-    
+
     func bumpNumDone() {
         self.base.numDone += 1
     }
 }
-

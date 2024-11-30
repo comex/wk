@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
     name: "rerere-cli",
     platforms: [
-        .macOS(.v15),
+        .macOS(.v15)
     ],
     dependencies: [
         .package(url: "https://github.com/jpsim/Yams.git", from: "5.1.3"),
@@ -31,8 +31,8 @@ let package = Package(
                 "rerere-cli/cli.swift",
             ],
             cSettings: [
-                .headerSearchPath("rerere-c"),
+                .headerSearchPath("rerere-c")
             ]
-        ),
+        )
     ]
 )

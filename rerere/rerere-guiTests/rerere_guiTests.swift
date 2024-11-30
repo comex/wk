@@ -7,6 +7,7 @@
 //
 
 import Testing
+
 @testable import rerere_gui
 
 struct rerere_guiTests {

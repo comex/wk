@@ -55,6 +55,4 @@ struct Levenshtein {
         return v0[target.count]
     }
 
- }
-
-
+}

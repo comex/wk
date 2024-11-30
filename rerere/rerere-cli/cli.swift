@@ -1,5 +1,5 @@
-import Foundation
 import ArgumentParser
+import Foundation
 
 #if false
 func runAndGetOutput(_ args: [String]) throws -> String {
@@ -24,27 +24,29 @@ func runAndGetOutput(_ args: [String]) throws -> String {
         throw MyError("bad termination")
     }
     queue.sync {}
-    return try unwrapOrThrow(String(decoding: output!, as: UTF8.self), err: MyError("invalid utf8 in output"))
+    return try unwrapOrThrow(
+        String(decoding: output!, as: UTF8.self), err: MyError("invalid utf8 in output"))
 }
 #endif
 func runAndGetOutput(_ args: [String]) throws -> String {
     let pipe = Pipe()
     let stdoutFd = pipe.fileHandleForWriting.fileDescriptor
-    let myArgs: [UnsafeMutablePointer<Int8>?] = args.map {
-        strdup($0)
-    } + [nil]
+    let myArgs: [UnsafeMutablePointer<Int8>?] =
+        args.map {
+            strdup($0)
+        } + [nil]
     var pid: pid_t = 0
     var fileActions: posix_spawn_file_actions_t? = nil
-    
+
     posix_spawn_file_actions_init(&fileActions)
     posix_spawn_file_actions_adddup2(&fileActions, stdoutFd, 1)
     let res = posix_spawn(&pid, myArgs[0], &fileActions, nil, myArgs, environ)
-    
+
     for arg in myArgs { free(arg) }
     if res == -1 {
         throw MyError("runAndGetOutput(\(args)): posix_spawn failed: \(strerror(errno)!)")
     }
-    
+
     let queue = DispatchQueue(label: "runAndGetOutput")
     nonisolated(unsafe) var output: Data? = nil
     pipe.fileHandleForWriting.closeFile()
@@ -52,7 +54,6 @@ func runAndGetOutput(_ args: [String]) throws -> String {
         output = pipe.fileHandleForReading.readDataToEndOfFile()
     }
 
-    
     var st: Int32 = 0
     while true {
         let waited = waitpid(pid, &st, 0)
@@ -74,21 +75,22 @@ func runAndGetOutput(_ args: [String]) throws -> String {
     if exitStatus != 0 {
         throw ExitStatusError(exitStatus: Int(exitStatus))
     }
-    
+
     queue.sync {}
-    return try unwrapOrThrow(String(decoding: output!, as: UTF8.self), err: MyError("invalid utf8 in output"))
+    return try unwrapOrThrow(
+        String(decoding: output!, as: UTF8.self), err: MyError("invalid utf8 in output"))
 
 }
 
 struct CLI {
-    func formatIngs(_ ings: [Ing], colorful: Bool, isMeaning: Bool, tildify: (String) -> String) -> String {
+    func formatIngs(_ ings: [Ing], colorful: Bool, isMeaning: Bool, tildify: (String) -> String)
+        -> String
+    {
         var prev: Ing? = nil
         var out: String = ""
         for ing in (ings.sorted { $0.type < $1.type }) {
             if ing.type != .whitelist && ing.type != .blacklist {
-                let separator = prev == nil ? "" :
-                                prev!.type == ing.type ? ", " :
-                                " >> "
+                let separator = prev == nil ? "" : prev!.type == ing.type ? ", " : " >> "
                 var colored = ing.text
                 if colorful {
                     let primaryColor: (String) -> String
@@ -118,10 +120,12 @@ struct CLI {
         }
     }
     func formatItemReadings(_ normal: NormalItem, colorful: Bool) -> String {
-        return formatIngs(normal.readings, colorful: colorful, isMeaning: false, tildify: normal.tildify)
+        return formatIngs(
+            normal.readings, colorful: colorful, isMeaning: false, tildify: normal.tildify)
     }
     func formatItemMeanings(_ normal: NormalItem, colorful: Bool) -> String {
-        return formatIngs(normal.meanings, colorful: colorful, isMeaning: true, tildify: normal.tildify)
+        return formatIngs(
+            normal.meanings, colorful: colorful, isMeaning: true, tildify: normal.tildify)
     }
     func formatItemBacks(_ fc: Flashcard, colorful: Bool) -> String {
         return formatIngs(fc.backs, colorful: colorful, isMeaning: true, tildify: { $0 })
@@ -200,7 +204,9 @@ struct CLI {
             return ret
         }
     }
-    func formatLabel(outcome: TestOutcome, qual: Int, srsUpdate: SRSUpdate, existingOutcome: TestOutcome?) -> String {
+    func formatLabel(
+        outcome: TestOutcome, qual: Int, srsUpdate: SRSUpdate, existingOutcome: TestOutcome?
+    ) -> String {
         let text: String
         var back: (String) -> String
         switch outcome {
@@ -221,13 +227,19 @@ struct CLI {
 
     func formatResponseAcknowledgement(_ ra: ResponseAcknowledgement) -> String {
         let item = ra.prompt.item
-        var out = formatLabel(outcome: ra.outcome, qual: ra.qual, srsUpdate: ra.srsUpdate, existingOutcome: ra.existingOutcome)
+        var out = formatLabel(
+            outcome: ra.outcome, qual: ra.qual, srsUpdate: ra.srsUpdate,
+            existingOutcome: ra.existingOutcome)
         // should this be further abstracted?
         switch ra.question.testKind {
         case .meaningToReading:
-            out += " " + formatItemName(item) + " " + formatItemReadings(item as! NormalItem, colorful: false)
+            out +=
+                " " + formatItemName(item) + " "
+                + formatItemReadings(item as! NormalItem, colorful: false)
         case .readingToMeaning:
-            out += " " + formatItemName(item) + " " + formatItemMeanings(item as! NormalItem, colorful: true)
+            out +=
+                " " + formatItemName(item) + " "
+                + formatItemMeanings(item as! NormalItem, colorful: true)
 
         case .characterToRM, .confusion:
             switch ra.prompt.expectedInput {
@@ -280,16 +292,24 @@ struct CLI {
     func handleBang(_ input: String, curTest: Test, gotAnswerAlready: Bool, lastTest: Test?) async {
         switch input {
         case "!right":
-            await handleChangeLast(outcome: .right, curTest: curTest, gotAnswerAlready: gotAnswerAlready, lastTest: lastTest)
+            await handleChangeLast(
+                outcome: .right, curTest: curTest, gotAnswerAlready: gotAnswerAlready,
+                lastTest: lastTest)
         case "!wrong":
-            await handleChangeLast(outcome: .wrong, curTest: curTest, gotAnswerAlready: gotAnswerAlready, lastTest: lastTest)
+            await handleChangeLast(
+                outcome: .wrong, curTest: curTest, gotAnswerAlready: gotAnswerAlready,
+                lastTest: lastTest)
         case "!mu":
-            await handleChangeLast(outcome: .mu, curTest: curTest, gotAnswerAlready: gotAnswerAlready, lastTest: lastTest)
+            await handleChangeLast(
+                outcome: .mu, curTest: curTest, gotAnswerAlready: gotAnswerAlready,
+                lastTest: lastTest)
         default:
             print("?bang? \(input)")
         }
     }
-    func handleChangeLast(outcome: TestOutcome, curTest: Test, gotAnswerAlready: Bool, lastTest: Test?) async {
+    func handleChangeLast(
+        outcome: TestOutcome, curTest: Test, gotAnswerAlready: Bool, lastTest: Test?
+    ) async {
         let test: Test
         var outcome: TestOutcome? = outcome
         if gotAnswerAlready {
@@ -317,17 +337,20 @@ struct CLI {
             let prompt = await test.state.curPrompt!
             let nextState = await test.state.nextState
             let promptText = formatPromptOutput(prompt) + formatKindSuffix(item: prompt.item)
-            let resp = try promptInner(promptText: promptText, kana: prompt.expectedInput == .reading)
+            let resp = try promptInner(
+                promptText: promptText, kana: prompt.expectedInput == .reading)
             switch resp {
             case .answer(let answerText):
-                let ra = try await test.handlePromptResponse(prompt: prompt, input: answerText, final: nextState.isDone)
+                let ra = try await test.handlePromptResponse(
+                    prompt: prompt, input: answerText, final: nextState.isDone)
                 print(formatResponseAcknowledgement(ra))
                 gotAnswerAlready = true
                 if ra.outcome == .right {
                     await test.setState(nextState)
                 }
             case .bang(let bangText):
-                await handleBang(bangText, curTest: test, gotAnswerAlready: gotAnswerAlready, lastTest: lastTest)
+                await handleBang(
+                    bangText, curTest: test, gotAnswerAlready: gotAnswerAlready, lastTest: lastTest)
             }
         }
 
@@ -349,18 +372,26 @@ struct ForecastCommand: AsyncParsableCommand {
     func run() async {
         await Subete.initialize()
         let now = Date().timeIntervalSince1970
-        let srsItems: [(nextTestDate: Int, question: Question)] = await Subete.withSRS { (srs: inout SRS) in
+        let srsItems: [(nextTestDate: Int, question: Question)] = await Subete.withSRS {
+            (srs: inout SRS) in
             Subete.itemData.allQuestions.compactMap { (question) in
-                guard let nextTestDate = srs.info(question: question).nextTestDate else { return nil }
+                guard let nextTestDate = srs.info(question: question).nextTestDate else {
+                    return nil
+                }
                 return (nextTestDate: nextTestDate, question: question)
             }
         }
         let maxDays = 20
         let secondsPerDay: Double = 60 * 60 * 24
         let byDay: [(key: Int, value: [(nextTestDate: Int, question: Question)])] =
-            Dictionary(grouping: srsItems, by: { (val: (nextTestDate: Int, question: Question)) -> Int in
-                min(maxDays, max(0, Int(ceil((TimeInterval(val.nextTestDate) - now) / secondsPerDay))))
-            }).sorted { $0.key < $1.key }
+            Dictionary(
+                grouping: srsItems,
+                by: { (val: (nextTestDate: Int, question: Question)) -> Int in
+                    min(
+                        maxDays,
+                        max(0, Int(ceil((TimeInterval(val.nextTestDate) - now) / secondsPerDay))))
+                }
+            ).sorted { $0.key < $1.key }
         var total = 0
         for (days, items) in byDay {
             let keyStr = days == maxDays ? "later" : String(days)
@@ -385,13 +416,15 @@ struct TestOneCommand: AsyncParsableCommand {
     }
     func runImpl() async throws {
         await Subete.initialize()
-        let item = try unwrapOrThrow(Subete.itemData.allByKind(itemKind).findByName(name),
-                                     err: MyError("no such item kind \(itemKind) name \(name)"))
+        let item = try unwrapOrThrow(
+            Subete.itemData.allByKind(itemKind).findByName(name),
+            err: MyError("no such item kind \(itemKind) name \(name)"))
         let question = Question(item: item, testKind: testKind)
-        let testSession = TestSession(base: SerializableTestSession(
-            pulledCompleteQuestions: IndexableSet([question]),
-            randomMode: .all
-        ))
+        let testSession = TestSession(
+            base: SerializableTestSession(
+                pulledCompleteQuestions: IndexableSet([question]),
+                randomMode: .all
+            ))
         let test = Test(question: question, testSession: testSession)
         try await CLI().doOneTest(test, lastTest: nil)
     }
@@ -428,7 +461,6 @@ struct BenchStartupCommand: AsyncParsableCommand {
     }
 }
 
-
 @main
 struct Rerere: AsyncParsableCommand {
     @Option() var minQuestions: Int?
@@ -437,8 +469,10 @@ struct Rerere: AsyncParsableCommand {
     @Option() var randomMode: RandomMode = .all
 
     static let configuration = CommandConfiguration(
-            //abstract: "Randomness utilities.",
-            subcommands: [ForecastCommand.self, TestOneCommand.self, BenchStartupCommand.self, BenchSTSCommand.self])
+        subcommands: [
+            ForecastCommand.self, TestOneCommand.self, BenchStartupCommand.self,
+            BenchSTSCommand.self,
+        ])
 
     func validate() throws {
         guard minRandomQuestionsFraction >= 0 && minRandomQuestionsFraction <= 1 else {
@@ -452,34 +486,44 @@ struct Rerere: AsyncParsableCommand {
         let defaultMinQuestions = 50
         let defaultMaxQuestions = 75
         switch (self.minQuestions, self.maxQuestions) {
-            case (nil, nil):
-                return (minQuestions: defaultMinQuestions, maxQuestions: defaultMaxQuestions)
-            case (.some(let _minQuestions), nil):
-                return (minQuestions: _minQuestions, maxQuestions: max(defaultMaxQuestions, _minQuestions))
-            case (nil, .some(let _maxQuestions)):
-                return (minQuestions: min(defaultMinQuestions, _maxQuestions), maxQuestions: _maxQuestions)
-            case (.some(let _minQuestions), .some(let _maxQuestions)):
-                return (minQuestions: _minQuestions, maxQuestions: _maxQuestions)
+        case (nil, nil):
+            return (minQuestions: defaultMinQuestions, maxQuestions: defaultMaxQuestions)
+        case (.some(let _minQuestions), nil):
+            return (
+                minQuestions: _minQuestions, maxQuestions: max(defaultMaxQuestions, _minQuestions)
+            )
+        case (nil, .some(let _maxQuestions)):
+            return (
+                minQuestions: min(defaultMinQuestions, _maxQuestions), maxQuestions: _maxQuestions
+            )
+        case (.some(let _minQuestions), .some(let _maxQuestions)):
+            return (minQuestions: _minQuestions, maxQuestions: _maxQuestions)
         }
     }
     func gatherSRSQuestions() async -> [(nextTestDate: Int, question: Question)] {
         let now = Int(Date().timeIntervalSince1970)
         return await Subete.withSRS { (srs: inout SRS) in
             Subete.itemData.allQuestions.compactMap { (question) in
-                guard let nextTestDate = srs.info(question: question).nextTestDate else { return nil }
+                guard let nextTestDate = srs.info(question: question).nextTestDate else {
+                    return nil
+                }
                 return nextTestDate <= now ? (nextTestDate: nextTestDate, question: question) : nil
             }
         }
     }
-    func calcQuestionSplit(minQuestions: Int, maxQuestions: Int, availSRSQuestions: Int) -> (numSRSQuestions: Int, numRandomQuestions: Int) {
+    func calcQuestionSplit(minQuestions: Int, maxQuestions: Int, availSRSQuestions: Int) -> (
+        numSRSQuestions: Int, numRandomQuestions: Int
+    ) {
         if self.minRandomQuestionsFraction >= 1.0 {
             return (numSRSQuestions: 0, numRandomQuestions: minQuestions)
         } else {
-            var numQuestionsX: Double = Double(availSRSQuestions) / (1.0 - self.minRandomQuestionsFraction)
+            var numQuestionsX: Double =
+                Double(availSRSQuestions) / (1.0 - self.minRandomQuestionsFraction)
             numQuestionsX = max(numQuestionsX, Double(minQuestions))
             numQuestionsX = min(numQuestionsX, Double(maxQuestions))
             let numQuestions = Int(numQuestionsX)
-            let numSRSQuestions = min(availSRSQuestions, Int(numQuestionsX * (1.0 - self.minRandomQuestionsFraction)))
+            let numSRSQuestions = min(
+                availSRSQuestions, Int(numQuestionsX * (1.0 - self.minRandomQuestionsFraction)))
             return (
                 numSRSQuestions: numSRSQuestions,
                 numRandomQuestions: numQuestions - numSRSQuestions
@@ -489,11 +533,13 @@ struct Rerere: AsyncParsableCommand {
     func makeSerializableSession() async -> SerializableTestSession {
         let (minQuestions, maxQuestions) = resolveMinMax()
         var srsQuestions = await gatherSRSQuestions()
-        let (numSRSQuestions, numRandomQuestions) = calcQuestionSplit(minQuestions: minQuestions, maxQuestions: maxQuestions, availSRSQuestions: srsQuestions.count)
+        let (numSRSQuestions, numRandomQuestions) = calcQuestionSplit(
+            minQuestions: minQuestions, maxQuestions: maxQuestions,
+            availSRSQuestions: srsQuestions.count)
         print("got \(srsQuestions.count) SRS questions")
         if numSRSQuestions < srsQuestions.count {
             print("...but limiting to \(numSRSQuestions)")
-            srsQuestions.sort { $0.nextTestDate > $1.nextTestDate}
+            srsQuestions.sort { $0.nextTestDate > $1.nextTestDate }
             srsQuestions = Array(srsQuestions[0..<numSRSQuestions])
         }
         return SerializableTestSession(
@@ -511,8 +557,9 @@ struct Rerere: AsyncParsableCommand {
         do {
             sess = try TestSession(fromSaveURL: url)
             print("Loaded existing session \(path)")
-        } catch let e as NSError where e.domain == NSCocoaErrorDomain &&
-                                       e.code == NSFileReadNoSuchFileError {
+        } catch let e as NSError
+            where e.domain == NSCocoaErrorDomain && e.code == NSFileReadNoSuchFileError
+        {
             print("Starting new session \(path)")
             let ser = await makeSerializableSession()
             sess = TestSession(base: ser, saveURL: url)
