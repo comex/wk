@@ -1311,20 +1311,20 @@ actor Test {
 
 }
 
-enum PromptOutput {
+enum PromptOutput: Equatable {
     case meaning
     case reading
     case flashcardFront
     case character
 }
 
-enum PromptExpectedInput {
+enum PromptExpectedInput/*: Equatable*/ {
     case meaning
     case reading
     case flashcardBack
 }
 
-struct Prompt {
+struct Prompt: Equatable {
     let item: Item
     let output: PromptOutput
     let expectedInput: PromptExpectedInput

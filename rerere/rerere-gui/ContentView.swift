@@ -8,10 +8,45 @@
 
 import SwiftUI
 
-struct SnapshotView : View {
+let meaningBlue = Color(red: 0.2627, green: 0.2392, blue: 0.5)
+let lightGreen = Color(red: 0.4627, green: 0.8392, blue: 0.5)
+struct PromptOutputView: View {
+    let prompt: Prompt
+    var body: some View {
+        VStack {
+            switch prompt.output {
+            case .character:
+                // TODO: make selectable
+                // TODO: fill width
+                let character = prompt.item.name
+                Text(character)
+                    .font(Font.system(size: 80))
+                    .foregroundStyle(.white.shadow(.drop(radius: 0, x: 2, y: 2)))
+                    
+            default:
+                fatalError("TODO")
+            
+            }
+        }
+            .padding()
+            .background(in: Rectangle())
+            .backgroundStyle(meaningBlue.gradient)
+    }
+}
+
+struct TestSnapshotView : View {
     let testSnapshot: Container<Test.Snapshot?>
     var body: some View {
-        Text("Boo \(self.testSnapshot.value?.boogaloo ?? -1)")
+        VStack {
+            if let snapshot = self.testSnapshot.value {
+                if let prompt = snapshot.state.curPrompt {
+                    PromptOutputView(prompt: prompt)
+                    AnswerInputView(expectedInput: prompt.expectedInput)
+                }
+                Text("Boo \(snapshot.boogaloo)")
+                            
+            }
+        }
     }
 }
 
@@ -70,12 +105,14 @@ struct KanjiInputView: View {
 }
 
 struct AnswerInputView: View {
+    let expectedInput: PromptExpectedInput
+    
     @State private var pendingText: String = ""
-    let takeInput: (String) -> Void
+    
     var body: some View {
         KanjiInputView(label: "Reading", text: $pendingText)
             .onSubmit {
-                takeInput(pendingText)
+                print("got input \(pendingText)")
                 pendingText = ""
             }
     }
@@ -84,11 +121,8 @@ struct AnswerInputView: View {
 
 struct ContentView: View {
     let test: Test = buildTestTest()
-    var bla: String = "asdf"
 
-    func takeInput(_ text: String) {
-        print("got input \(text)")
-    }
+
     
 
     var body: some View {
@@ -100,9 +134,7 @@ struct ContentView: View {
                 .foregroundStyle(.tint)
             Text("Hello, world!")
             */
-            Text("\(test.question)")
-            SnapshotView(testSnapshot: self.test.snapshot.container)
-            AnswerInputView(takeInput: self.takeInput)
+            TestSnapshotView(testSnapshot: self.test.snapshot.container)
 
         }
         .padding()
@@ -115,7 +147,7 @@ func buildTestTest() -> Test {
         await Subete.initialize()
 
         let item = Subete.itemData.allWords.findByName("貰う")!
-        let question = Question(item: item, testKind: .meaningToReading)
+        let question = Question(item: item, testKind: .characterToRM)
         let testSession = TestSession(forSingleQuestion: question)
         return await Test(question: question, testSession: testSession)
     }
@@ -123,5 +155,5 @@ func buildTestTest() -> Test {
 
 
 #Preview {
-    AnswerInputView { print("got \($0)") }
+    ContentView()
 }
