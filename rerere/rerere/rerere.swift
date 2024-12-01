@@ -1,6 +1,7 @@
 import Foundation
 import Synchronization
 import System
+import Combine
 import Yams
 // TODO: right after mu should probably not count
 // TODO: mark items (newborns) as needing intensive SRS
@@ -1109,18 +1110,77 @@ enum TestState {
     }
 }
 
+@Observable final class Container<Value> {
+    var value: Value
+    init(_ value: Value) { self.value = value }
+}
+// comment says: "actors cannot yet be supported for their isolation"
+// This sucks.
+final class OffMainContainer<Value: Sendable>: Sendable {
+    @MainActor var container: Container<Value> {
+        if self._container == nil {
+            self._value.withLock { self._container = Container($0) }
+        }
+        return self._container!
+    }
+    @MainActor var _container: Container<Value>? = nil
+    let _value: Mutex<Value>
+    init(_ value: Value) {
+        self._value = Mutex(value)
+    }
+    nonisolated func send(_ value: Value) {
+        self._value.withLock { $0 = value }
+        // is there a way to do this that guarantees ordering?  if so, we could ditch the cache.
+        Task {
+            await MainActor.run {
+                if self._container != nil {
+                    self._value.withLock { self._container!.value = $0 }
+                }
+            }
+        }
+    }
+}
+
 actor Test {
     let question: Question
     let testSession: TestSession
-    var result: TestResult? = nil
-    var state: TestState
+    
+    var result: TestResult? = nil {
+        didSet { updateSnapshot() }
+    }
+    var state: TestState {
+        didSet { updateSnapshot() }
+    }
+    var boogaloo: Int = 0 {
+        didSet { updateSnapshot() }
+    }
+    
+    
+    struct Snapshot {
+        let result: TestResult?
+        let state: TestState
+        let boogaloo: Int
+    }
+    let snapshot: OffMainContainer<Snapshot?> = OffMainContainer(nil)
+    func updateSnapshot() {
+        // TODO.
+        Task {
+            self.snapshot.send(Snapshot(result: self.result, state: self.state, boogaloo: self.boogaloo))
+        }
+    }
 
-    init(question: Question, testSession: TestSession) {
+    init(question: Question, testSession: TestSession) async {
         self.question = question
         self.testSession = testSession
         self.state = Test.initialState(item: question.item, testKind: question.testKind)
+        Task {
+            while true {
+                self.boogaloo += 1
+                try! await Task.sleep(for: .milliseconds(500))
+            }
+        }
     }
-
+    
     func setState(_ state: TestState) {
         self.state = state
     }
@@ -1182,7 +1242,7 @@ actor Test {
 
     // TODO: this function kind of sucks
     // and passing `final` is an abstraction violation
-    func handlePromptResponse(prompt: Prompt, input: String, final: Bool) async throws
+    func handlePromptResponse(input: String, final: Bool) async throws
         -> ResponseAcknowledgement
     {
         let outcome: TestOutcome
@@ -1196,6 +1256,7 @@ actor Test {
             allowAlternatives = false
         }
         let alternativeItems: [Item]
+        let prompt = self.state.curPrompt!
         switch prompt.expectedInput {
         case .meaning:
             (outcome, qual, alternativeItems) = (prompt.item as! NormalItem).evaluateMeaningAnswer(

@@ -342,7 +342,7 @@ struct CLI {
             switch resp {
             case .answer(let answerText):
                 let ra = try await test.handlePromptResponse(
-                    prompt: prompt, input: answerText, final: nextState.isDone)
+                    input: answerText, final: nextState.isDone)
                 print(formatResponseAcknowledgement(ra))
                 gotAnswerAlready = true
                 if ra.outcome == .right {
@@ -421,7 +421,7 @@ struct TestOneCommand: AsyncParsableCommand {
             err: MyError("no such item kind \(itemKind) name \(name)"))
         let question = Question(item: item, testKind: testKind)
         let testSession = TestSession(forSingleQuestion: question)
-        let test = Test(question: question, testSession: testSession)
+        let test = await Test(question: question, testSession: testSession)
         try await CLI().doOneTest(test, lastTest: nil)
     }
 }
@@ -566,7 +566,7 @@ struct Rerere: AsyncParsableCommand {
             var lastTest: Test? = nil
             let cli = CLI()
             while let question = await sess.randomQuestion() {
-                let test = Test(question: question, testSession: sess)
+                let test = await Test(question: question, testSession: sess)
                 try await cli.doTestInSession(test: test, lastTest: lastTest, session: sess)
                 await sess.bumpNumDone()
                 lastTest = test
