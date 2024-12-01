@@ -25,4 +25,41 @@ struct rerere_guiTests {
         #expect(x == 42)
     }
 
+    @Test func testFixKana() async {
+        await MainActor.run { () -> Void in
+            let oldText = "f00xtsubarchi3"
+            let oldIndices = Array(oldText.indices)
+            var newIndices = oldIndices
+            var newText = oldText
+            fixKana(&newText) { (fixIndex) -> Void in
+                newIndices = newIndices.map {
+                    let new = fixIndex($0)
+                    return new
+                }
+            }
+            for i in 0..<oldIndices.count {
+                let oldIndex = oldIndices[i]
+                let newIndex = newIndices[i]
+                let oldChar = String(oldText[oldIndex])
+                let newChar = String(newText[newIndex])
+                let exp: String
+                switch oldChar {
+                case "x":
+                    exp = "っ"
+                case "t", "s", "u", "b":
+                    exp = "ば"
+                case "a":
+                    exp = "r"
+                case "c":
+                    exp = "ち"
+                case "h", "i":
+                    exp = "3"
+                default:
+                    exp = oldChar
+                }
+                assert(newChar == exp)
+                #expect(newChar == exp)
+            }
+        }
+    }
 }

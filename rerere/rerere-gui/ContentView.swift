@@ -15,60 +15,55 @@ struct SnapshotView : View {
     }
 }
 
-struct KanjiInputView: NSViewRepresentable {
-
-    typealias NSViewType = NSTextField
+struct KanjiInputView: View {
     
-    class Coordinator: NSObject, NSTextFieldDelegate {
-        let kiv: KanjiInputView
-
-        
-        init(kiv: KanjiInputView) {
-            self.kiv = kiv
-        }
-        
-        func controlTextDidChange(_ obj: Notification) {
-            
-            let textField = obj.object as! NSTextField
-            textField.stringValue = textField.stringValue.replacing("a", with: "bb")
-            print("controlTextDidChange to \(textField.stringValue)")
-            self.kiv.text = textField.stringValue
-            
-        }
-        func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-            print("doCommandBy \(commandSelector)")
-            if commandSelector == #selector(NSStandardKeyBindingResponding.insertNewline) {
-                self.kiv.onSubmit()
-                return true
-            }
-            return false
-        }
-        func controlTextDidEndEditing(_ obj: Notification) {
-            print("didEndEditing")
-        }
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(kiv: self)
-    }
-    
-    func makeNSView(context: Context) -> NSTextField {
-        print("makeNSView")
-        
-        let textField = NSTextField(string: self.text)
-   
-        textField.placeholderString = self.label
-        textField.delegate = context.coordinator
-        return textField
-    }
-    
-    func updateNSView(_ textField: NSTextField, context: Context) {
-        print("updateNSView")
-        textField.stringValue = self.text
-    }
     let label: String
-    @Binding var text: String
-    let onSubmit: () -> Void
+    let text: Binding<String>
+    @State var myText: String
+    @State var selection: TextSelection? = nil
+    init(label: String, text: Binding<String>) {
+        self.label = label
+        self.text = text
+        self.myText = text.wrappedValue
+    }
+
+    var body: some View {
+        TextField(label, text: $myText, selection: $selection)
+            .onChange(of: myText) {
+                var modText = myText
+                print("onChange 1 text=\(text.wrappedValue) myText=\(myText)")
+                //if modText == text.wrappedValue { return }
+                var sel = selection
+                var changed = false
+                fixKana(&modText) { fixIndex in
+                    changed = true
+                    if sel != nil {
+                        switch sel!.indices {
+                        case .multiSelection(let rangeSet):
+                            sel = TextSelection(ranges: RangeSet(rangeSet.ranges.map { (range: Range<String.Index>) in
+                                fixIndex(range.lowerBound)..<fixIndex(range.upperBound)
+                            }))
+                        case .selection(let range):
+                            sel = TextSelection(range: fixIndex(range.lowerBound)..<fixIndex(range.upperBound))
+                        @unknown default:
+                            fatalError("unknown selection kind")
+                        }
+                    }
+                }
+                if !changed {
+                    return
+                }
+                myText = modText
+                selection = sel
+                print("onChange 1 text=\(text.wrappedValue) myText=\(myText)")
+                text.wrappedValue = myText
+            }
+            .onChange(of: text.wrappedValue) {
+                print("onChange 2 text=\(text.wrappedValue) myText=\(myText)")
+                myText = text.wrappedValue
+                selection = nil
+            }
+    }
 
 }
 
@@ -76,11 +71,11 @@ struct AnswerInputView: View {
     @State private var pendingText: String = ""
     let takeInput: (String) -> Void
     var body: some View {
-        KanjiInputView(label: "Reading", text: $pendingText, onSubmit: {
-            
-            takeInput(pendingText)
-            pendingText = ""
-        })
+        KanjiInputView(label: "Reading", text: $pendingText)
+            .onSubmit {
+                takeInput(pendingText)
+                pendingText = ""
+            }
     }
 }
 
