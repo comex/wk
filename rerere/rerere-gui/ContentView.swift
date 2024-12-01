@@ -15,25 +15,25 @@ struct SnapshotView : View {
     }
 }
 
-extension EnvironmentValues {
-    @Entry var KIVText: String = "#?"
-}
-
-struct KanjiInputViewInner: NSViewRepresentable {
+struct KanjiInputView: NSViewRepresentable {
 
     typealias NSViewType = NSTextField
     
     class Coordinator: NSObject, NSTextFieldDelegate {
-        let kiv: KanjiInputViewInner
+        let kiv: KanjiInputView
+
         
-        init(kiv: KanjiInputViewInner) {
+        init(kiv: KanjiInputView) {
             self.kiv = kiv
         }
         deinit {
         
         }
         func controlTextDidChange(_ obj: Notification) {
-            print("controlTextDidChange")
+            
+            let textField = obj.object as! NSTextField
+            print("controlTextDidChange to \(textField.stringValue)")
+            self.kiv.text = textField.stringValue
         }
         func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
             print("doCommandBy \(commandSelector)")
@@ -55,18 +55,8 @@ struct KanjiInputViewInner: NSViewRepresentable {
     func makeNSView(context: Context) -> NSTextField {
         print("makeNSView")
         
-        let textField = withObservationTracking {
-            NSTextField(string: context.environment.KIVText)
-        } onChange: {
-            print("onChange")
-        }
-        /*
-        } onChange: { [weak textField] in
-            print("onChange")
-            MainActor.assumeIsolated {
-                textField?.stringValue = self.text.wrappedValue
-            }
-        }*/
+        let textField = NSTextField(string: self.text)
+   
         textField.placeholderString = self.label
         textField.delegate = context.coordinator
         return textField
@@ -74,25 +64,16 @@ struct KanjiInputViewInner: NSViewRepresentable {
     
     func updateNSView(_ textField: NSTextField, context: Context) {
         print("updateNSView")
+        textField.stringValue = self.text
     }
-    let label: String
-    let onSubmit: () -> Void
-
-}
-
-struct KanjiInputView: View {
     let label: String
     @Binding var text: String
     let onSubmit: () -> Void
-    var body: some View {
-        let _ = print("KIV outer: text is \(text)")
-        KanjiInputViewInner(label: self.label, onSubmit: self.onSubmit)
-            .environment(\.KIVText, self.text)
-    }
+
 }
 
 struct AnswerInputView: View {
-    @State private var pendingText: String = "FF"
+    @State private var pendingText: String = ""
     let takeInput: (String) -> Void
     var body: some View {
         KanjiInputView(label: "Reading", text: $pendingText, onSubmit: {
