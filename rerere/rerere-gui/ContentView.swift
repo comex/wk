@@ -26,14 +26,14 @@ struct KanjiInputView: NSViewRepresentable {
         init(kiv: KanjiInputView) {
             self.kiv = kiv
         }
-        deinit {
         
-        }
         func controlTextDidChange(_ obj: Notification) {
             
             let textField = obj.object as! NSTextField
+            textField.stringValue = textField.stringValue.replacing("a", with: "bb")
             print("controlTextDidChange to \(textField.stringValue)")
             self.kiv.text = textField.stringValue
+            
         }
         func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
             print("doCommandBy \(commandSelector)")
