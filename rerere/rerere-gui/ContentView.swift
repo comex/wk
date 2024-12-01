@@ -31,7 +31,7 @@ struct KanjiInputView: View {
         TextField(label, text: $myText, selection: $selection)
             .onChange(of: myText) {
                 var modText = myText
-                print("onChange 1 text=\(text.wrappedValue) myText=\(myText)")
+                //print("onChange 1 text=\(text.wrappedValue) myText=\(myText)")
                 //if modText == text.wrappedValue { return }
                 var sel = selection
                 var changed = false
@@ -50,16 +50,18 @@ struct KanjiInputView: View {
                         }
                     }
                 }
+                
+                text.wrappedValue = modText
+
                 if !changed {
                     return
                 }
                 myText = modText
                 selection = sel
-                print("onChange 1 text=\(text.wrappedValue) myText=\(myText)")
-                text.wrappedValue = myText
+                
             }
             .onChange(of: text.wrappedValue) {
-                print("onChange 2 text=\(text.wrappedValue) myText=\(myText)")
+                //print("onChange 2 text=\(text.wrappedValue) myText=\(myText)")
                 myText = text.wrappedValue
                 selection = nil
             }
