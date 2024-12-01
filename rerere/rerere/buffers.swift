@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 struct UnsafeData: Hashable, CustomStringConvertible {
     let ubp: UnsafeRawBufferPointer
@@ -168,9 +169,58 @@ actor AsyncMutex<Value: ~Copyable> {
     }
 }
 
-struct AsyncOnce<T: Sendable> {
-    let mtx: AsyncMutex<T?> = AsyncMutex(nil)
-    func get(_ cb: sending () async -> T) async -> T {
+let asyncOnceWaiters: Mutex<[UnsafeRawPointer: [CheckedContinuation<Void, Never>]]> = Mutex([:])
+// This wastes space by redundantly storing the state (due to the optional),
+// because the magic used by Synchronization._Cell requires a feature flag.
+// But this should run fast.
+struct AsyncOnce<Value>: ~Copyable {
+    nonisolated(unsafe) private var _value: Value?
+    enum State: UInt8, AtomicRepresentable {
+        case uninitialized = 0, initializing = 1, initialized = 2
+    }
+    let state: Atomic<State> = Atomic(.uninitialized)
+    var value: Value {
+        _read {
+            ensureInitialized()
+            yield self._value!
+        }
+        _modify {
+            ensureInitialized()
+            yield &_value!
+        }
+    }
+    func ensureInitialized() {
+        let state = self.state.load(ordering: .acquiring)
+        if state != .initialized {
+            fatalError("AsyncOnce was not initialized")
+        }
+    }
+    
+    func initialize(_ value: sending Value) {
+        let (exchanged, original) = self.state.compareExchange(expected: .uninitialized, desired: .initializing, ordering: .relaxed)
+        if !exchanged {
+            fatalError("AsyncOnce was already initialized (or being initialized")
+        }
+        // This assumes no optimizations based on immutability.
+        // _Cell doesn't seem to do anything special
+        // ti.isBitwiseTakable
+        
+        // addIndirectValueParameterAttributes
+        self._value = value
+        self.state.store(.initialized, ordering: .releasing)
+
+    }
+    @inline(never)
+    func ensureExistsSlow(state: State) async {
+        while state != .initialized {
+            if state == .uninitialized {
+                let z: Int = self.state.weakCompareExchange(expected: state, desired: .initializing, ordering: .relaxed)
+            }
+
+        }
+    }
+    /*
+        func get(_ cb: sending () async -> Value) async -> Value {
         await mtx.withLock { (val: inout T?) async -> T in
             if val == nil {
                 val = await cb()
@@ -178,4 +228,6 @@ struct AsyncOnce<T: Sendable> {
             return val!
         }
     }
+*/
+     
 }
