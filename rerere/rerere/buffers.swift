@@ -119,7 +119,7 @@ func parseNonnegativeInt(data: UnsafeData) -> Int? {
 struct StableArray<T>: ~Copyable {
     let buf: UnsafeMutableBufferPointer<T>
     init(repeating t: T, count: Int) {
-        let ptr = calloc(MemoryLayout<T>.size, count).bindMemory(to: T.self, capacity: count)
+        let ptr = calloc(MemoryLayout<T>.stride, count).bindMemory(to: T.self, capacity: count)
         self.buf = UnsafeMutableBufferPointer(start: ptr, count: count)
         self.buf.initialize(repeating: t)
     }
@@ -167,67 +167,4 @@ actor AsyncMutex<Value: ~Copyable> {
             self.waiters.removeFirst().resume()
         }
     }
-}
-
-let asyncOnceWaiters: Mutex<[UnsafeRawPointer: [CheckedContinuation<Void, Never>]]> = Mutex([:])
-// This wastes space by redundantly storing the state (due to the optional),
-// because the magic used by Synchronization._Cell requires a feature flag.
-// But this should run fast.
-struct AsyncOnce<Value>: ~Copyable {
-    nonisolated(unsafe) private var _value: Value?
-    enum State: UInt8, AtomicRepresentable {
-        case uninitialized = 0, initializing = 1, initialized = 2
-    }
-    let state: Atomic<State> = Atomic(.uninitialized)
-    var value: Value {
-        _read {
-            ensureInitialized()
-            yield self._value!
-        }
-        _modify {
-            ensureInitialized()
-            yield &_value!
-        }
-    }
-    func ensureInitialized() {
-        let state = self.state.load(ordering: .acquiring)
-        if state != .initialized {
-            fatalError("AsyncOnce was not initialized")
-        }
-    }
-    
-    func initialize(_ value: sending Value) {
-        let (exchanged, original) = self.state.compareExchange(expected: .uninitialized, desired: .initializing, ordering: .relaxed)
-        if !exchanged {
-            fatalError("AsyncOnce was already initialized (or being initialized")
-        }
-        // This assumes no optimizations based on immutability.
-        // _Cell doesn't seem to do anything special
-        // ti.isBitwiseTakable
-        
-        // addIndirectValueParameterAttributes
-        self._value = value
-        self.state.store(.initialized, ordering: .releasing)
-
-    }
-    @inline(never)
-    func ensureExistsSlow(state: State) async {
-        while state != .initialized {
-            if state == .uninitialized {
-                let z: Int = self.state.weakCompareExchange(expected: state, desired: .initializing, ordering: .relaxed)
-            }
-
-        }
-    }
-    /*
-        func get(_ cb: sending () async -> Value) async -> Value {
-        await mtx.withLock { (val: inout T?) async -> T in
-            if val == nil {
-                val = await cb()
-            }
-            return val!
-        }
-    }
-*/
-     
 }
