@@ -20,6 +20,16 @@ struct ContentView: View {
     }
 }
 
+func buildTestTest() -> Test {
+    blockOnLikeYoureNotSupposedTo { await Subete.initialize() }
+
+    let item = Subete.itemData.allWords.findByName("貰える")!
+    let question = Question(item: item, testKind: .meaningToReading)
+    let testSession = TestSession(forSingleQuestion: question)
+    return Test(question: question, testSession: testSession)
+}
+
 #Preview {
+    let x = buildTestTest()
     ContentView()
 }

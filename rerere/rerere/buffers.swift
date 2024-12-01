@@ -168,3 +168,37 @@ actor AsyncMutex<Value: ~Copyable> {
         }
     }
 }
+
+extension AtomicLazyReference {
+    func forceInitialize(_ value: Instance) {
+        // Can't atomically check whether init succeeded for some dumb reason.
+        if self.load() != nil {
+            fatalError("AtomicLazyReference.forceInitialize already initialized")
+        }
+        _ = self.storeIfNil(value)
+    }
+}
+
+struct TotallySendable<T: ~Copyable>: ~Copyable, @unchecked Sendable {
+    let value: T
+}
+
+typealias BlockOnCallback<T: ~Copyable> = () async throws -> sending T
+func blockOnLikeYoureNotSupposedTo<T: ~Copyable>(_ cb: sending BlockOnCallback<T>) rethrows -> sending T {
+    var t: T? = nil
+    let sema: DispatchSemaphore = DispatchSemaphore(value: 0)
+    withUnsafeMutablePointer(to: &t) { (tPtr) -> Void in
+        withoutActuallyEscaping(consume cb) { (cb2) -> Void in
+            withUnsafePointer(to: cb2) { (cbPtr) -> Void in
+                let bundle = TotallySendable(value: (tPtr: tPtr, cbPtr: cbPtr))
+                _ = Task {
+                    bundle.value.tPtr.pointee = try await bundle.value.cbPtr.pointee()
+                    sema.signal()
+                }
+                sema.wait()
+
+            }
+        }
+    }
+    return t.take()!
+}

@@ -420,11 +420,7 @@ struct TestOneCommand: AsyncParsableCommand {
             Subete.itemData.allByKind(itemKind).findByName(name),
             err: MyError("no such item kind \(itemKind) name \(name)"))
         let question = Question(item: item, testKind: testKind)
-        let testSession = TestSession(
-            base: SerializableTestSession(
-                pulledCompleteQuestions: IndexableSet([question]),
-                randomMode: .all
-            ))
+        let testSession = TestSession(forSingleQuestion: question)
         let test = Test(question: question, testSession: testSession)
         try await CLI().doOneTest(test, lastTest: nil)
     }
@@ -550,6 +546,7 @@ struct Rerere: AsyncParsableCommand {
     }
 
     func run() async throws {
+    
         await Subete.initialize()
         let path = "\(Subete.basePath)/sess.json"
         let url = URL(fileURLWithPath: path)

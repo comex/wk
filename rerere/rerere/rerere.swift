@@ -236,10 +236,8 @@ final class ItemLoader: Sendable {
     // Safety: Always initialized before being used.  No easy way to abstract
     // this pattern without allocation overhead because Swift has no concept of
     // interior mutability.
-    nonisolated(unsafe)
-        var allWords: ItemList<Word>? = nil
-    nonisolated(unsafe)
-        var allKanji: ItemList<Kanji>? = nil
+    let allWords: AtomicLazyReference<ItemList<Word>> = AtomicLazyReference()
+    let allKanji: AtomicLazyReference<ItemList<Kanji>> = AtomicLazyReference()
     init() {
         self.studyMaterials = loadStudyMaterials(basePath: Subete.basePath)
     }
@@ -265,8 +263,8 @@ struct ItemData {
 
         self.allWords = await allWords
         self.allKanji = await allKanji
-        itemLoader.allWords = self.allWords
-        itemLoader.allKanji = self.allKanji
+        itemLoader.allWords.forceInitialize(self.allWords)
+        itemLoader.allKanji.forceInitialize(self.allKanji)
 
         self.allFlashcards = ItemList(loadFlashcardYAML(basePath: basePath, itemLoader: itemLoader))
         print("done")
@@ -788,10 +786,10 @@ final class Confusion: Item, CustomStringConvertible, @unchecked Sendable {
         let characters: [String]
         if isWord {
             characters = spec.split(separator: "/").map { trim($0) }
-            allXs = itemLoader.allWords!
+            allXs = itemLoader.allWords.load()!
         } else {
             characters = spec.map { String($0) }
-            allXs = itemLoader.allKanji!
+            allXs = itemLoader.allKanji.load()!
         }
         var birthday: Date? = nil
         if bits.count > bitsIdx + 1 {
@@ -1684,6 +1682,12 @@ actor TestSession {
             base: try SerializableTestSession.deserialize(data),
             saveURL: url
         )
+    }
+    init(forSingleQuestion question: Question) {
+        self.init(base: SerializableTestSession(
+            pulledCompleteQuestions: IndexableSet([question]),
+            randomMode: .all
+        ))
     }
     static func makeLottery(randomMode: RandomMode, excluding excl: Set<Question>) -> WeightedList<
         Question
