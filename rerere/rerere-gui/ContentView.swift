@@ -8,7 +8,7 @@
 
 import SwiftUI
 
-let meaningBlue = Color(red: 0.2627, green: 0.2392, blue: 0.5)
+let vocabBlue = Color(red: 0.63, green: 0.00, blue: 0.94)
 let lightGreen = Color(red: 0.4627, green: 0.8392, blue: 0.5)
 struct PromptOutputView: View {
     let prompt: Prompt
@@ -16,12 +16,12 @@ struct PromptOutputView: View {
         VStack {
             switch prompt.output {
             case .character:
-                // TODO: make selectable
                 // TODO: fill width
                 let character = prompt.item.name
                 Text(character)
                     .font(Font.system(size: 80))
                     .foregroundStyle(.white.shadow(.drop(radius: 0, x: 2, y: 2)))
+                    .textSelection(.enabled)
                     
             default:
                 fatalError("TODO")
@@ -30,7 +30,7 @@ struct PromptOutputView: View {
         }
             .padding()
             .background(in: Rectangle())
-            .backgroundStyle(meaningBlue.gradient)
+            .backgroundStyle(vocabBlue.gradient)
     }
 }
 
