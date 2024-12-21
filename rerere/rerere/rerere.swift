@@ -244,16 +244,17 @@ final class ItemLoader: Sendable {
     }
 }
 
-struct ItemData {
+final class ItemData: Sendable {
     let allWords: ItemList<Word>
     let allKanji: ItemList<Kanji>
     let allConfusion: ItemList<Confusion>
     let allFlashcards: ItemList<Flashcard>
     let allItems: [Item]
+    let startupDate: Date = Date()
 
     init() async {
         let basePath = Subete.basePath
-        print("loading json...", terminator: "")
+        print("loading json pid=\(ProcessInfo.processInfo.processIdentifier)...", terminator: "")
         let itemLoader = ItemLoader()
         async let allWords = ItemList(
             loadJSONAndExtraYAML(
@@ -264,8 +265,8 @@ struct ItemData {
 
         self.allWords = await allWords
         self.allKanji = await allKanji
-        itemLoader.allWords.forceInitialize(self.allWords)
-        itemLoader.allKanji.forceInitialize(self.allKanji)
+        itemLoader.allWords.initializeUnique(self.allWords)
+        itemLoader.allKanji.initializeUnique(self.allKanji)
 
         self.allFlashcards = ItemList(loadFlashcardYAML(basePath: basePath, itemLoader: itemLoader))
         print("done")
@@ -338,7 +339,9 @@ actor SRSManager {
 
 struct Subete: Sendable, ~Copyable {
     //static let itemDataOnce = AsyncOnce<ItemData>()
-    nonisolated(unsafe) static var itemData: ItemData! = nil
+    static let itemData: ItemData = itemDataLazy.load()!
+    static let itemDataLazy = AtomicLazyReference<ItemData>()
+    static let initMutex = AsyncMutex(())
     static let retrep = RetiredReplace()
     static let basePath = getWkDir()
     static let srsManager = SRSManager()
@@ -346,7 +349,7 @@ struct Subete: Sendable, ~Copyable {
     static let nextItemID: Mutex<Int> = Mutex(0)
 
     static let logTxtManager: LogTxtManager = LogTxtManager()
-    nonisolated(unsafe) static var startupDate: Date! = nil
+
     static let myDateFormatter: DateFormatter = {
         let mdf = DateFormatter()
         mdf.locale = Locale(identifier: "en_US_POSIX")
@@ -355,8 +358,14 @@ struct Subete: Sendable, ~Copyable {
     }()
 
     static func initialize() async {
-        Subete.startupDate = Date()
-        Subete.itemData = await ItemData()
+        await Subete.initMutex.withLock({ (_) async in
+            if Subete.itemDataLazy.load() == nil {
+                let itemData = await ItemData()
+                Subete.itemDataLazy.initializeUnique(itemData)
+            }
+        }, preWait: {
+            print("Subete.initialize waiting for other task")
+        })
     }
 
     static func withSRS<R>(cb: sending (inout SRS) async throws -> sending R) async rethrows
@@ -1151,7 +1160,7 @@ actor Test {
     var state: TestState {
         didSet { updateSnapshot() }
     }
-    var boogaloo: Int = 0 {
+    var counterForDebugging: Int = 0 {
         didSet { updateSnapshot() }
     }
     
@@ -1159,13 +1168,16 @@ actor Test {
     struct Snapshot {
         let result: TestResult?
         let state: TestState
-        let boogaloo: Int
+        let counterForDebugging: Int
     }
     let snapshot: OffMainContainer<Snapshot?> = OffMainContainer(nil)
     func updateSnapshot() {
-        // TODO.
         Task {
-            self.snapshot.send(Snapshot(result: self.result, state: self.state, boogaloo: self.boogaloo))
+            self.snapshot.send(Snapshot(
+                result: self.result,
+                state: self.state,
+                counterForDebugging: self.counterForDebugging
+            ))
         }
     }
 
@@ -1174,11 +1186,12 @@ actor Test {
         self.testSession = testSession
         self.state = Test.initialState(item: question.item, testKind: question.testKind)
         Task {
-            while true {
-                self.boogaloo += 1
-                try! await Task.sleep(for: .milliseconds(500))
+            while false { // XX: debug
+                self.counterForDebugging += 1
+                try! await Task.sleep(for: .milliseconds(2000))
             }
         }
+        self.updateSnapshot()
     }
     
     func setState(_ state: TestState) {
@@ -1500,7 +1513,7 @@ final class SRS {
         if let birthday = question.item.birthday {
             return .active(
                 (
-                    lastSeen: Int(min(birthday, Subete.startupDate).timeIntervalSince1970),
+                    lastSeen: Int(min(birthday, Subete.itemData.startupDate).timeIntervalSince1970),
                     points: 0, urgentRetest: false
                 ))
         } else {

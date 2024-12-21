@@ -140,10 +140,17 @@ actor AsyncMutex<Value: ~Copyable> {
     init(_ value: consuming sending Value) {
         self.value = consume value
     }
-    func withLock<Result: ~Copyable>(_ body: (inout sending Value) async throws -> sending Result)
+    func withLock<Result: ~Copyable>(
+        _ body: (inout sending Value) async throws -> sending Result,
+        preWait: (() async -> Void)? = nil
+        // ^^ can't change to
+        //        preWait: () async -> Void = {}
+        //    because compiler complains
+    )
         async rethrows -> sending Result
     {
         while self.value == nil {
+            await preWait?()
             await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                 self.waiters.append(continuation)
             }
@@ -170,18 +177,29 @@ actor AsyncMutex<Value: ~Copyable> {
 }
 
 extension AtomicLazyReference {
-    func forceInitialize(_ value: Instance) {
-        // Can't atomically check whether init succeeded for some dumb reason.
-        if self.load() != nil {
-            fatalError("AtomicLazyReference.forceInitialize already initialized")
+    func initializeUnique(_ value: Instance) {
+        // Just a double-check, in case `value` is actually not unique (in which
+        // case we can't detect a race).  Would be better if storeIfNil just returned
+        // success.
+        let wasNonNil = self.load() != nil
+        
+        let actualValue = self.storeIfNil(value)
+        if actualValue !== value || wasNonNil {
+            fatalError("initializeUnique initing with \(value) but already got \(actualValue)")
         }
-        _ = self.storeIfNil(value)
     }
 }
 
 struct TotallySendable<T: ~Copyable>: ~Copyable, @unchecked Sendable {
     let value: T
 }
+
+/*
+class Box<T: ~Copyable> {
+    let value: T
+    init(value: consuming T) { self.value = value }
+}
+*/
 
 typealias BlockOnCallback<T: ~Copyable> = () async throws -> sending T
 func blockOnLikeYoureNotSupposedTo<T: ~Copyable>(_ cb: sending BlockOnCallback<T>) rethrows -> sending T {

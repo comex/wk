@@ -16,12 +16,14 @@ struct PromptOutputView: View {
         VStack {
             switch prompt.output {
             case .character:
-                // TODO: fill width
                 let character = prompt.item.name
                 Text(character)
                     .font(Font.system(size: 80))
+                    .padding(.leading)
                     .foregroundStyle(.white.shadow(.drop(radius: 0, x: 2, y: 2)))
                     .textSelection(.enabled)
+                    .border(Color.pink)
+                    .frame(maxWidth: .infinity)
                     
             default:
                 fatalError("TODO")
@@ -43,8 +45,10 @@ struct TestSnapshotView : View {
                     PromptOutputView(prompt: prompt)
                     AnswerInputView(expectedInput: prompt.expectedInput)
                 }
-                Text("Boo \(snapshot.boogaloo)")
+                Text("Boo \(snapshot.counterForDebugging)")
                             
+            } else {
+                Text("Loading")
             }
         }
     }
@@ -129,15 +133,16 @@ struct ContentView: View {
         let _ = print("** ContentView recalc")
         VStack {
             /*
+            Text("Hello, world!")
             Image(systemName: "globe")
                 .imageScale(.large)
                 .foregroundStyle(.tint)
-            Text("Hello, world!")
+            
             */
+            
             TestSnapshotView(testSnapshot: self.test.snapshot.container)
 
         }
-        .padding()
         
     }
 }
