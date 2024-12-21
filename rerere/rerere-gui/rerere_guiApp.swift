@@ -12,7 +12,7 @@ import SwiftUI
 struct rerere_guiApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(test: buildTestTest(itemKind: .word, name: "貰う", testKind: .meaningToReading))
         }
     }
 }

@@ -10,53 +10,116 @@ import SwiftUI
 
 let vocabBlue = Color(red: 0.63, green: 0.00, blue: 0.94)
 let lightGreen = Color(red: 0.4627, green: 0.8392, blue: 0.5)
+let meaningBitBackground = Color(red: 0.16, green: 0.48, blue: 0.65)
+let readingBitBackground = Color(red: 1.00, green: 0.17, blue: 0.33)
+struct IdentifiableWrapper<T>: Identifiable {
+    typealias ID = Int
+    let t: T
+    let id: Int
+}
+func identifiableWrapArray<T>(_ ts: [T]) -> [IdentifiableWrapper<T>] {
+    ts.enumerated().map { IdentifiableWrapper(t: $0.element, id: $0.offset) }
+}
 
-/*
-struct WrappingLayoutView: View {
-    
-    var body: some View {
-        WrappingLayout {
-            ForEach(0..<20) { i in
-                VStack {
-                    Text("Hello \(i)!")
-                    .border(.pink)
-                    .fixedSize()
-                }
-                    .padding(5)
+extension View {
+    func trackHover(_ hovering: Binding<Bool>) -> some View {
+        self.onContinuousHover { (phase: HoverPhase) -> Void in
+            switch phase {
+                case .active(_): hovering.wrappedValue = true
+                case .ended: hovering.wrappedValue = false
             }
-
-        }.border(.blue)
-        
+        }
     }
 }
-#Preview {
-    WrappingLayoutView()
-}
- */
 struct PromptOutputView: View {
     let prompt: Prompt
     var body: some View {
-        VStack {
-            
-            switch prompt.output {
-            case .character:
-                let character = prompt.item.name
-                Text(character)
-                    .font(Font.system(size: 80))
-                    .padding(.leading)
-                    .foregroundStyle(.white.shadow(.drop(radius: 0, x: 2, y: 2)))
-                    .textSelection(.enabled)
-                    
-                    
-            default:
-                fatalError("TODO")
-            
-            }
-        }
+        let _ = print("POV render")
+        let bits = TextBit.bitsForPromptOutput(prompt)
+        
+        let style: AnyShapeStyle = style(forItem: prompt.item)
+        view(prompt: prompt, bits: bits)
             .padding()
             .frame(maxWidth: .infinity)
             .background(in: Rectangle())
-            .backgroundStyle(vocabBlue.gradient)
+            .backgroundStyle(style)
+    }
+    
+    @ViewBuilder
+    private func view(prompt: Prompt, bits: [TextBit]) -> some View {
+        switch prompt.output {
+            case .character: viewForCharacter(bits: bits)
+            default: viewForOther(bits: bits)
+        }
+    }
+    
+    struct BitViewForOther: View {
+        let bit: TextBit
+        @State var hover: Bool = false
+        var body: some View {
+            let _ = print("BVFO render text=\(bit.text) hover=\(hover)")
+            let bgColor1: Color = switch bit.kind {
+            case .ing(let ing):
+                ing.superkind == .reading ? readingBitBackground : meaningBitBackground
+            default:
+                .black.opacity(0)
+            }
+            let bgColor: Color = !hover ? bgColor1 :
+                bgColor1.mix(with: .white, by: 0.2)
+            
+            Text(bit.text)
+                .font(Font.system(size: 20))
+                
+                .foregroundStyle(.white.shadow(.drop(radius: 0, x: 2, y: 2)))
+                .textSelection(.enabled)
+                .fixedSize()
+                
+                .padding(5)
+                .background {
+                    RoundedRectangle(cornerRadius: 5)
+    
+                    .fill(bgColor)
+                    .stroke(.mint, lineWidth: 1)
+                    .animation(.easeIn.speed(hover ? 99.0 : 3.0) , value: hover)
+                    
+                }
+                .padding(2)
+                .clipped().shadow(radius: 2, x: 2, y: 2)
+                .scaleEffect(hover ? 1.1 : 1.0)
+                .zIndex(hover ? 2.0 : 1.0)
+                .animation(.easeIn.speed(hover ? 99.0 : 3.0) , value: hover)
+                .trackHover($hover)
+        
+            
+                
+        }
+    }
+
+    @ViewBuilder
+    private func viewForOther(bits: [TextBit]) -> some View {
+        HStack {
+            WrappingLayout(jitterSeed: bits.first?.text.hashValue ?? 0) {
+                ForEach(identifiableWrapArray(bits)) { bitWrapper in
+                    BitViewForOther(bit: bitWrapper.t)
+                }
+            }
+            //.border(.pink)
+        }
+    }
+    @ViewBuilder
+    private func viewForCharacter(bits: [TextBit]) -> some View {
+        let _ = ensure(bits.count == 1)
+        Text(bits[0].text)
+            .font(Font.system(size: 80))
+            .padding(.leading)
+            .foregroundStyle(.white.shadow(.drop(radius: 0, x: 2, y: 2)))
+            .textSelection(.enabled)
+    }
+    private func style(forItem item: Item) -> AnyShapeStyle {
+        switch type(of: item).kind {
+            case .word: AnyShapeStyle(vocabBlue.gradient)
+            default: AnyShapeStyle(lightGreen.gradient)
+        }
     }
 }
 
@@ -79,9 +142,9 @@ struct TestSnapshotView : View {
 }
 
 struct KanjiInputView: View {
-    
     let label: String
     let text: Binding<String>
+    
     @State var myText: String
     @State var selection: TextSelection? = nil
     init(label: String, text: Binding<String>) {
@@ -148,10 +211,7 @@ struct AnswerInputView: View {
 
 
 struct ContentView: View {
-    let test: Test = buildTestTest()
-
-
-    
+    let test: Test
 
     var body: some View {
         let _ = print("** ContentView recalc")
@@ -170,13 +230,18 @@ struct ContentView: View {
         
     }
 }
+#Preview {
+    ContentView(test: buildTestTest(itemKind: .word, name: "貰う", testKind: .meaningToReading))
+    
+}
 
-func buildTestTest() -> Test {
+
+func buildTestTest(itemKind: ItemKind, name: String, testKind: TestKind) -> Test {
     blockOnLikeYoureNotSupposedTo {
         await Subete.initialize()
 
-        let item = Subete.itemData.allWords.findByName("貰う")!
-        let question = Question(item: item, testKind: .characterToRM)
+        let item = Subete.itemData.allByKind(itemKind).findByName(name)!
+        let question = Question(item: item, testKind: testKind)
         let testSession = TestSession(forSingleQuestion: question)
         return await Test(question: question, testSession: testSession)
     }
