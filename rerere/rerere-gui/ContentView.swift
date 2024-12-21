@@ -10,10 +10,34 @@ import SwiftUI
 
 let vocabBlue = Color(red: 0.63, green: 0.00, blue: 0.94)
 let lightGreen = Color(red: 0.4627, green: 0.8392, blue: 0.5)
+
+/*
+struct WrappingLayoutView: View {
+    
+    var body: some View {
+        WrappingLayout {
+            ForEach(0..<20) { i in
+                VStack {
+                    Text("Hello \(i)!")
+                    .border(.pink)
+                    .fixedSize()
+                }
+                    .padding(5)
+            }
+
+        }.border(.blue)
+        
+    }
+}
+#Preview {
+    WrappingLayoutView()
+}
+ */
 struct PromptOutputView: View {
     let prompt: Prompt
     var body: some View {
         VStack {
+            
             switch prompt.output {
             case .character:
                 let character = prompt.item.name
@@ -22,8 +46,7 @@ struct PromptOutputView: View {
                     .padding(.leading)
                     .foregroundStyle(.white.shadow(.drop(radius: 0, x: 2, y: 2)))
                     .textSelection(.enabled)
-                    .border(Color.pink)
-                    .frame(maxWidth: .infinity)
+                    
                     
             default:
                 fatalError("TODO")
@@ -31,6 +54,7 @@ struct PromptOutputView: View {
             }
         }
             .padding()
+            .frame(maxWidth: .infinity)
             .background(in: Rectangle())
             .backgroundStyle(vocabBlue.gradient)
     }
@@ -156,9 +180,4 @@ func buildTestTest() -> Test {
         let testSession = TestSession(forSingleQuestion: question)
         return await Test(question: question, testSession: testSession)
     }
-}
-
-
-#Preview {
-    ContentView()
 }

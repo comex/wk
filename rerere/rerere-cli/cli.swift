@@ -83,66 +83,64 @@ func runAndGetOutput(_ args: [String]) throws -> String {
 }
 
 struct CLI {
-    func formatIngs(_ ings: [Ing], colorful: Bool, isMeaning: Bool, tildify: (String) -> String)
-        -> String
-    {
-        var prev: Ing? = nil
-        var out: String = ""
-        for ing in (ings.sorted { $0.type < $1.type }) {
-            if ing.type != .whitelist && ing.type != .blacklist {
-                let separator = prev == nil ? "" : prev!.type == ing.type ? ", " : " >> "
-                var colored = ing.text
-                if colorful {
-                    let primaryColor: (String) -> String
-                    let otherColor: (String) -> String
-                    if isMeaning {
-                        (primaryColor, otherColor) = (ANSI.purple, ANSI.dpurple)
-                    } else {
-                        (primaryColor, otherColor) = (ANSI.red, ANSI.dred)
-                    }
-                    colored = (ing.type == .primary ? primaryColor : otherColor)(colored)
+   func formatSingleTextBit(_ bit: TextBit, colorful: Bool) -> String {
+        switch bit.kind {
+        case .ing(let ing):
+            var text = bit.text
+            if colorful {
+                switch (ing.superkind, ing.kind == .primary) {
+                case (.meaning, true):
+                    text = ANSI.purple(text)
+                case (.meaning, false):
+                    text = ANSI.dpurple(text)
+                case (.reading, true):
+                    text = ANSI.red(text)
+                case (.reading, false):
+                    text = ANSI.dred(text)
+                case (.flashcardBack, _):
+                    break
                 }
-                colored = tildify(colored)
-                out += separator + colored
             }
-            prev = ing
+            return text + formatKindSuffix(item: bit.ownerItem)
+
+        case .character:
+            var text = bit.text
+            if colorful && bit.ownerItem is Kanji {
+                text = ANSI.purple(text)
+            }
+            return text + formatKindSuffix(item: bit.ownerItem)
+        
+        case .flashcardFront:
+            return bit.text
+
+        case .unknownItemName:
+            return bit.text
+        }
+    }
+
+    func format(bits: [TextBit], colorful: Bool) -> String {
+        var out = ""
+        var prev: TextBit? = nil
+        for bit in bits {
+            if let prev {
+                if case .ing(let ing) = bit.kind,
+                   case .ing(let prevIng) = prev.kind,
+                   ing.kind != prevIng.kind {
+                   out += " >> "
+                } else {
+                   out += ", "
+                }
+            }
+            out += formatSingleTextBit(bit, colorful: colorful)
+            prev = bit
         }
         return out
     }
 
-    func formatItemName(_ item: Item) -> String {
-        if item is Kanji {
-            return ANSI.purple(item.name) + formatKindSuffix(item: item)
-        } else if item is Flashcard {
-            return item.name + formatKindSuffix(item: item)
-        } else {
-            return item.name + formatKindSuffix(item: item)
-        }
-    }
-    func formatItemReadings(_ normal: NormalItem, colorful: Bool) -> String {
-        return formatIngs(
-            normal.readings, colorful: colorful, isMeaning: false, tildify: normal.tildify)
-    }
-    func formatItemMeanings(_ normal: NormalItem, colorful: Bool) -> String {
-        return formatIngs(
-            normal.meanings, colorful: colorful, isMeaning: true, tildify: normal.tildify)
-    }
-    func formatItemBacks(_ fc: Flashcard, colorful: Bool) -> String {
-        return formatIngs(fc.backs, colorful: colorful, isMeaning: true, tildify: { $0 })
-    }
-
+ 
     func formatItemFull(_ item: Item, colorful: Bool) -> String {
-        let name = formatItemName(item)
-        if let normal = item as? NormalItem {
-            let readings = formatItemReadings(normal, colorful: colorful)
-            let meanings = formatItemMeanings(normal, colorful: colorful)
-            return "\(name) \(readings) \(meanings)"
-        }
-        if let fc = item as? Flashcard {
-            let backs = formatItemBacks(fc, colorful: colorful)
-            return "\(name) \(backs)"
-        }
-        fatalError("unknown item kind \(item)")
+        let bits: [TextBit] = TextBit.bitsForName(of: item) + TextBit.bitsForAllIngs(of: item)
+        return format(bits: bits, colorful: colorful)
     }
 
     func formatKindSuffix(item: Item) -> String {
@@ -156,16 +154,7 @@ struct CLI {
     }
 
     func formatPromptOutput(_ prompt: Prompt) -> String {
-        switch prompt.output {
-        case .meaning:
-            return formatItemMeanings(prompt.item as! NormalItem, colorful: false)
-        case .reading:
-            return formatItemReadings(prompt.item as! NormalItem, colorful: false)
-        case .flashcardFront:
-            return (prompt.item as! Flashcard).front
-        case .character:
-            return prompt.item.name
-        }
+        return format(bits: TextBit.bitsForPromptOutput(prompt), colorful: true)
     }
 
     func formatAlternativesInner(_ items: [Item], label: String) -> String {
@@ -230,23 +219,20 @@ struct CLI {
         var out = formatLabel(
             outcome: ra.outcome, qual: ra.qual, srsUpdate: ra.srsUpdate,
             existingOutcome: ra.existingOutcome)
-        // should this be further abstracted?
+        // should this be further abstracted?  ...no, I want to allow divergence in GUI
         switch ra.question.testKind {
         case .meaningToReading:
-            out +=
-                " " + formatItemName(item) + " "
-                + formatItemReadings(item as! NormalItem, colorful: false)
+            out += " " + format(bits: TextBit.bitsForName(of: item as! NormalItem), colorful: true)
+            out += " " + format(bits: TextBit.bitsForReadings(of: item as! NormalItem), colorful: false)
         case .readingToMeaning:
-            out +=
-                " " + formatItemName(item) + " "
-                + formatItemMeanings(item as! NormalItem, colorful: true)
-
+            out += " " + format(bits: TextBit.bitsForName(of: item as! NormalItem), colorful: true)
+            out += " " + format(bits: TextBit.bitsForMeanings(of: item as! NormalItem), colorful: true)
         case .characterToRM, .confusion:
             switch ra.prompt.expectedInput {
             case .meaning:
-                out += " " + formatItemMeanings(item as! NormalItem, colorful: true)
+                out += " " + format(bits: TextBit.bitsForMeanings(of: item as! NormalItem), colorful: true)
             case .reading:
-                out += " " + formatItemReadings(item as! NormalItem, colorful: true)
+                out += " " + format(bits: TextBit.bitsForReadings(of: item as! NormalItem), colorful: true)
             default: break
             }
 

@@ -515,21 +515,98 @@ func normalizeReadingTrimmed(_ input: String) -> String {
     return reading
 }
 
-enum IngType: Comparable {
-    case primary, secondary, whitelist, blacklist, synonym
+struct TextBit {
+    let kind: Kind
+    let ownerItem: Item
+    let text: String
+
+    enum Kind {
+        case ing(Ing)
+        case character
+        case flashcardFront
+        case unknownItemName
+    }
+    
+    
+    static func bitsForIngs(_ ings: [Ing], ownerItem: Item) -> [TextBit] {
+        return ings.sorted { $0.kind < $1.kind }.map { (ing: Ing) -> TextBit in
+            TextBit(kind: .ing(ing), ownerItem: ownerItem, text: ing.text)
+        }
+    }
+
+    static func bitsForMeanings(of item: NormalItem) -> [TextBit] {
+        return bitsForIngs(item.meanings, ownerItem: item)
+    }
+    static func bitsForReadings(of item: NormalItem) -> [TextBit] {
+        return bitsForIngs(item.readings, ownerItem: item)
+    }
+    static func bitsForFlashcardFront(of item: Flashcard) -> [TextBit] {
+        return [TextBit(kind: .flashcardFront, ownerItem: item,
+                        text: item.front)]
+    }
+    static func bitsForFlashcardBacks(of item: Flashcard) -> [TextBit] {
+        return bitsForIngs(item.backs, ownerItem: item)
+    }
+    static func bitsForCharacter(of item: NormalItem) -> [TextBit] {
+        return [TextBit(kind: .character, ownerItem: item,
+                        text: item.character)]
+    }
+    static func bitsForName(of item: Item) -> [TextBit] {
+        //if let item = item as? Kanji {
+        if let item = item as? NormalItem {
+            return bitsForCharacter(of: item)
+        } else if let item = item as? Flashcard {
+            return bitsForFlashcardFront(of: item)
+        } else {
+            return [TextBit(kind: .unknownItemName, ownerItem: item,
+                    text: item.name)]
+        }
+    }
+    static func bitsForAllIngs(of item: Item) -> [TextBit] {
+        if let item = item as? NormalItem {
+            return bitsForReadings(of: item) + bitsForMeanings(of: item)
+        } else if let item = item as? Flashcard {
+            return bitsForFlashcardFront(of: item)
+        } else {
+            return []
+        }
+    }
+
+    static func bitsForPromptOutput(_ prompt: Prompt) -> [TextBit] {
+        switch prompt.output {
+        case .meanings:
+            return bitsForMeanings(of: prompt.item as! NormalItem)
+        case .readings:
+            return bitsForReadings(of: prompt.item as! NormalItem)
+        case .flashcardFront:
+            return bitsForFlashcardFront(of: prompt.item as! Flashcard)
+        case .character:
+            return bitsForCharacter(of: prompt.item as! NormalItem)
+        }
+    }
+    
 }
 
 struct Ing {
     let text: String
-    let type: IngType
+    let superkind: Superkind
+    let kind: Kind
     let acceptedAnswerWK: Bool
+    
+    enum Superkind: Comparable {
+        case meaning, reading, flashcardBack
+    }
+    
+    enum Kind: Comparable {
+        case primary, secondary, whitelist, blacklist, synonym
+    }
 
     var acceptedAnswerForMe: Bool {
         // it's fiiiiine
         return true
     }
 
-    init(from dec: any Decoder, isMeaning: Bool, relaxed: Bool) throws {
+    init(from dec: any Decoder, superkind: Superkind, relaxed: Bool) throws {
         enum K: CodingKey { case reading, meaning, primary, accepted_answer }
         let c: KeyedDecodingContainer<K>
         do {
@@ -538,29 +615,32 @@ struct Ing {
             if !relaxed { fatalError("expected dictionary") }
             let text = try dec.singleValueContainer().decode(String.self)
             self.text = text
-            self.type = .primary
+            self.superkind = superkind
+            self.kind = .primary
             self.acceptedAnswerWK = true
             return
         }
-        if isMeaning {
+        if superkind == .meaning {
             self.text = try c.decode(String.self, forKey: .meaning).lowercased()
         } else {
             self.text = try c.decode(String.self, forKey: .reading)
         }
-        self.type = try c.decode(Bool.self, forKey: .primary) ? .primary : .secondary
+        self.superkind = superkind
+        self.kind = try c.decode(Bool.self, forKey: .primary) ? .primary : .secondary
         self.acceptedAnswerWK = try c.decode(Bool.self, forKey: .accepted_answer)
     }
     init(auxiliaryMeaningFrom dec: any Decoder) throws {
         enum K: CodingKey { case meaning, type }
         let c = try dec.container(keyedBy: K.self)
         self.text = try c.decode(String.self, forKey: .meaning).lowercased()
+        self.superkind = .meaning
         let type = try c.decode(String.self, forKey: .type)
         switch type {
         case "whitelist":
-            self.type = .whitelist
+            self.kind = .whitelist
             self.acceptedAnswerWK = true
         case "blacklist":
-            self.type = .blacklist
+            self.kind = .blacklist
             self.acceptedAnswerWK = false
         default:
             fatalError("unknown auxiliary meaning type \(type)")
@@ -568,7 +648,8 @@ struct Ing {
     }
     init(synonymWithText text: String) {
         self.text = text
-        self.type = .synonym
+        self.superkind = .meaning
+        self.kind = .synonym
         self.acceptedAnswerWK = true
     }
 }
@@ -642,10 +723,10 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable, @unchecked Sendab
 
         self.character = trim(try dataC.decode(String.self, forKey: .characters))
         self.readings = try decodeArray(dataC.nestedUnkeyedContainer(forKey: .readings)) {
-            try Ing(from: $0, isMeaning: false, relaxed: relaxed)
+            try Ing(from: $0, superkind: .reading, relaxed: relaxed)
         }
         var meanings = try decodeArray(dataC.nestedUnkeyedContainer(forKey: .meanings)) {
-            try Ing(from: $0, isMeaning: true, relaxed: relaxed)
+            try Ing(from: $0, superkind: .meaning, relaxed: relaxed)
         }
         if dataC.contains(.auxiliary_meanings) {
             meanings += try decodeArray(dataC.nestedUnkeyedContainer(forKey: .auxiliary_meanings)) {
@@ -693,7 +774,7 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable, @unchecked Sendab
         var bestQual: Int = 0
         for reading in self.readings {
             if reading.text == normalizedInput {
-                let thisQual = reading.type == .primary ? 2 : 1
+                let thisQual = reading.kind == .primary ? 2 : 1
                 bestQual = max(bestQual, thisQual)
             }
         }
@@ -821,6 +902,7 @@ final class Confusion: Item, CustomStringConvertible, @unchecked Sendable {
     override class var kind: ItemKind { return .confusion }
     override var availableTests: [TestKind] { return [.confusion] }
 }
+
 final class Flashcard: Item, CustomStringConvertible, DecodableWithConfiguration, Decodable,
     @unchecked Sendable
 {
@@ -842,7 +924,7 @@ final class Flashcard: Item, CustomStringConvertible, DecodableWithConfiguration
         let container = try dec.container(keyedBy: K.self)
         self.front = try container.decode(String.self, forKey: .front)
         self.backs = try decodeArray(container.nestedUnkeyedContainer(forKey: .backs)) {
-            try Ing(from: $0, isMeaning: true, relaxed: true)
+            try Ing(from: $0, superkind: .flashcardBack, relaxed: true)
         }
         super.init(
             try Item.initializer(name: self.front, from: dec), itemLoader: configuration.itemLoader)
@@ -1229,9 +1311,9 @@ actor Test {
     static func initialState(item: Item, testKind: TestKind) -> TestState {
         switch testKind {
         case .meaningToReading:
-            return .prompt(Prompt(item: item, output: .meaning, expectedInput: .reading))
+            return .prompt(Prompt(item: item, output: .meanings, expectedInput: .reading))
         case .readingToMeaning:
-            return .prompt(Prompt(item: item, output: .reading, expectedInput: .meaning))
+            return .prompt(Prompt(item: item, output: .readings, expectedInput: .meaning))
         case .characterToRM:
             return .shuffle(
                 substates: [
@@ -1325,8 +1407,8 @@ actor Test {
 }
 
 enum PromptOutput: Equatable {
-    case meaning
-    case reading
+    case meanings
+    case readings
     case flashcardFront
     case character
 }
