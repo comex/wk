@@ -38,11 +38,13 @@ struct PromptOutputView: View {
         let bits = TextBit.bitsForPromptOutput(prompt)
         
         let style: AnyShapeStyle = style(forItem: prompt.item)
-        view(prompt: prompt, bits: bits)
+        ScrollView {
+            view(prompt: prompt, bits: bits)
+        }
             .padding()
-            .frame(maxWidth: .infinity)
             .background(in: Rectangle())
             .backgroundStyle(style)
+
     }
     
     @ViewBuilder
@@ -67,12 +69,11 @@ struct PromptOutputView: View {
             let bgColor: Color = !hover ? bgColor1 :
                 bgColor1.mix(with: .white, by: 0.2)
             
-            Text(bit.text)
+            Text(bit.text)//"test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test ")
                 .font(Font.system(size: 20))
                 
                 .foregroundStyle(.white.shadow(.drop(radius: 0, x: 2, y: 2)))
                 .textSelection(.enabled)
-                .fixedSize()
                 
                 .padding(5)
                 .background {
@@ -97,14 +98,12 @@ struct PromptOutputView: View {
 
     @ViewBuilder
     private func viewForOther(bits: [TextBit]) -> some View {
-        HStack {
-            WrappingLayout(jitterSeed: bits.first?.text.hashValue ?? 0) {
-                ForEach(identifiableWrapArray(bits)) { bitWrapper in
-                    BitViewForOther(bit: bitWrapper.t)
-                }
+        WrappingLayout(jitterSeed: bits.first?.text.hashValue ?? 0) {
+            ForEach(identifiableWrapArray(bits)) { bitWrapper in
+                BitViewForOther(bit: bitWrapper.t)
             }
-            //.border(.pink)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     @ViewBuilder
     private func viewForCharacter(bits: [TextBit]) -> some View {
@@ -215,7 +214,7 @@ struct ContentView: View {
 
     var body: some View {
         let _ = print("** ContentView recalc")
-        VStack {
+        HStack {
             /*
             Text("Hello, world!")
             Image(systemName: "globe")
@@ -225,16 +224,25 @@ struct ContentView: View {
             */
             
             TestSnapshotView(testSnapshot: self.test.snapshot.container)
+            .border(.yellow)
+//            .containerRelativeFrame([.horizontal, .vertical])
+            
 
         }
+        .border(.red)
+//        .containerRelativeFrame([.horizontal, .vertical])
+        
         
     }
 }
+
+
 #Preview {
+
     ContentView(test: buildTestTest(itemKind: .word, name: "貰う", testKind: .meaningToReading))
+        //.containerRelativeFrame([.horizontal])
     
 }
-
 
 func buildTestTest(itemKind: ItemKind, name: String, testKind: TestKind) -> Test {
     blockOnLikeYoureNotSupposedTo {

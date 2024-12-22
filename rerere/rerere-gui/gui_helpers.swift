@@ -12,8 +12,9 @@ struct WrappingLayout: Layout {
         subviews: Subviews,
         cache: inout Cache
     ) -> CGSize {
+        print("sizeThatFits(\(proposal))")
         let ret = placeImpl(in: nil, proposal: proposal, subviews: subviews)
-        //print("sizeThatFits(\(proposal)) -> \(ret)")
+        print("    --> \(ret)")
         return ret
     }
 
@@ -24,7 +25,9 @@ struct WrappingLayout: Layout {
         subviews: Subviews,
         cache: inout Cache
     ) {
+        print("placeSubviews(in \(bounds), proposal: \(proposal))")
         _ = placeImpl(in: bounds, proposal: proposal, subviews: subviews)
+        
     }
     
     private func placeImpl(
@@ -51,7 +54,7 @@ struct WrappingLayout: Layout {
                     curJitterSeed = cur
                 }
                 for (subviewIdx, xOffset) in xOffsets {
-                    //print("   placing at (\(xOffset), \(yOffset))")
+                    
                     subviews[subviewIdx].place(
                         at: CGPoint(x: bounds.minX + xOffset + leftPad, y: bounds.minY + yOffset),
                         anchor: .topLeading,
@@ -67,37 +70,82 @@ struct WrappingLayout: Layout {
         }
         
         for (subviewIdx, subview) in subviews.enumerated() {
-            let proposal = ProposedViewSize(width: width, height: nil)
+            let remHeight: CGFloat? = if let height = proposal.height {
+                max(0, height - yOffset)
+            } else { nil }
+
+            let proposal = ProposedViewSize(width: width, height: remHeight)
+            
             let subSize = subview.sizeThatFits(proposal)
-            //print("   xCur=\(xOffset) yCur=\(yOffset) subSize=\(subSize)")
+            print("       subviews[\(subviewIdx)].sizeThatFits(\(proposal)) => \(subSize)")
+            
             if subSize.width > width - xRight {
                 flushRow()
             }
             yCur = max(yCur, subSize.height)
             xOffsets.append((subviewIdx, xRight))
+            //print("   placing at (\(xRight), \(yOffset)) subSize=\(subSize)")
+            
             xRight += subSize.width
         }
         flushRow()
         return CGSize(width: maxXRight, height: yOffset)
+        
     }
+}
+
+// Test struct that wraps an existing layout just so we can log how it works
+struct TestLayout: Layout {
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout Cache
+    ) -> CGSize {
+        ensure(subviews.count == 1)
+        let ret = subviews[0].sizeThatFits(proposal)
+        print("TV sizeThatFits(\(proposal)) --> \(ret)")
+        return ret
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout Cache
+    ) {
+        print("TV placeSubviews(in \(bounds), proposal: \(proposal))")
+        ensure(subviews.count == 1)
+        subviews[0].place(at: bounds.origin, proposal: proposal)
+        
+    }
+   
 }
 
 
 #Preview {
     struct WrappingLayoutTestView: View {
         var body: some View {
-            WrappingLayout(jitterSeed: 42) {
-                ForEach(0..<20) { i in
+            WrappingLayout {
+                ForEach(0..<5) { i in
                     VStack {
                         Text("Hello \(1 << i)!")
                         .border(.pink)
-                        .fixedSize()
                     }
                         .padding(5)
+                        
                 }
-
-            }.border(.blue)
-            
+                //Text("This is a very long piece of text asdf asdif oaisud oiaunsfdio uansdofu naosdufn oasdiufn oasudfno adsufno uasdnof uansdofu naosdufn oasdiufn aosdufn oaisudfn oausdfno iuadsnfo uasdnfo iuasndofiu asdf ")
+                    //.frame(minWidth: 10, idealWidth: 40)
+                    //.frame(width: 40)
+                    
+                    //.fixedSize()
+            }
+                .border(.blue)
+                .frame(minWidth: 100, maxWidth: 800)
+                //.containerRelativeFrame([.horizontal, .vertical])
+                //.frame(width: 100)
+                
+                
         }
     }
     return WrappingLayoutTestView()

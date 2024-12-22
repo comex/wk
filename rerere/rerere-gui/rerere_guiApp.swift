@@ -13,7 +13,11 @@ struct rerere_guiApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView(test: buildTestTest(itemKind: .word, name: "貰う", testKind: .meaningToReading))
+                .border(.blue)
         }
+            .windowResizability(.contentSize)
+            // setting an explicit defaultSize is needed to avoid insanity - todo: radar
+            .defaultSize(width: 300, height: 100)
     }
 }
 
