@@ -211,10 +211,12 @@ struct AnswerInputView: View {
 
 struct ContentView: View {
     let test: Test
+    let sess: TestSession
+    
 
     var body: some View {
         let _ = print("** ContentView recalc")
-        HStack {
+        VStack {
             /*
             Text("Hello, world!")
             Image(systemName: "globe")
@@ -224,13 +226,9 @@ struct ContentView: View {
             */
             
             TestSnapshotView(testSnapshot: self.test.snapshot.container)
-            .border(.yellow)
-//            .containerRelativeFrame([.horizontal, .vertical])
-            
+            self.
 
         }
-        .border(.red)
-//        .containerRelativeFrame([.horizontal, .vertical])
         
         
     }

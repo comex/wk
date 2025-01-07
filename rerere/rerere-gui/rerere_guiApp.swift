@@ -12,8 +12,7 @@ import SwiftUI
 struct rerere_guiApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView(test: buildTestTest(itemKind: .word, name: "貰う", testKind: .meaningToReading))
-                .border(.blue)
+            ContentView(test: buildTestTest(itemKind: .word, name: "貰う", testKind: .readingToMeaning))
         }
             .windowResizability(.contentSize)
             // setting an explicit defaultSize is needed to avoid insanity - todo: radar
