@@ -3,6 +3,11 @@ import Synchronization
 import System
 import Combine
 import Yams
+// TODO: very messed up:
+//       - the cabinet /k >> cabinet /k /k
+//       -  余る, あまる, to be in surplus
+//       - we are showing whitelist entries
+
 // TODO: right after mu should probably not count
 // TODO: mark items (newborns) as needing intensive SRS
 /*
@@ -529,9 +534,12 @@ struct TextBit {
     
     
     static func bitsForIngs(_ ings: [Ing], ownerItem: Item) -> [TextBit] {
-        return ings.sorted { $0.kind < $1.kind }.map { (ing: Ing) -> TextBit in
-            TextBit(kind: .ing(ing), ownerItem: ownerItem, text: ing.text)
-        }
+		return ings
+			.filter { $0.kind != .whitelist && $0.kind != .blacklist }
+			.sorted { $0.kind < $1.kind }
+			.map { (ing: Ing) -> TextBit in
+				TextBit(kind: .ing(ing), ownerItem: ownerItem, text: ing.text)
+			}
     }
 
     static func bitsForMeanings(of item: NormalItem) -> [TextBit] {
@@ -552,7 +560,6 @@ struct TextBit {
                         text: item.character)]
     }
     static func bitsForName(of item: Item) -> [TextBit] {
-        //if let item = item as? Kanji {
         if let item = item as? NormalItem {
             return bitsForCharacter(of: item)
         } else if let item = item as? Flashcard {
