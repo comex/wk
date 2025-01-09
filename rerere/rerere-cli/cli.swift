@@ -100,15 +100,19 @@ struct CLI {
                 case (.flashcardBack, _):
                     break
                 }
+				text += formatKindSuffix(item: bit.ownerItem)
             }
-            return text + formatKindSuffix(item: bit.ownerItem)
+            return text
 
         case .character:
             var text = bit.text
             if colorful && bit.ownerItem is Kanji {
                 text = ANSI.purple(text)
             }
-            return text + formatKindSuffix(item: bit.ownerItem)
+			if colorful {
+				text += formatKindSuffix(item: bit.ownerItem)
+			}
+            return text
         
         case .flashcardFront:
             return bit.text
@@ -123,9 +127,10 @@ struct CLI {
         var prev: TextBit? = nil
         for bit in bits {
             if let prev {
+				// XXX: this should be different
                 if case .ing(let ing) = bit.kind,
                    case .ing(let prevIng) = prev.kind,
-                   ing.kind != prevIng.kind {
+				   ing.superkind != prevIng.superkind || ing.kind != prevIng.kind {
                    out += " >> "
                 } else {
                    out += ", "
@@ -139,7 +144,7 @@ struct CLI {
 
  
     func formatItemFull(_ item: Item, colorful: Bool) -> String {
-        let bits: [TextBit] = TextBit.bitsForName(of: item) + TextBit.bitsForAllIngs(of: item)
+        let bits: [TextBit] = [TextBit.bitForName(of: item)] + TextBit.bitsForAllIngs(of: item)
         return format(bits: bits, colorful: colorful)
     }
 
@@ -154,7 +159,7 @@ struct CLI {
     }
 
     func formatPromptOutput(_ prompt: Prompt) -> String {
-        return format(bits: TextBit.bitsForPromptOutput(prompt), colorful: true)
+        return format(bits: [TextBit.bitForPromptOutput(prompt)], colorful: true)
     }
 
     func formatAlternativesInner(_ items: [Item], label: String) -> String {
@@ -322,7 +327,7 @@ struct CLI {
             await test.testSession.save()
             let prompt = await test.state.curPrompt!
             let nextState = await test.state.nextState
-            let promptText = formatPromptOutput(prompt) + formatKindSuffix(item: prompt.item)
+            let promptText = formatPromptOutput(prompt)
             let resp = try promptInner(
                 promptText: promptText, kana: prompt.expectedInput == .reading)
             switch resp {

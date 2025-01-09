@@ -520,75 +520,71 @@ func normalizeReadingTrimmed(_ input: String) -> String {
     return reading
 }
 
-struct TextBit {
-    let kind: Kind
-    let ownerItem: Item
-    let text: String
-
-    enum Kind {
-        case ing(Ing)
-        case character
-        case flashcardFront
-        case unknownItemName
-    }
+enum TextBit {
+	case ing(Ing, item: Item)
+	case character(item: NormalItem)
+	case flashcardFront(item: Flashcard)
+	case unknownItemName(item: Item)
+	case ingsList(superkind: Ing.Superkind, children: [TextBit])
     
+	static func tildify(_ text: String, ownerName: String) -> String {
+		if ownerName.starts(with: "〜") {
+			return "〜" + text
+			// why the heck is there starts(with:) but not ends(with:)
+		} else if ownerName.hasSuffix("〜") {
+			return text + "〜"
+		} else {
+			return text
+		}
+	}
     
-    static func bitsForIngs(_ ings: [Ing], ownerItem: Item) -> [TextBit] {
-		return ings
+	static func bitForIngs(_ ings: [Ing], superkind: Ing.Superkind, ownerItem: Item) -> TextBit {
+		return .ingsList(superkind: superkind, children:
+			ings
 			.filter { $0.kind != .whitelist && $0.kind != .blacklist }
 			.sorted { $0.kind < $1.kind }
-			.map { (ing: Ing) -> TextBit in
-				TextBit(kind: .ing(ing), ownerItem: ownerItem, text: ing.text)
-			}
+			.map { (ing: Ing) -> TextBit in .ing(ing, item: ownerItem) }
+		)
     }
 
-    static func bitsForMeanings(of item: NormalItem) -> [TextBit] {
-        return bitsForIngs(item.meanings, ownerItem: item)
+    static func bitForMeanings(of item: NormalItem) -> TextBit {
+		return bitForIngs(item.meanings, superkind: .meaning, ownerItem: item)
     }
-    static func bitsForReadings(of item: NormalItem) -> [TextBit] {
-        return bitsForIngs(item.readings, ownerItem: item)
+    static func bitForReadings(of item: NormalItem) -> TextBit {
+		return bitForIngs(item.readings, superkind: .reading, ownerItem: item)
     }
-    static func bitsForFlashcardFront(of item: Flashcard) -> [TextBit] {
-        return [TextBit(kind: .flashcardFront, ownerItem: item,
-                        text: item.front)]
+    static func bitForFlashcardBacks(of item: Flashcard) -> TextBit {
+		return bitForIngs(item.backs, superkind: .flashcardBack, ownerItem: item)
     }
-    static func bitsForFlashcardBacks(of item: Flashcard) -> [TextBit] {
-        return bitsForIngs(item.backs, ownerItem: item)
-    }
-    static func bitsForCharacter(of item: NormalItem) -> [TextBit] {
-        return [TextBit(kind: .character, ownerItem: item,
-                        text: item.character)]
-    }
-    static func bitsForName(of item: Item) -> [TextBit] {
+    static func bitForName(of item: Item) -> TextBit {
         if let item = item as? NormalItem {
-            return bitsForCharacter(of: item)
+			return .character(item: item)
         } else if let item = item as? Flashcard {
-            return bitsForFlashcardFront(of: item)
+			return .flashcardFront(item: item)
         } else {
-            return [TextBit(kind: .unknownItemName, ownerItem: item,
-                    text: item.name)]
+			return .unknownItemName(item: item)
         }
     }
     static func bitsForAllIngs(of item: Item) -> [TextBit] {
         if let item = item as? NormalItem {
             return bitsForReadings(of: item) + bitsForMeanings(of: item)
         } else if let item = item as? Flashcard {
-            return bitsForFlashcardFront(of: item)
+			return [.flashcardFront(item: item)]
         } else {
             return []
         }
     }
 
-    static func bitsForPromptOutput(_ prompt: Prompt) -> [TextBit] {
+    static func bitForPromptOutput(_ prompt: Prompt) -> TextBit {
         switch prompt.output {
         case .meanings:
-            return bitsForMeanings(of: prompt.item as! NormalItem)
+            return bitForMeanings(of: prompt.item as! NormalItem)
         case .readings:
-            return bitsForReadings(of: prompt.item as! NormalItem)
+            return bitForReadings(of: prompt.item as! NormalItem)
         case .flashcardFront:
-            return bitsForFlashcardFront(of: prompt.item as! Flashcard)
+			return .flashcardFront(item: prompt.item as! Flashcard)
         case .character:
-            return bitsForCharacter(of: prompt.item as! NormalItem)
+			return .character(item: prompt.item as! NormalItem)
         }
     }
     
@@ -835,16 +831,6 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable, @unchecked Sendab
             outcome = .mu
         }
         return (outcome, qual, alternatives)
-    }
-    func tildify(_ prompt: String) -> String {
-        if self.character.starts(with: "〜") {
-            return "〜" + prompt
-            // why the heck is there starts(with:) but not ends(with:)
-        } else if self.character.hasSuffix("〜") {
-            return "\(prompt)〜"
-        } else {
-            return prompt
-        }
     }
     override var availableTests: [TestKind] {
         return [.characterToRM, .meaningToReading, .readingToMeaning]
