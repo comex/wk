@@ -567,9 +567,9 @@ enum TextBit {
     }
     static func bitsForAllIngs(of item: Item) -> [TextBit] {
         if let item = item as? NormalItem {
-            return bitsForReadings(of: item) + bitsForMeanings(of: item)
+            return [bitForReadings(of: item), bitForMeanings(of: item)]
         } else if let item = item as? Flashcard {
-			return [.flashcardFront(item: item)]
+			return [bitForFlashcardBacks(of: item)]
         } else {
             return []
         }

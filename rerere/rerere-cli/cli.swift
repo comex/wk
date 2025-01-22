@@ -83,10 +83,10 @@ func runAndGetOutput(_ args: [String]) throws -> String {
 }
 
 struct CLI {
-   func formatSingleTextBit(_ bit: TextBit, colorful: Bool) -> String {
-        switch bit.kind {
-        case .ing(let ing):
-            var text = bit.text
+   func format(bit: TextBit, colorful: Bool) -> String {
+        switch bit {
+        case .ing(let ing, let item):
+			var text = ing.text
             if colorful {
                 switch (ing.superkind, ing.kind == .primary) {
                 case (.meaning, true):
@@ -100,52 +100,51 @@ struct CLI {
                 case (.flashcardBack, _):
                     break
                 }
-				text += formatKindSuffix(item: bit.ownerItem)
+				text += formatKindSuffix(item: item)
             }
             return text
 
-        case .character:
-            var text = bit.text
-            if colorful && bit.ownerItem is Kanji {
+        case .character(let item):
+			var text = item.character
+            if colorful && item is Kanji {
                 text = ANSI.purple(text)
             }
 			if colorful {
-				text += formatKindSuffix(item: bit.ownerItem)
+				text += formatKindSuffix(item: item)
 			}
             return text
         
-        case .flashcardFront:
-            return bit.text
+        case .flashcardFront(let item):
+			return item.front
 
-        case .unknownItemName:
-            return bit.text
+		case .unknownItemName(let item):
+			return item.name
+		
+		case .ingsList(_, let children):
+			var out = ""
+			var prevKind: Ing.Kind? = nil
+			for bit in children {
+				guard case .ing(let ing, _) = bit else {
+					fatalError("ingsList child not ing")
+				}
+				if let prevKind {
+					// XXX: this should be different
+					if ing.kind != prevKind {
+						out += " >> "
+					} else {
+						out += ", "
+					}
+				}
+				out += format(bit: bit, colorful: colorful)
+				prevKind = ing.kind
+			}
+			return out
         }
     }
-
-    func format(bits: [TextBit], colorful: Bool) -> String {
-        var out = ""
-        var prev: TextBit? = nil
-        for bit in bits {
-            if let prev {
-				// XXX: this should be different
-                if case .ing(let ing) = bit.kind,
-                   case .ing(let prevIng) = prev.kind,
-				   ing.superkind != prevIng.superkind || ing.kind != prevIng.kind {
-                   out += " >> "
-                } else {
-                   out += ", "
-                }
-            }
-            out += formatSingleTextBit(bit, colorful: colorful)
-            prev = bit
-        }
-        return out
-    }
-
  
     func formatItemFull(_ item: Item, colorful: Bool) -> String {
         let bits: [TextBit] = [TextBit.bitForName(of: item)] + TextBit.bitsForAllIngs(of: item)
-        return format(bits: bits, colorful: colorful)
+		return bits.map { format(bit: $0, colorful: colorful) }.joined(separator: " ")
     }
 
     func formatKindSuffix(item: Item) -> String {
@@ -159,7 +158,7 @@ struct CLI {
     }
 
     func formatPromptOutput(_ prompt: Prompt) -> String {
-        return format(bits: [TextBit.bitForPromptOutput(prompt)], colorful: true)
+        return format(bit: TextBit.bitForPromptOutput(prompt), colorful: true)
     }
 
     func formatAlternativesInner(_ items: [Item], label: String) -> String {
@@ -227,17 +226,17 @@ struct CLI {
         // should this be further abstracted?  ...no, I want to allow divergence in GUI
         switch ra.question.testKind {
         case .meaningToReading:
-            out += " " + format(bits: TextBit.bitsForName(of: item as! NormalItem), colorful: true)
-            out += " " + format(bits: TextBit.bitsForReadings(of: item as! NormalItem), colorful: false)
+			out += " " + format(bit: TextBit.character(item: item as! NormalItem), colorful: true)
+            out += " " + format(bit: TextBit.bitForReadings(of: item as! NormalItem), colorful: false)
         case .readingToMeaning:
-            out += " " + format(bits: TextBit.bitsForName(of: item as! NormalItem), colorful: true)
-            out += " " + format(bits: TextBit.bitsForMeanings(of: item as! NormalItem), colorful: true)
+            out += " " + format(bit: TextBit.character(item: item as! NormalItem), colorful: true)
+            out += " " + format(bit: TextBit.bitForMeanings(of: item as! NormalItem), colorful: true)
         case .characterToRM, .confusion:
             switch ra.prompt.expectedInput {
             case .meaning:
-                out += " " + format(bits: TextBit.bitsForMeanings(of: item as! NormalItem), colorful: true)
+                out += " " + format(bit: TextBit.bitForMeanings(of: item as! NormalItem), colorful: true)
             case .reading:
-                out += " " + format(bits: TextBit.bitsForReadings(of: item as! NormalItem), colorful: true)
+                out += " " + format(bit: TextBit.bitForReadings(of: item as! NormalItem), colorful: true)
             default: break
             }
 
