@@ -1,4 +1,7 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# dependencies = ['requests']
+# ///
 import requests, json
 s = requests.Session()
 s.headers['Wanikani-Revision'] = '20170710'
