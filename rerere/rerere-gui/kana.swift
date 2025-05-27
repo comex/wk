@@ -79,6 +79,15 @@ let kana: [String: String] = [
     "xyo": "ょ",
     "xtu": "っ",
     "xtsu": "っ",
+    // ***
+    "fe": "ふぇ",
+    "fa": "ふぁ",
+    "fi": "ふぃ",
+    "xa": "ぁ",
+    "xe": "ぇ",
+    "xi": "ぃ",
+    "xo": "ぉ",
+    "xu": "ぅ",
 ]
 
 @MainActor let kanaRegex: Regex = try! Regex(kana.keys.joined(separator: "|"))

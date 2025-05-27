@@ -80,6 +80,15 @@ kana=(
     xyo 'ょ'
     xtu 'っ'
     xtsu 'っ'
+    # ***
+    fe 'ふぇ'
+    fa 'ふぁ'
+    fi 'ふぃ'
+    xa 'ぁ'
+    xe 'ぇ'
+    xi 'ぃ'
+    xo 'ぉ'
+    xu 'ぅ'
 )
 
 #for k in "${(@k)kana}"; do
