@@ -281,7 +281,7 @@ final class ItemData: Sendable {
         async let allWordConfusion = ItemData.loadConfusion(
             path: basePath + "/confusion-vocab.txt", isWord: true, itemLoader: itemLoader)
         self.allConfusion = ItemList(await allKanjiConfusion + allWordConfusion)
-        self.allItems = self.allWords.items + self.allKanji.items + self.allConfusion.items
+        self.allItems = self.allWords.items + self.allKanji.items + self.allConfusion.items + self.allFlashcards.items
         print("done")
     }
     static func loadConfusion(path: String, isWord: Bool, itemLoader: ItemLoader) -> [Confusion] {
@@ -938,6 +938,14 @@ final class Flashcard: Item, CustomStringConvertible, DecodableWithConfiguration
         let alternatives = meaningAlternatives(meaning: normalizedInput)
         return (outcome, qual, alternatives)
     }
+    func similarMeaning() -> [Item] {
+        var set: Set<Item> = []
+        for back in self.backs {
+            set.formUnion(Subete.itemData.allByKind(Self.kind).findByMeaning(back.text))
+        }
+        set.remove(self)
+        return Array(set).sorted()
+    }
     override class var kind: ItemKind { return .flashcard }
     override var availableTests: [TestKind] { return [.flashcard] }
 }
@@ -1369,7 +1377,11 @@ actor Test {
         let srsUpdate = try await self.maybeMarkResult(outcome: outcome, final: final)
 
         switch self.question.testKind {
-        case .meaningToReading, .flashcard:
+        case .flashcard:
+            alternativesSections.append(
+                AlternativesSection(
+                    kind: .similarMeaning, items: (prompt.item as! Flashcard).similarMeaning()))
+        case .meaningToReading:
             alternativesSections.append(
                 AlternativesSection(
                     kind: .similarMeaning, items: (prompt.item as! NormalItem).similarMeaning()))
