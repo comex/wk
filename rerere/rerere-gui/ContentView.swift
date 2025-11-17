@@ -35,11 +35,11 @@ struct PromptOutputView: View {
     let prompt: Prompt
     var body: some View {
         let _ = print("POV render")
-        let bits = TextBit.bitsForPromptOutput(prompt)
+        let bit = TextBit.bitForPromptOutput(prompt)
         
         let style: AnyShapeStyle = style(forItem: prompt.item)
         ScrollView {
-            view(prompt: prompt, bits: bits)
+            view(prompt: prompt, bit: bit)
         }
             .padding()
             .background(in: Rectangle())
@@ -48,10 +48,14 @@ struct PromptOutputView: View {
     }
     
     @ViewBuilder
-    private func view(prompt: Prompt, bits: [TextBit]) -> some View {
-        switch prompt.output {
-            case .character: viewForCharacter(bits: bits)
-            default: viewForOther(bits: bits)
+    private func view(prompt: Prompt, bit: TextBit) -> some View {
+        /*switch prompt.output {
+            case .character: viewForCharacter(bit: bit)
+            default: viewForOther(bit: bit)
+        }*/
+        switch bit {
+        case .character(let item):
+        
         }
     }
     
@@ -95,9 +99,9 @@ struct PromptOutputView: View {
                 
         }
     }
-
+/*
     @ViewBuilder
-    private func viewForOther(bits: [TextBit]) -> some View {
+    private func viewForOther(bits: TextBit) -> some View {
         WrappingLayout(jitterSeed: bits.first?.text.hashValue ?? 0) {
             ForEach(identifiableWrapArray(bits)) { bitWrapper in
                 BitViewForOther(bit: bitWrapper.t)
@@ -106,7 +110,7 @@ struct PromptOutputView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     @ViewBuilder
-    private func viewForCharacter(bits: [TextBit]) -> some View {
+    private func viewForCharacter(bits: TextBit) -> some View {
         let _ = ensure(bits.count == 1)
         Text(bits[0].text)
             .font(Font.system(size: 80))
@@ -114,6 +118,7 @@ struct PromptOutputView: View {
             .foregroundStyle(.white.shadow(.drop(radius: 0, x: 2, y: 2)))
             .textSelection(.enabled)
     }
+    */
     private func style(forItem item: Item) -> AnyShapeStyle {
         switch type(of: item).kind {
             case .word: AnyShapeStyle(vocabBlue.gradient)
@@ -226,7 +231,7 @@ struct ContentView: View {
             */
             
             TestSnapshotView(testSnapshot: self.test.snapshot.container)
-            self.
+            
 
         }
         
