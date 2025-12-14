@@ -87,6 +87,7 @@ struct CLI {
         switch bit {
         case .ing(let ing, let item):
             var text = ing.text
+            text = TextBit.tildify(text, ownerItem: item)
             if colorful {
                 switch (ing.superkind, ing.kind == .primary) {
                 case (.meaning, true):
@@ -100,8 +101,8 @@ struct CLI {
                 case (.flashcardBack, _):
                     break
                 }
-                text += formatKindSuffix(item: item)
             }
+            text += formatKindSuffix(item: item)
             return text
 
         case .character(let item):

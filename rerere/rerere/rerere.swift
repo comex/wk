@@ -527,11 +527,11 @@ enum TextBit {
     case unknownItemName(item: Item)
     case ingsList(superkind: Ing.Superkind, children: [TextBit])
     
-    static func tildify(_ text: String, ownerName: String) -> String {
-        if ownerName.starts(with: "〜") {
+    static func tildify(_ text: String, ownerItem: Item) -> String {
+        if ownerItem.name.starts(with: "〜") {
             return "〜" + text
             // why the heck is there starts(with:) but not ends(with:)
-        } else if ownerName.hasSuffix("〜") {
+        } else if ownerItem.name.hasSuffix("〜") {
             return text + "〜"
         } else {
             return text
