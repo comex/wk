@@ -76,6 +76,13 @@ private func style(forItem item: Item) -> AnyShapeStyle {
     }
 }
 
+private func baseColor(forItem item: Item) -> Color {
+    switch type(of: item).kind {
+        case .word: vocabBlue
+        default: lightGreen
+    }
+}
+
 struct IngsListView: View {
     let prompt: Prompt
     let superkind: Ing.Superkind
@@ -119,10 +126,10 @@ struct PromptOutputView: View {
 
         let style: AnyShapeStyle = style(forItem: prompt.item)
         if useAppKit {
-            AppKitGridViewRepresentable(items: flattenTextBit(bit, prompt: prompt))
-                .padding()
-                .background(in: Rectangle())
-                .backgroundStyle(style)
+            AppKitGridViewRepresentable(
+                items: flattenTextBit(bit, prompt: prompt),
+                backgroundColor: NSColor(baseColor(forItem: prompt.item))
+            )
         } else {
             ScrollView(.vertical) {
                 textBitView(bit: bit, prompt: prompt)

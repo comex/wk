@@ -1,3 +1,5 @@
+// Mostly written by Claude
+
 import AppKit
 import SwiftUI
 
@@ -177,8 +179,30 @@ class TextBitCollectionViewItem: NSCollectionViewItem {
 
 // MARK: - NSViewRepresentable
 
+/// A gradient-filled background view for the scroll view's document area.
+class GradientBackgroundView: NSView {
+    var baseColor: NSColor = .clear {
+        didSet { needsDisplay = true }
+    }
+
+    override var isOpaque: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let gradient = NSGradient(
+            starting: baseColor,
+            ending: baseColor.withAlphaComponent(0)
+        ) else {
+            baseColor.setFill()
+            dirtyRect.fill()
+            return
+        }
+        gradient.draw(in: bounds, angle: 90)
+    }
+}
+
 struct AppKitGridViewRepresentable: NSViewRepresentable {
     let items: [AppKitGridItem]
+    let backgroundColor: NSColor
 
     class Coordinator: NSObject, NSCollectionViewDataSource, NSCollectionViewDelegateFlowLayout {
         var items: [AppKitGridItem] = []
@@ -237,11 +261,18 @@ struct AppKitGridViewRepresentable: NSViewRepresentable {
         Coordinator()
     }
 
-    func makeNSView(context: Context) -> NSScrollView {
+    func makeNSView(context: Context) -> GradientBackgroundView {
+        let backgroundView = GradientBackgroundView()
+        backgroundView.baseColor = backgroundColor
+        backgroundView.wantsLayer = true
+        backgroundView.canDrawSubviewsIntoLayer = true
+        backgroundView.canDrawConcurrently = true
+
         let scrollView = NSScrollView()
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
         scrollView.autohidesScrollers = true
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
 
         let collectionView = NSCollectionView()
         collectionView.backgroundColors = [.clear]
@@ -260,13 +291,23 @@ struct AppKitGridViewRepresentable: NSViewRepresentable {
         collectionView.delegate = context.coordinator
 
         scrollView.documentView = collectionView
+        backgroundView.addSubview(scrollView)
 
-        return scrollView
+        NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: backgroundView.topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: backgroundView.bottomAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: backgroundView.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: backgroundView.trailingAnchor),
+        ])
+
+        return backgroundView
     }
 
-    func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        context.coordinator.items = items
-        if let collectionView = scrollView.documentView as? NSCollectionView {
+    func updateNSView(_ backgroundView: GradientBackgroundView, context: Context) {
+        backgroundView.baseColor = backgroundColor
+        if let scrollView = backgroundView.subviews.first as? NSScrollView,
+           let collectionView = scrollView.documentView as? NSCollectionView {
+            context.coordinator.items = items
             collectionView.reloadData()
         }
     }
