@@ -332,8 +332,8 @@ struct CLI {
                 promptText: promptText, kana: prompt.expectedInput == .reading)
             switch resp {
             case .answer(let answerText):
-                let ra = try await test.handlePromptResponse(
-                    input: answerText, final: nextState.isDone)
+                try await test.handlePromptResponse(input: answerText)
+                let ra = await test.lastResponseAcknowledgement!
                 print(formatResponseAcknowledgement(ra))
                 gotAnswerAlready = true
                 if ra.outcome == .right {

@@ -342,10 +342,19 @@ actor SRSManager {
     }
 }
 
+struct SubeteSettings: Sendable, Equatable {
+    let useFakeLog: Bool
+}
+final class SubeteSettingsWrapper: Sendable {
+    let settings: SubeteSettings
+    init(settings: SubeteSettings) { self.settings = settings }
+}
+
 struct Subete: Sendable, ~Copyable {
-    //static let itemDataOnce = AsyncOnce<ItemData>()
     static let itemData: ItemData = itemDataLazy.load()!
     static let itemDataLazy = AtomicLazyReference<ItemData>()
+    static let settings: SubeteSettings = settingsLazy.load()!.settings
+    static let settingsLazy = AtomicLazyReference<SubeteSettingsWrapper>()
     static let initMutex = AsyncMutex(())
     static let retrep = RetiredReplace()
     static let basePath = getWkDir()
@@ -353,7 +362,7 @@ struct Subete: Sendable, ~Copyable {
 
     static let nextItemID: Mutex<Int> = Mutex(0)
 
-    static let logTxtManager: LogTxtManager = LogTxtManager()
+    static let logTxtManager: LogTxtManager = LogTxtManager(useFakeLog: settings.useFakeLog)
 
     static let myDateFormatter: DateFormatter = {
         let mdf = DateFormatter()
@@ -362,8 +371,13 @@ struct Subete: Sendable, ~Copyable {
         return mdf
     }()
 
-    static func initialize() async {
+    static func initialize(useFakeLog: Bool = false) async {
         await Subete.initMutex.withLock({ (_) async in
+            let mySettings = SubeteSettings(useFakeLog: useFakeLog)
+            let storedSettingsWrapper = Subete.settingsLazy.storeIfNil(SubeteSettingsWrapper(settings: mySettings))
+            // any prior initialize calls must have used the same settings:
+            ensure(storedSettingsWrapper.settings == mySettings)
+
             if Subete.itemDataLazy.load() == nil {
                 let itemData = await ItemData()
                 Subete.itemDataLazy.initializeUnique(itemData)
@@ -1179,7 +1193,7 @@ enum TestState {
     var nextState: TestState {
         switch self {
         case .done:
-            fatalError("nextPrompt when already done")
+            fatalError("nextState when already done")
         case .prompt(_):
             return .done
         case .shuffle(var substates, let substateIdx):
@@ -1191,6 +1205,15 @@ enum TestState {
             } else {
                 return .shuffle(substates: substates, substateIdx: substateIdx + 1)
             }
+        }
+    }
+    
+    var nextStateIsDone: Bool {
+        switch self {
+        case .done, .prompt(_):
+            return true
+        case .shuffle(let substates, let substateIdx):
+            return substateIdx + 1 == substates.count && substates[substateIdx].nextStateIsDone
         }
     }
 
@@ -1237,28 +1260,33 @@ actor Test {
     let question: Question
     let testSession: TestSession
     
+    var state: TestState {
+        didSet { updateSnapshot() }
+    }
     var result: TestResult? = nil {
         didSet { updateSnapshot() }
     }
-    var state: TestState {
+    var lastResponseAcknowledgement: ResponseAcknowledgement? = nil {
         didSet { updateSnapshot() }
     }
     var counterForDebugging: Int = 0 {
         didSet { updateSnapshot() }
     }
     
-    
     struct Snapshot {
-        let result: TestResult?
         let state: TestState
+        let result: TestResult?
+        let lastResponseAcknowledgement: ResponseAcknowledgement?
         let counterForDebugging: Int
     }
+
     let snapshot: OffMainContainer<Snapshot?> = OffMainContainer(nil)
     func updateSnapshot() {
         Task {
             self.snapshot.send(Snapshot(
-                result: self.result,
                 state: self.state,
+                result: self.result,
+                lastResponseAcknowledgement: self.lastResponseAcknowledgement,
                 counterForDebugging: self.counterForDebugging
             ))
         }
@@ -1279,11 +1307,12 @@ actor Test {
     
     func setState(_ state: TestState) {
         self.state = state
+        self.lastResponseAcknowledgement = nil
     }
 
-    func maybeMarkResult(outcome: TestOutcome, final: Bool) async throws -> SRSUpdate {
+    func maybeMarkResult(outcome: TestOutcome) async throws -> SRSUpdate {
         let ret: SRSUpdate
-        if outcome == .wrong || (self.result == nil && final) {
+        if outcome == .wrong || (self.result == nil && self.state.nextStateIsDone) {
             ret = try await self.markResult(outcome: outcome)
         } else {
             ret = .noChangeOther
@@ -1337,10 +1366,7 @@ actor Test {
     }
 
     // TODO: this function kind of sucks
-    // and passing `final` is an abstraction violation
-    func handlePromptResponse(input: String, final: Bool) async throws
-        -> ResponseAcknowledgement
-    {
+    func handlePromptResponse(input: String) async throws {
         let outcome: TestOutcome
         let qual: Int
         var alternativesSections: [AlternativesSection]
@@ -1374,7 +1400,7 @@ actor Test {
             ]
         }
 
-        let srsUpdate = try await self.maybeMarkResult(outcome: outcome, final: final)
+        let srsUpdate = try await self.maybeMarkResult(outcome: outcome)
 
         switch self.question.testKind {
         case .flashcard:
@@ -1398,7 +1424,7 @@ actor Test {
             }
         }
 
-        return ResponseAcknowledgement(
+        self.lastResponseAcknowledgement = ResponseAcknowledgement(
             question: self.question,
             prompt: prompt,
             outcome: outcome,

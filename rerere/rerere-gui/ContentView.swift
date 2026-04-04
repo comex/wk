@@ -128,15 +128,34 @@ struct PromptOutputView: View {
             .backgroundStyle(style)
     }
 }
+struct ResponseAcknowledgementView : View {
+    let responseAcknowledgement: ResponseAcknowledgement
+    var body: some View {
+        switch responseAcknowledgement.outcome {
+        case .wrong:
+            Text("Wrong")
+        case .right:
+            Text("Right")
+        case .mu:
+            Text("Mu")
+        }
+    }
+}
 struct TestSnapshotView : View {
     let testSnapshot: Container<Test.Snapshot?>
+    let submitCallback: (String) -> Void
+
     var body: some View {
         VStack {
             if let snapshot = self.testSnapshot.value {
                 if let prompt = snapshot.state.curPrompt {
                     PromptOutputView(prompt: prompt)
                        // .drawingGroup(opaque: false)
-                    AnswerInputView(expectedInput: prompt.expectedInput)
+                    if let lastResponseAcknowledgement = snapshot.lastResponseAcknowledgement {
+                        ResponseAcknowledgementView(responseAcknowledgement: lastResponseAcknowledgement)
+                    }
+                    AnswerInputView(expectedInput: prompt.expectedInput, submitCallback: submitCallback)
+                        .padding(.horizontal, 4)
                 }
                 Text("Boo \(snapshot.counterForDebugging)")
                             
@@ -203,13 +222,27 @@ struct KanjiInputView: View {
 
 struct AnswerInputView: View {
     let expectedInput: PromptExpectedInput
-    
+    let submitCallback: (String) -> Void
+
     @State private var pendingText: String = ""
     
+
     var body: some View {
-        KanjiInputView(label: "Reading", text: $pendingText)
+        let field: any View = switch expectedInput {
+        case .meaning:
+            TextField("Meaning", text: $pendingText)
+               
+        case .reading:
+            KanjiInputView(label: "Reading", text: $pendingText)
+
+
+        case .flashcardBack:
+            TextField("Flashcard", text: $pendingText)
+        }
+        AnyView(field)
             .onSubmit {
                 print("got input \(pendingText)")
+                self.submitCallback(pendingText)
                 pendingText = ""
             }
     }
@@ -218,9 +251,12 @@ struct AnswerInputView: View {
 
 struct ContentView: View {
     let test: Test
+    @State private var selection = 2
 
     var body: some View {
         let _ = print("** ContentView recalc")
+        // lazy-load SRS:
+        let _ = Task { await Subete.withSRS { _ in } }
         VStack {
             /*
             Text("Hello, world!")
@@ -229,8 +265,26 @@ struct ContentView: View {
                 .foregroundStyle(.tint)
             
             */
+            TabView(selection: $selection) {
+                Tab(value: 1) {
+                    Text("not implemented")
+                } label: {
+                    Text("History")
+                }
+                Tab(value: 2) {
+                    TestSnapshotView(testSnapshot: self.test.snapshot.container, submitCallback: { (input: String) in
+                        Task { try! await self.test.handlePromptResponse(input: input) }
+                    })
+                } label: {
+                    Text("Test")
+                }
+                Tab(value: 3) {
+                    Text("not implemented")
+                } label: {
+                    Text("Options")
+                }
+            }
             
-            TestSnapshotView(testSnapshot: self.test.snapshot.container)
             
 
         }
@@ -242,18 +296,22 @@ struct ContentView: View {
 
 #Preview {
 
-    ContentView(test: buildTestTest(itemKind: .word, name: "貰う", testKind: .meaningToReading))
+    //ContentView(test: buildTestTest(itemKind: .word, name: "貰う", testKind: .meaningToReading))
         //.containerRelativeFrame([.horizontal])
+    let test = buildTestTest(itemKind: .word, name: "貰う", testKind: .meaningToReading)
+    
+    ResponseAcknowledgementView(responseAcknowledgement: ResponseAcknowledgement(question: Question, prompt: <#T##Prompt#>, outcome: <#T##TestOutcome#>, existingOutcome: <#T##TestOutcome?#>, qual: <#T##Int#>, alternativesSections: <#T##[AlternativesSection]#>, srsUpdate: <#T##SRSUpdate#>)
     
 }
 
 func buildTestTest(itemKind: ItemKind, name: String, testKind: TestKind) -> Test {
     blockOnLikeYoureNotSupposedTo {
-        await Subete.initialize()
+        await Subete.initialize(useFakeLog: true)
 
         let item = Subete.itemData.allByKind(itemKind).findByName(name)!
         let question = Question(item: item, testKind: testKind)
         let testSession = TestSession(forSingleQuestion: question)
-        return await Test(question: question, testSession: testSession)
+        let test = await Test(question: question, testSession: testSession)
+        return test
     }
 }
