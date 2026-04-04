@@ -82,6 +82,7 @@ struct IngsListView: View {
     let children: [IdentifiableWrapper<TextBit>]
     var body: some View {
         WrappingLayout(jitterSeed: 0) { //bits.first?.text.hashValue ?? 0) {
+            // repeat 100x for UI testing:
             ForEach(0..<100) { i in
                 ForEach(children) { child in
                     textBitView(bit: child.t, prompt: prompt)
@@ -111,22 +112,29 @@ private func textBitView(bit: TextBit, prompt: Prompt) -> some View {
 }
 struct PromptOutputView: View {
     let prompt: Prompt
+    var useAppKit: Bool = true
     var body: some View {
         let _ = print("POV render")
         let bit = TextBit.bitForPromptOutput(prompt)
-        
+
         let style: AnyShapeStyle = style(forItem: prompt.item)
-        ScrollView(.vertical) {
-            textBitView(bit: bit, prompt: prompt)
-           
+        if useAppKit {
+            AppKitGridViewRepresentable(items: flattenTextBit(bit, prompt: prompt))
+                .padding()
+                .background(in: Rectangle())
+                .backgroundStyle(style)
+        } else {
+            ScrollView(.vertical) {
+                textBitView(bit: bit, prompt: prompt)
+
+            }
+                .padding()
+                .background(in: Rectangle())
+                .backgroundStyle(style)
         }
-            .padding()
-            .background(in: Rectangle())
-            .backgroundStyle(style)
-            
 
     }
-    
+
 }
 struct TestSnapshotView : View {
     let testSnapshot: Container<Test.Snapshot?>
