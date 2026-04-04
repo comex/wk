@@ -57,11 +57,13 @@ struct BasicTextView: View {
                 
             }
             .padding(2)
-            .clipped().shadow(radius: 2, x: 2, y: 2)
+            //.clipped() // this doesn't seem to help
+            .shadow(radius: 2, x: 2, y: 2)
             .scaleEffect(hover ? 1.1 : 1.0)
-            //.zIndex(hover ? 2.0 : 1.0) // this causes the layout to invalidate!
+            //.zIndex(hover ? 2.0 : 1.0) // this causes the layout to invalidate on hover, we don't need it
             .animation(.easeIn.speed(hover ? 99.0 : 3.0) , value: hover)
             .trackHover($hover)
+            //.drawingGroup(opaque: false) // messes up color
     
         
             
@@ -83,16 +85,9 @@ struct IngsListView: View {
     let children: [IdentifiableWrapper<TextBit>]
     @State private var numChildren: Int = 100
     var body: some View {
-        VStack {
-            
-            TextField("nc", value: $numChildren, formatter: NumberFormatter())
-            WrappingLayout(jitterSeed: 0) { //bits.first?.text.hashValue ?? 0) {
-                // repeat 100x for UI testing:
-                ForEach(0..<numChildren, id: \.self) { i in
-                    ForEach(children) { child in
-                        textBitView(bit: child.t, prompt: prompt)
-                    }
-                }
+        WrappingLayout(jitterSeed: 0) { //bits.first?.text.hashValue ?? 0) {
+            ForEach(children) { child in
+                textBitView(bit: child.t, prompt: prompt)
             }
         }
     }
@@ -113,6 +108,7 @@ private func textBitView(bit: TextBit, prompt: Prompt) -> some View {
     case .unknownItemName(item: let item):
         BasicTextView(text: item.name)
     case .ingsList(superkind: let superkind, children: let children):
+        //let xchildren = Array(repeating: children, count: 100).flatMap { $0 }
         IngsListView(prompt: prompt, superkind: superkind, children: identifiableWrapArray(children))
     }
 }
