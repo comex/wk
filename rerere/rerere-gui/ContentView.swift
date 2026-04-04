@@ -12,6 +12,7 @@ let vocabBlue = Color(red: 0.63, green: 0.00, blue: 0.94)
 let lightGreen = Color(red: 0.4627, green: 0.8392, blue: 0.5)
 let meaningBitBackground = Color(red: 0.16, green: 0.48, blue: 0.65)
 let readingBitBackground = Color(red: 1.00, green: 0.17, blue: 0.33)
+let defaultBitBackground = Color.black.opacity(0)
 struct IdentifiableWrapper<T>: Identifiable {
     typealias ID = Int
     let t: T
@@ -31,6 +32,81 @@ extension View {
         }
     }
 }
+struct BasicTextView: View {
+    let text: String
+    var bgColor: Color = defaultBitBackground
+    @State var hover: Bool = false
+    var body: some View {
+        let _ = print("BVFO render text=\(text) hover=\(hover)")
+        let realBgColor: Color = !hover ? bgColor :
+            bgColor.mix(with: .white, by: 0.2)
+        
+        Text(text)//"test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test ")
+            .font(Font.system(size: 20))
+            
+            .foregroundStyle(.white.shadow(.drop(radius: 0, x: 2, y: 2)))
+            .textSelection(.enabled)
+            
+            .padding(5)
+            .background {
+                RoundedRectangle(cornerRadius: 5)
+
+                .fill(realBgColor)
+                .stroke(.mint, lineWidth: 1)
+                .animation(.easeIn.speed(hover ? 99.0 : 3.0) , value: hover)
+                
+            }
+            .padding(2)
+            .clipped().shadow(radius: 2, x: 2, y: 2)
+            .scaleEffect(hover ? 1.1 : 1.0)
+            .zIndex(hover ? 2.0 : 1.0)
+            .animation(.easeIn.speed(hover ? 99.0 : 3.0) , value: hover)
+            .trackHover($hover)
+    
+        
+            
+    }
+}
+
+
+private func style(forItem item: Item) -> AnyShapeStyle {
+    switch type(of: item).kind {
+        case .word: AnyShapeStyle(vocabBlue.gradient)
+        default: AnyShapeStyle(lightGreen.gradient)
+    }
+}
+
+struct IngsListView: View {
+    let prompt: Prompt
+    let superkind: Ing.Superkind
+    let children: [IdentifiableWrapper<TextBit>]
+    var body: some View {
+        WrappingLayout(jitterSeed: 0) { //bits.first?.text.hashValue ?? 0) {
+            ForEach(children) { child in
+                textBitView(bit: child.t, prompt: prompt)
+            }
+        }
+    }
+}
+@MainActor @ViewBuilder
+private func textBitView(bit: TextBit, prompt: Prompt) -> some View {
+    switch bit {
+    case .ing(let ing, item: _):
+        let bgColor = switch ing.superkind {
+            case .meaning: meaningBitBackground
+            case .reading, .flashcardBack: readingBitBackground
+        }
+        BasicTextView(text: ing.text, bgColor: bgColor)
+    case .character(item: let item):
+        BasicTextView(text: item.character)
+    case .flashcardFront(item: let item):
+        BasicTextView(text: item.front)
+    case .unknownItemName(item: let item):
+        BasicTextView(text: item.name)
+    case .ingsList(superkind: let superkind, children: let children):
+        IngsListView(prompt: prompt, superkind: superkind, children: identifiableWrapArray(children))
+    }
+}
 struct PromptOutputView: View {
     let prompt: Prompt
     var body: some View {
@@ -39,7 +115,7 @@ struct PromptOutputView: View {
         
         let style: AnyShapeStyle = style(forItem: prompt.item)
         ScrollView {
-            view(prompt: prompt, bit: bit)
+            textBitView(bit: bit, prompt: prompt)
         }
             .padding()
             .background(in: Rectangle())
@@ -47,86 +123,7 @@ struct PromptOutputView: View {
 
     }
     
-    @ViewBuilder
-    private func view(prompt: Prompt, bit: TextBit) -> some View {
-        /*switch prompt.output {
-            case .character: viewForCharacter(bit: bit)
-            default: viewForOther(bit: bit)
-        }*/
-        switch bit {
-        case .character(let item):
-        
-        }
-    }
-    
-    struct BitViewForOther: View {
-        let bit: TextBit
-        @State var hover: Bool = false
-        var body: some View {
-            let _ = print("BVFO render text=\(bit.text) hover=\(hover)")
-            let bgColor1: Color = switch bit.kind {
-            case .ing(let ing):
-                ing.superkind == .reading ? readingBitBackground : meaningBitBackground
-            default:
-                .black.opacity(0)
-            }
-            let bgColor: Color = !hover ? bgColor1 :
-                bgColor1.mix(with: .white, by: 0.2)
-            
-            Text(bit.text)//"test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test ")
-                .font(Font.system(size: 20))
-                
-                .foregroundStyle(.white.shadow(.drop(radius: 0, x: 2, y: 2)))
-                .textSelection(.enabled)
-                
-                .padding(5)
-                .background {
-                    RoundedRectangle(cornerRadius: 5)
-    
-                    .fill(bgColor)
-                    .stroke(.mint, lineWidth: 1)
-                    .animation(.easeIn.speed(hover ? 99.0 : 3.0) , value: hover)
-                    
-                }
-                .padding(2)
-                .clipped().shadow(radius: 2, x: 2, y: 2)
-                .scaleEffect(hover ? 1.1 : 1.0)
-                .zIndex(hover ? 2.0 : 1.0)
-                .animation(.easeIn.speed(hover ? 99.0 : 3.0) , value: hover)
-                .trackHover($hover)
-        
-            
-                
-        }
-    }
-/*
-    @ViewBuilder
-    private func viewForOther(bits: TextBit) -> some View {
-        WrappingLayout(jitterSeed: bits.first?.text.hashValue ?? 0) {
-            ForEach(identifiableWrapArray(bits)) { bitWrapper in
-                BitViewForOther(bit: bitWrapper.t)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-    @ViewBuilder
-    private func viewForCharacter(bits: TextBit) -> some View {
-        let _ = ensure(bits.count == 1)
-        Text(bits[0].text)
-            .font(Font.system(size: 80))
-            .padding(.leading)
-            .foregroundStyle(.white.shadow(.drop(radius: 0, x: 2, y: 2)))
-            .textSelection(.enabled)
-    }
-    */
-    private func style(forItem item: Item) -> AnyShapeStyle {
-        switch type(of: item).kind {
-            case .word: AnyShapeStyle(vocabBlue.gradient)
-            default: AnyShapeStyle(lightGreen.gradient)
-        }
-    }
 }
-
 struct TestSnapshotView : View {
     let testSnapshot: Container<Test.Snapshot?>
     var body: some View {
@@ -216,8 +213,6 @@ struct AnswerInputView: View {
 
 struct ContentView: View {
     let test: Test
-    let sess: TestSession
-    
 
     var body: some View {
         let _ = print("** ContentView recalc")
