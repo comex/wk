@@ -1,6 +1,6 @@
 import SwiftUI
 struct WrappingLayout: Layout {
-    let verbosity = 1
+    let verbosity = 0
     // This seems like we'll call sizeThatFits so many times...
     typealias Cache = () // ...
     let jitterSeed: Int?
@@ -92,7 +92,7 @@ struct WrappingLayout: Layout {
             xRight += subSize.width
         }
         flushRow()
-        if let height = proposal.height { yOffset = max(yOffset, height) }
+        //if let height = proposal.height { yOffset = max(yOffset, height) }
         //if let height = proposal.height { yOffset = height }
         return CGSize(
             width: proposal.width ?? maxXRight,

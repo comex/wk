@@ -76,23 +76,22 @@ private func style(forItem item: Item) -> AnyShapeStyle {
     }
 }
 
-private func baseColor(forItem item: Item) -> Color {
-    switch type(of: item).kind {
-        case .word: vocabBlue
-        default: lightGreen
-    }
-}
 
 struct IngsListView: View {
     let prompt: Prompt
     let superkind: Ing.Superkind
     let children: [IdentifiableWrapper<TextBit>]
+    @State private var numChildren: Int = 100
     var body: some View {
-        WrappingLayout(jitterSeed: 0) { //bits.first?.text.hashValue ?? 0) {
-            // repeat 100x for UI testing:
-            ForEach(0..<100) { i in
-                ForEach(children) { child in
-                    textBitView(bit: child.t, prompt: prompt)
+        VStack {
+            
+            TextField("nc", value: $numChildren, formatter: NumberFormatter())
+            WrappingLayout(jitterSeed: 0) { //bits.first?.text.hashValue ?? 0) {
+                // repeat 100x for UI testing:
+                ForEach(0..<numChildren, id: \.self) { i in
+                    ForEach(children) { child in
+                        textBitView(bit: child.t, prompt: prompt)
+                    }
                 }
             }
         }
@@ -119,29 +118,19 @@ private func textBitView(bit: TextBit, prompt: Prompt) -> some View {
 }
 struct PromptOutputView: View {
     let prompt: Prompt
-    var useAppKit: Bool = true
     var body: some View {
         let _ = print("POV render")
         let bit = TextBit.bitForPromptOutput(prompt)
 
         let style: AnyShapeStyle = style(forItem: prompt.item)
-        if useAppKit {
-            AppKitGridViewRepresentable(
-                items: flattenTextBit(bit, prompt: prompt),
-                backgroundColor: NSColor(baseColor(forItem: prompt.item))
-            )
-        } else {
-            ScrollView(.vertical) {
-                textBitView(bit: bit, prompt: prompt)
+        ScrollView(.vertical) {
+            textBitView(bit: bit, prompt: prompt)
 
-            }
-                .padding()
-                .background(in: Rectangle())
-                .backgroundStyle(style)
         }
-
+            .padding()
+            .background(in: Rectangle())
+            .backgroundStyle(style)
     }
-
 }
 struct TestSnapshotView : View {
     let testSnapshot: Container<Test.Snapshot?>
