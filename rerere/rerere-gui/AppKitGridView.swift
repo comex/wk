@@ -90,7 +90,9 @@ class TextBitCellView: NSView {
 
     private func commonInit() {
         wantsLayer = true
-        layer?.masksToBounds = false
+        //print("layer=\(layer)")
+        //layer?.masksToBounds = true // XXX
+        //layer?.isOpaque = true
 
         // Drop shadow on the cell (matches .shadow(radius: 2, x: 2, y: 2))
         layer?.shadowRadius = 2
