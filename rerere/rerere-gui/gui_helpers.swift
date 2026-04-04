@@ -1,5 +1,6 @@
 import SwiftUI
 struct WrappingLayout: Layout {
+    let verbosity = 1
     // This seems like we'll call sizeThatFits so many times...
     typealias Cache = () // ...
     let jitterSeed: Int?
@@ -12,9 +13,9 @@ struct WrappingLayout: Layout {
         subviews: Subviews,
         cache: inout Cache
     ) -> CGSize {
-        print("sizeThatFits(\(proposal))")
+        if verbosity >= 1 { print("sizeThatFits(\(proposal))") }
         let ret = placeImpl(in: nil, proposal: proposal, subviews: subviews)
-        print("    --> \(ret)")
+        if verbosity >= 1 { print("    --> \(ret)") }
         return ret
     }
 
@@ -25,7 +26,7 @@ struct WrappingLayout: Layout {
         subviews: Subviews,
         cache: inout Cache
     ) {
-        print("placeSubviews(in \(bounds), proposal: \(proposal))")
+        if verbosity >= 1 { print("placeSubviews(in \(bounds), proposal: \(proposal))") }
         _ = placeImpl(in: bounds, proposal: proposal, subviews: subviews)
         
     }
@@ -77,7 +78,9 @@ struct WrappingLayout: Layout {
             let proposal = ProposedViewSize(width: width, height: remHeight)
             
             let subSize = subview.sizeThatFits(proposal)
-            print("       subviews[\(subviewIdx)].sizeThatFits(\(proposal)) => \(subSize)")
+            if verbosity >= 1 {
+                print("       subviews[\(subviewIdx)].sizeThatFits(\(proposal)) => \(subSize)")
+            }
             
             if subSize.width > width - xRight {
                 flushRow()
@@ -89,8 +92,12 @@ struct WrappingLayout: Layout {
             xRight += subSize.width
         }
         flushRow()
-        return CGSize(width: maxXRight, height: yOffset)
-        
+        if let height = proposal.height { yOffset = max(yOffset, height) }
+        //if let height = proposal.height { yOffset = height }
+        return CGSize(
+            width: proposal.width ?? maxXRight,
+            height: yOffset
+        )
     }
 }
 

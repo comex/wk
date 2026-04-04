@@ -14,7 +14,7 @@ struct rerere_guiApp: App {
         WindowGroup {
             ContentView(test: buildTestTest(itemKind: .word, name: "貰う", testKind: .readingToMeaning))
         }
-            .windowResizability(.contentSize)
+            .windowResizability(.contentMinSize)
             // setting an explicit defaultSize is needed to avoid insanity - todo: radar
             .defaultSize(width: 300, height: 100)
     }

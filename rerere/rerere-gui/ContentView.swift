@@ -37,7 +37,7 @@ struct BasicTextView: View {
     var bgColor: Color = defaultBitBackground
     @State var hover: Bool = false
     var body: some View {
-        let _ = print("BVFO render text=\(text) hover=\(hover)")
+        //let _ = print("BVFO render text=\(text) hover=\(hover)")
         let realBgColor: Color = !hover ? bgColor :
             bgColor.mix(with: .white, by: 0.2)
         
@@ -59,7 +59,7 @@ struct BasicTextView: View {
             .padding(2)
             .clipped().shadow(radius: 2, x: 2, y: 2)
             .scaleEffect(hover ? 1.1 : 1.0)
-            .zIndex(hover ? 2.0 : 1.0)
+            //.zIndex(hover ? 2.0 : 1.0) // this causes the layout to invalidate!
             .animation(.easeIn.speed(hover ? 99.0 : 3.0) , value: hover)
             .trackHover($hover)
     
@@ -82,8 +82,10 @@ struct IngsListView: View {
     let children: [IdentifiableWrapper<TextBit>]
     var body: some View {
         WrappingLayout(jitterSeed: 0) { //bits.first?.text.hashValue ?? 0) {
-            ForEach(children) { child in
-                textBitView(bit: child.t, prompt: prompt)
+            ForEach(0..<100) { i in
+                ForEach(children) { child in
+                    textBitView(bit: child.t, prompt: prompt)
+                }
             }
         }
     }
@@ -114,12 +116,14 @@ struct PromptOutputView: View {
         let bit = TextBit.bitForPromptOutput(prompt)
         
         let style: AnyShapeStyle = style(forItem: prompt.item)
-        ScrollView {
+        ScrollView(.vertical) {
             textBitView(bit: bit, prompt: prompt)
+           
         }
             .padding()
             .background(in: Rectangle())
             .backgroundStyle(style)
+            
 
     }
     
@@ -131,6 +135,7 @@ struct TestSnapshotView : View {
             if let snapshot = self.testSnapshot.value {
                 if let prompt = snapshot.state.curPrompt {
                     PromptOutputView(prompt: prompt)
+                       // .drawingGroup(opaque: false)
                     AnswerInputView(expectedInput: prompt.expectedInput)
                 }
                 Text("Boo \(snapshot.counterForDebugging)")
