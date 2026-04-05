@@ -181,7 +181,12 @@ func getWkDir() -> String {
 }
 
 final actor LogTxtManager {
+    let useFakeLog: Bool
     var lastAppend: (test: Test, appendedData: Data)? = nil
+    
+    init(useFakeLog: Bool) {
+        self.useFakeLog = useFakeLog
+    }
 
     func removeFromLog(test: Test) throws {
         if self.lastAppend?.test !== test {
@@ -219,7 +224,7 @@ final actor LogTxtManager {
 
     func openLogTxt<R>(write: Bool, cb: (FileHandle) throws -> R) throws -> R {
         // todo: clowd!
-        let url = URL(fileURLWithPath: Subete.basePath + "/log.txt")
+        let url = URL(fileURLWithPath: Subete.basePath + "/" + (useFakeLog ? "log-fake.txt" : "log.txt"))
         let fh: FileHandle
         if write {
             fh = try FileHandle(forUpdating: url)
@@ -345,17 +350,21 @@ actor SRSManager {
 struct SubeteSettings: Sendable, Equatable {
     let useFakeLog: Bool
 }
-final class SubeteSettingsWrapper: Sendable {
+
+final class DidInit: Sendable {
+    let itemData: ItemData
     let settings: SubeteSettings
-    init(settings: SubeteSettings) { self.settings = settings }
+    init(itemData: ItemData, settings: SubeteSettings) {
+        self.itemData = itemData
+        self.settings = settings
+    }
 }
 
 struct Subete: Sendable, ~Copyable {
-    static let itemData: ItemData = itemDataLazy.load()!
-    static let itemDataLazy = AtomicLazyReference<ItemData>()
-    static let settings: SubeteSettings = settingsLazy.load()!.settings
-    static let settingsLazy = AtomicLazyReference<SubeteSettingsWrapper>()
-    static let initMutex = AsyncMutex(())
+    static let didInit = AtomicLazyReference<DidInit>()
+    static let itemData = didInit.load()!.itemData
+    static let settings: SubeteSettings = didInit.load()!.settings
+    static let initMutex = AsyncMutex<(ItemData, SubeteSettings)?>(nil)
     static let retrep = RetiredReplace()
     static let basePath = getWkDir()
     static let srsManager = SRSManager()
@@ -374,13 +383,13 @@ struct Subete: Sendable, ~Copyable {
     static func initialize(useFakeLog: Bool = false) async {
         await Subete.initMutex.withLock({ (_) async in
             let mySettings = SubeteSettings(useFakeLog: useFakeLog)
-            let storedSettingsWrapper = Subete.settingsLazy.storeIfNil(SubeteSettingsWrapper(settings: mySettings))
-            // any prior initialize calls must have used the same settings:
-            ensure(storedSettingsWrapper.settings == mySettings)
 
-            if Subete.itemDataLazy.load() == nil {
+            if let didInit = Subete.didInit.load() {
+                // any prior initialize calls must have used the same settings:
+                ensure(didInit.settings == mySettings)
+            } else {
                 let itemData = await ItemData()
-                Subete.itemDataLazy.initializeUnique(itemData)
+                Subete.didInit.initializeUnique(DidInit(itemData: itemData, settings: mySettings))
             }
         }, preWait: {
             print("Subete.initialize waiting for other task")
@@ -587,6 +596,9 @@ enum TextBit {
         } else {
             return []
         }
+    }
+    static func allBits(for item: Item) -> [TextBit] {
+        return [bitForName(of: item)] + bitsForAllIngs(of: item)
     }
 
     static func bitForPromptOutput(_ prompt: Prompt) -> TextBit {

@@ -12,7 +12,9 @@ let vocabBlue = Color(red: 0.63, green: 0.00, blue: 0.94)
 let lightGreen = Color(red: 0.4627, green: 0.8392, blue: 0.5)
 let meaningBitBackground = Color(red: 0.16, green: 0.48, blue: 0.65)
 let readingBitBackground = Color(red: 1.00, green: 0.17, blue: 0.33)
+let itemNameBitBackground = Color(red: 0.57, green: 0.49, blue: 0.16)
 let defaultBitBackground = Color.black.opacity(0)
+
 struct IdentifiableWrapper<T>: Identifiable {
     typealias ID = Int
     let t: T
@@ -32,21 +34,24 @@ extension View {
         }
     }
 }
-struct BasicTextView: View {
+struct BitBoxView: View {
     let text: String
-    var bgColor: Color = defaultBitBackground
+    let bgColor: Color
+    let style: TextBitsStyle
+    var isCharacter: Bool = false
     @State var hover: Bool = false
     var body: some View {
         //let _ = print("BVFO render text=\(text) hover=\(hover)")
         let realBgColor: Color = !hover ? bgColor :
             bgColor.mix(with: .white, by: 0.2)
+        let isBigCharacter = isCharacter && style == .prompt
         
         Text(text)//"test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test ")
-            .font(Font.system(size: 20))
+            .font(Font.system(size: isBigCharacter ? 40 : 20))
             
             .foregroundStyle(.white.shadow(.drop(radius: 0, x: 2, y: 2)))
             .textSelection(.enabled)
-            
+            .frame(maxWidth: isBigCharacter ? .infinity : nil)
             .padding(5)
             .background {
                 RoundedRectangle(cornerRadius: 5)
@@ -57,87 +62,144 @@ struct BasicTextView: View {
                 
             }
             .padding(2)
-            //.clipped() // this doesn't seem to help
+            //.clipped() // this doesn't seem to help perf
             .shadow(radius: 2, x: 2, y: 2)
             .scaleEffect(hover ? 1.1 : 1.0)
             //.zIndex(hover ? 2.0 : 1.0) // this causes the layout to invalidate on hover, we don't need it
             .animation(.easeIn.speed(hover ? 99.0 : 3.0) , value: hover)
             .trackHover($hover)
             //.drawingGroup(opaque: false) // messes up color
-    
         
             
     }
 }
 
 
-private func style(forItem item: Item) -> AnyShapeStyle {
-    switch type(of: item).kind {
-        case .word: AnyShapeStyle(vocabBlue.gradient)
-        default: AnyShapeStyle(lightGreen.gradient)
-    }
+
+
+enum TextBitsStyle {
+    case line
+    case prompt
 }
 
-
 struct IngsListView: View {
-    let prompt: Prompt
     let superkind: Ing.Superkind
     let children: [IdentifiableWrapper<TextBit>]
+    let style: TextBitsStyle
     @State private var numChildren: Int = 100
     var body: some View {
-        WrappingLayout(jitterSeed: 0) { //bits.first?.text.hashValue ?? 0) {
+        if style == .line {
             ForEach(children) { child in
-                textBitView(bit: child.t, prompt: prompt)
+                textBitView(bit: child.t, style: style)
+            }
+        } else {
+            WrappingLayout { //bits.first?.text.hashValue ?? 0) {
+                ForEach(children) { child in
+                    textBitView(bit: child.t, style: style)
+                }
             }
         }
     }
 }
 @MainActor @ViewBuilder
-private func textBitView(bit: TextBit, prompt: Prompt) -> some View {
+private func textBitView(bit: TextBit, style: TextBitsStyle) -> some View {
     switch bit {
     case .ing(let ing, item: _):
         let bgColor = switch ing.superkind {
             case .meaning: meaningBitBackground
             case .reading, .flashcardBack: readingBitBackground
         }
-        BasicTextView(text: ing.text, bgColor: bgColor)
+        BitBoxView(text: ing.text, bgColor: bgColor, style: style)
     case .character(item: let item):
-        BasicTextView(text: item.character)
+    
+        BitBoxView(text: item.character, bgColor: itemNameBitBackground, style: style, isCharacter: true)
     case .flashcardFront(item: let item):
-        BasicTextView(text: item.front)
+        BitBoxView(text: item.front, bgColor: itemNameBitBackground, style: style)
     case .unknownItemName(item: let item):
-        BasicTextView(text: item.name)
+        BitBoxView(text: item.name, bgColor: itemNameBitBackground, style: style)
     case .ingsList(superkind: let superkind, children: let children):
         //let xchildren = Array(repeating: children, count: 100).flatMap { $0 }
-        IngsListView(prompt: prompt, superkind: superkind, children: identifiableWrapArray(children))
+
+        IngsListView(superkind: superkind, children: identifiableWrapArray(children), style: style)
+            //.border(Color.black, width: 1)
     }
 }
 struct PromptOutputView: View {
     let prompt: Prompt
+    let showEverything: Bool
     var body: some View {
         let _ = print("POV render")
-        let bit = TextBit.bitForPromptOutput(prompt)
-
-        let style: AnyShapeStyle = style(forItem: prompt.item)
-        ScrollView(.vertical) {
-            textBitView(bit: bit, prompt: prompt)
-
+        let bits = showEverything ? TextBit.allBits(for: prompt.item) : [TextBit.bitForPromptOutput(prompt)]
+        let shapeStyle: AnyShapeStyle = style(for: prompt.item)
+        
+        VStack {
+            ForEach(identifiableWrapArray(bits)) { bit in
+                textBitView(bit: bit.t, style: .prompt)
+            }
         }
             .padding()
             .background(in: Rectangle())
-            .backgroundStyle(style)
+            .backgroundStyle(shapeStyle)
+
+    }
+    private func style(for item: Item) -> AnyShapeStyle {
+        switch type(of: item).kind {
+            case .word: AnyShapeStyle(vocabBlue.gradient)
+            default: AnyShapeStyle(lightGreen.gradient)
+        }
     }
 }
-struct ResponseAcknowledgementView : View {
+struct AlternativesSectionView: View {
+    let sect: AlternativesSection
+    @State private var expanded: Bool = true
+    var body: some View {
+        let _ = print(sect)
+        let label = switch sect.kind {
+        case .meaningAlternatives:
+            "Meaning Alternatives"
+        case .readingAlternatives:
+            "Reading Alternatives"
+        case .sameReading:
+            "Same Reading"
+        case .similarMeaning:
+            "Similar Meaning"
+        }
+        DisclosureGroup(isExpanded: $expanded) {
+            ForEach(identifiableWrapArray(sect.items)) { item in
+                ItemLineView(item: item.t)
+            }
+        } label: {
+            Label(label, systemImage: "wat")
+                .labelStyle(.titleOnly)
+                .onTapGesture {
+                    expanded.toggle()
+                }
+        }
+    }
+}
+struct ItemLineView: View {
+    let item: Item
+    var body: some View {
+        let bits: [TextBit] = TextBit.allBits(for: item)
+
+        WrappingLayout {
+            ForEach(identifiableWrapArray(bits)) { bit in
+                textBitView(bit: bit.t, style: .line)
+            }
+        }
+        
+    }
+}
+
+struct ResponseAcknowledgementView: View {
     let responseAcknowledgement: ResponseAcknowledgement
     var body: some View {
-        switch responseAcknowledgement.outcome {
-        case .wrong:
-            Text("Wrong")
-        case .right:
-            Text("Right")
-        case .mu:
-            Text("Mu")
+        VStack {
+            ForEach(identifiableWrapArray(responseAcknowledgement.alternativesSections)) { sect in
+                if !sect.t.items.isEmpty {
+                    AlternativesSectionView(sect: sect.t)
+                }
+            }
         }
     }
 }
@@ -149,10 +211,12 @@ struct TestSnapshotView : View {
         VStack {
             if let snapshot = self.testSnapshot.value {
                 if let prompt = snapshot.state.curPrompt {
-                    PromptOutputView(prompt: prompt)
-                       // .drawingGroup(opaque: false)
-                    if let lastResponseAcknowledgement = snapshot.lastResponseAcknowledgement {
-                        ResponseAcknowledgementView(responseAcknowledgement: lastResponseAcknowledgement)
+                    ScrollView(.vertical) {
+                        PromptOutputView(prompt: prompt, showEverything: snapshot.lastResponseAcknowledgement != nil)
+                           // .drawingGroup(opaque: false)
+                        if let lastResponseAcknowledgement = snapshot.lastResponseAcknowledgement {
+                            ResponseAcknowledgementView(responseAcknowledgement: lastResponseAcknowledgement)
+                        }
                     }
                     AnswerInputView(expectedInput: prompt.expectedInput, submitCallback: submitCallback)
                         .padding(.horizontal, 4)
@@ -298,13 +362,11 @@ struct ContentView: View {
 
     //ContentView(test: buildTestTest(itemKind: .word, name: "貰う", testKind: .meaningToReading))
         //.containerRelativeFrame([.horizontal])
-    let test = buildTestTest(itemKind: .word, name: "貰う", testKind: .meaningToReading)
-    
-    ResponseAcknowledgementView(responseAcknowledgement: ResponseAcknowledgement(question: Question, prompt: <#T##Prompt#>, outcome: <#T##TestOutcome#>, existingOutcome: <#T##TestOutcome?#>, qual: <#T##Int#>, alternativesSections: <#T##[AlternativesSection]#>, srsUpdate: <#T##SRSUpdate#>)
+    ContentView(test: buildTestTest(itemKind: .word, name: "貰う", testKind: .meaningToReading, input: "asdf"))
     
 }
 
-func buildTestTest(itemKind: ItemKind, name: String, testKind: TestKind) -> Test {
+func buildTestTest(itemKind: ItemKind, name: String, testKind: TestKind, input: String? = nil) -> Test {
     blockOnLikeYoureNotSupposedTo {
         await Subete.initialize(useFakeLog: true)
 
@@ -312,6 +374,7 @@ func buildTestTest(itemKind: ItemKind, name: String, testKind: TestKind) -> Test
         let question = Question(item: item, testKind: testKind)
         let testSession = TestSession(forSingleQuestion: question)
         let test = await Test(question: question, testSession: testSession)
+        if let input { try! await test.handlePromptResponse(input: input) }
         return test
     }
 }

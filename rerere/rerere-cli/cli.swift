@@ -144,7 +144,7 @@ struct CLI {
     }
  
     func formatItemFull(_ item: Item, colorful: Bool) -> String {
-        let bits: [TextBit] = [TextBit.bitForName(of: item)] + TextBit.bitsForAllIngs(of: item)
+        let bits: [TextBit] = TextBit.allBits(for: item)
         return bits.map { format(bit: $0, colorful: colorful) }.joined(separator: " ")
     }
 
