@@ -181,83 +181,126 @@ func getWkDir() -> String {
 }
 
 final actor LogTxtManager {
-    var linesAppendedToLog: [Test.Id: Data] = [:]
-    let presenter: Presenter
-    let coordinator: NSFileCoordinator
+    var linesAppendedToLog: AsyncMutex<[Test.Id: Data]>
     let theURLDontUseDirectly: URL
+    var presenter: Presenter
     
     init(useFakeLog: Bool) {
+        self.linesAppendedToLog = AsyncMutex([:])
         self.theURLDontUseDirectly = URL(fileURLWithPath: Subete.basePath + "/" + (useFakeLog ? "log-fake.txt" : "log.txt"))
-        self.presenter = Presenter(manager: self)
-        self.coordinator = NSFileCoordinator(filePresenter: self.presenter)
+        self.presenter = Presenter(url: self.theURLDontUseDirectly)
     }
 
     func removeFromLog(test: Test) async throws {
-        guard let appendedData = linesAppendedToLog[test.uniqueId] else {
-            throw MyError("removeFromLog when we did not append")
-        }
-        try await self.openLogTxt(write: true) { (url: URL) throws in
-            // Fast path if it's the last thing in the file.
-            let fh: FileHandle = try FileHandle(forUpdating: url)
-            let len = try fh.seekToEnd()
-            if len >= appendedData.count {
-                let truncOffset = len - UInt64(appendedData.count)
-                try fh.seek(toOffset: truncOffset)
-                let actualData = try fh.readToEnd()
-                if actualData == appendedData {
-                    fh.truncateFile(atOffset: truncOffset)
-                    return
+        try await self.linesAppendedToLog.withLock { @Sendable (linesAppendedToLog) in
+            guard let appendedData = linesAppendedToLog[test.uniqueId] else {
+                throw MyError("removeFromLog when we did not append")
+            }
+            try await self.openLogTxt(write: true) { @Sendable (url: URL) throws in
+                // Fast path if it's the last thing in the file.
+                let fh: FileHandle = try FileHandle(forUpdating: url)
+                let len = try fh.seekToEnd()
+                if len >= appendedData.count {
+                    let truncOffset = len - UInt64(appendedData.count)
+                    try fh.seek(toOffset: truncOffset)
+                    let actualData = try fh.readToEnd()
+                    if actualData == appendedData {
+                        fh.truncateFile(atOffset: truncOffset)
+                        return
+                    }
                 }
+        
+                // Otherwise, is it anywhere in the file?
+                try fh.seek(toOffset: 0)
+                let entireContents: Data = try fh.readToEnd() ?? Data()
+                let newContents = entireContents.replacing(appendedData, with: Data())
+                if entireContents.count - newContents.count <= 0 {
+                    throw MyError("removeFromLog but it was not in the log: \(appendedData)")
+                }
+                if entireContents.count - newContents.count > appendedData.count {
+                    // Generally this shouldn't happen due to the timestamps, though it could theoretically happen if there were multiple identical
+                    // tests in one second.
+                    throw MyError("removeFromLog but it was in the log multiple times: \(appendedData)")
+                }
+                try fh.close()
+                try newContents.write(to: url, options: [.atomic])
             }
-    
-            // Otherwise, is it anywhere in the file?
-            try fh.seek(toOffset: 0)
-            let entireContents: Data = try fh.readToEnd() ?? Data()
-            let newContents = entireContents.replacing(appendedData, with: Data())
-            if entireContents.count - newContents.count <= 0 {
-                throw MyError("removeFromLog but it was not in the log: \(appendedData)")
-            }
-            if entireContents.count - newContents.count > appendedData.count {
-                // Generally this shouldn't happen due to the timestamps, though it could theoretically happen if there were multiple identical
-                // tests in one second.
-                throw MyError("removeFromLog but it was in the log multiple times: \(appendedData)")
-            }
-            try fh.close()
-            try newContents.write(to: url, options: [.atomic])
+            linesAppendedToLog[test.uniqueId] = nil
         }
     }
 
     func addToLog(test: Test) async throws {
         let toAppend = Data((await test.result!.getRecordLine() + "\n").utf8)
-        try await self.openLogTxt(write: true) { (url: URL) throws in
-            let fh: FileHandle = try FileHandle(forUpdating: url)
-            try fh.seekToEnd()
-            try fh.write(contentsOf: toAppend)
-            self.linesAppendedToLog[test.uniqueId] = toAppend
+        try await self.linesAppendedToLog.withLock { @Sendable (linesAppendedToLog) in
+            if linesAppendedToLog[test.uniqueId] != nil {
+                throw MyError("addToLog but it was already appended: \(toAppend)")
+            }
+            try await self.openLogTxt(write: true) { (url: URL) throws in
+                let fh: FileHandle = try FileHandle(forUpdating: url)
+                try fh.seekToEnd()
+                try fh.write(contentsOf: toAppend)
+            }
+            linesAppendedToLog[test.uniqueId] = toAppend
         }
     }
 
-    func openLogTxt<R>(write: Bool, cb: (URL) async throws -> R) async throws -> R {
-        let url = self.theURLDontUseDirectly
+    struct OLTState<R> {
+        var errorList: [any Error] = []
+        var successVal: R? = nil
+    }
+    func openLogTxt<R: Sendable>(write: Bool, cb: @Sendable (URL) async throws -> R) async throws -> R {
+        // NSFileCoordinator has no way to go async within a coordination block!
+        // There is only a version that asyncly waits to _start_ the block.
+        // So we need a dedicated thread.
+        let presenter = self.presenter
         return try await withCheckedThrowingContinuation { (cc: CheckedContinuation<R, any Error>) -> Void in
-            let intents: [NSFileAccessIntent] = [write ? .writingIntent(with: url) : .readingIntent(with: url)]
-            self.coordinator.coordinate(with: intents, queue: self.presenter.presentedItemOperationQueue) { (err: (any Error)?) in
-                if let err {
-                    cc.resume(throwing: err)
-                    return
+            withoutActuallyEscaping(cb) { (cb2) in
+                Thread.detachNewThread {
+                    let coordinator = NSFileCoordinator(filePresenter: presenter)
+
+                    let state: Mutex<OLTState<R>> = .init(.init())
+                    let accessor: (URL) -> Void = { (url) in
+                        blockOnLikeYoureNotSupposedTo { @Sendable () async -> Void in
+                            do {
+                                let res = try await cb2(url)
+                                state.withLock {
+                                    ensure($0.successVal == nil)
+                                    $0.successVal = res
+                                }
+                            } catch let e {
+                                state.withLock { $0.errorList.append(e) }
+                            }
+                        }
+                    }
+                    var errOut: NSError? = nil
+                    if write {
+                        coordinator.coordinate(writingItemAt: self.theURLDontUseDirectly, options: [], error: &errOut, byAccessor: accessor)
+                    } else {
+                        coordinator.coordinate(readingItemAt: self.theURLDontUseDirectly, options: [], error: &errOut, byAccessor: accessor)
+                    }
+                    state.withLock { (state) in
+                        if let errOut { state.errorList.append(errOut) }
+                        if let e = state.errorList.first {
+                            print("errorList: \(state.errorList)")
+                            cc.resume(throwing: e)
+                        } else if let r = state.successVal {
+                            cc.resume(returning: r)
+                        } else {
+                            cc.resume(throwing: MyError("no error but the block was not called"))
+                        }
+                    }
                 }
-                
-                
             }
         }
+      
     }
     
-    final class Presenter: NSObject, NSFilePresenter {
+    final class Presenter: NSObject, NSFilePresenter, Sendable {
         let presentedItemURL: URL?
         let presentedItemOperationQueue: OperationQueue = .init()
         
-        init(manager: LogTxtManager) {
-            self.presentedItemURL = manager.theURLDontUseDirectly
+        init(url: URL) {
+            self.presentedItemURL = url
         }
     }
 }
