@@ -113,24 +113,24 @@ final class Presenter: NSObject, NSFilePresenter, Sendable {
 struct ContentView: View {
     @State var state = MyState()
     @State private var isImporting: Bool = false
-    func log(_ message: String) {
-        print("\(message)")
-        self.state.logger.yield(message)
-    }
+
     var body: some View {
+    
         VStack {
-            ForEach(state.logMessages, id: \.id) { message in
-                Text("\(message.id). \(message.msg)")
+            ScrollView {
+                ForEach(state.logMessages, id: \.id) { message in
+                    Text("\(message.id). \(message.msg)")
+                }
             }
             Button("Select File") {
                 self.isImporting = true
             }.fileImporter(isPresented: $isImporting, allowedContentTypes: [.item]) { result in
                 switch result {
                 case .success(let url):
-                    self.log("importing: \(url.path)")
+                    self.state.logger.yield("importing: \(url.path)")
                     self.state.presenter = Presenter(url: url, logger: self.state.logger)
                 case .failure:
-                    self.log("import failed")
+                    self.state.logger.yield("import failed")
                 }
             }
             Button("Append Something") {
@@ -138,42 +138,58 @@ struct ContentView: View {
                 
             }
             Button("Read Something") {
-                self.coordinateSomething(write: true)
+                self.coordinateSomething(write: false)
             }
         }
         .padding()
     }
     
     func coordinateSomething(write: Bool) {
+        let id = Int.random(in: 0..<1000000)
+        let logger = self.state.logger
+        @Sendable func log(_ message: String) {
+            let message = "\(id) \(message)"
+            print("\(message)")
+            logger.yield(message)
+        }
         guard let presenter = self.state.presenter, let baseURL = presenter.presentedItemURL else {
-            self.log("no presenter/url")
+            log("no presenter/url")
             return
         }
         Task {
-            self.log("will coordinateAsync")
+            log("will coordinateAsync")
             do {
                 guard baseURL.startAccessingSecurityScopedResource() else {
-                    self.log("startAccessingSecurityScopedResource failed")
+                    log("startAccessingSecurityScopedResource failed")
                     return
                 }
-                defer { baseURL.stopAccessingSecurityScopedResource() }
-                try await coordinateAsync(url: baseURL, filePresenter: presenter, write: write) { url in
-                    await self.log("coordinateAsync callback")
+                defer {
+                    print("stopAccessingSecurityScopedResource")
+                    baseURL.stopAccessingSecurityScopedResource()
+                }
+                try await coordinateAsync(url: baseURL, filePresenter: presenter, write: write, idForDebugging: id) { url in
+                    log("coordinateAsync callback with url=\(url)")
                     if write {
                         let fh = try FileHandle(forUpdating: url)
                         try fh.seekToEnd()
-                        try fh.write(contentsOf: "Hello\n".data(using: .utf8)!)
+                        
+                        let data = "\(id)\n".data(using: .utf8)!
+                        for c in data {
+                            log("wrote: \(String(data: Data([c]), encoding: .utf8)!)")
+                            try fh.write(contentsOf: Data([c]))
+                            try! await Task.sleep(for: .milliseconds(200))
+                        }
                         try fh.close()
                     } else {
                         let fh = try FileHandle(forReadingFrom: url)
-                        
-
                         try fh.close()
                     }
+                    log("coordinateAsync callback finished r/w")
                 }
+                log("coordinateAsync finished")
                 
             } catch let e {
-                self.log("coordinateAsync error: \(e)")
+                log("coordinateAsync error: \(e)")
             }
         }
 
