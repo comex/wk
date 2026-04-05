@@ -537,7 +537,6 @@ struct Rerere: AsyncParsableCommand {
     }
 
     func run() async throws {
-    
         await Subete.initialize()
         let path = "\(Subete.basePath)/sess.json"
         let url = URL(fileURLWithPath: path)

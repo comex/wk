@@ -9,10 +9,12 @@
 import SwiftUI
 
 let vocabBlue = Color(red: 0.63, green: 0.00, blue: 0.94)
+let kanjiPink = Color(red: 1.00, green: 0.00, blue: 0.67)
 let lightGreen = Color(red: 0.4627, green: 0.8392, blue: 0.5)
 let meaningBitBackground = Color(red: 0.16, green: 0.48, blue: 0.65)
 let readingBitBackground = Color(red: 1.00, green: 0.17, blue: 0.33)
-let itemNameBitBackground = Color(red: 0.57, green: 0.49, blue: 0.16)
+//let itemNameBitBackground = Color(red: 0.57, green: 0.49, blue: 0.16)
+let itemNameBitBackgroundForLine = Color(red: 0.44, green: 0.23, blue: 0.55)
 let defaultBitBackground = Color.black.opacity(0)
 
 struct IdentifiableWrapper<T>: Identifiable {
@@ -34,29 +36,51 @@ extension View {
         }
     }
 }
+
+func containsJapanese(_ text: String) -> Bool {
+    text.unicodeScalars.contains {
+        // slightly overinclusive but it doesn't matter
+        $0.value >= 0x3000 && $0.value <= 0x9fff
+    }
+}
+
 struct BitBoxView: View {
     let text: String
     let bgColor: Color
     let style: TextBitsStyle
-    var isCharacter: Bool = false
+    var isFullWidth: Bool = false
     @State var hover: Bool = false
     var body: some View {
         //let _ = print("BVFO render text=\(text) hover=\(hover)")
-        let realBgColor: Color = !hover ? bgColor :
-            bgColor.mix(with: .white, by: 0.2)
-        let isBigCharacter = isCharacter && style == .prompt
+        let bgColor: Color = {
+            var c = self.bgColor
+            if hover { c = c.mix(with: .white, by: 0.2) }
+            return c
+        }()
+        
+        let size: CGFloat = if style == .line {
+            20
+        } else {
+            if isFullWidth {
+                60
+            } else if containsJapanese(text) {
+                40
+            } else {
+                25
+            }
+        }
         
         Text(text)//"test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test test ")
-            .font(Font.system(size: isBigCharacter ? 40 : 20))
+            .font(Font.system(size: size))
             
             .foregroundStyle(.white.shadow(.drop(radius: 0, x: 2, y: 2)))
             .textSelection(.enabled)
-            .frame(maxWidth: isBigCharacter ? .infinity : nil)
+            .frame(maxWidth: isFullWidth ? .infinity : nil)
             .padding(5)
             .background {
                 RoundedRectangle(cornerRadius: 5)
 
-                .fill(realBgColor)
+                .fill(bgColor)
                 .stroke(.mint, lineWidth: 1)
                 .animation(.easeIn.speed(hover ? 99.0 : 3.0) , value: hover)
                 
@@ -103,6 +127,7 @@ struct IngsListView: View {
 }
 @MainActor @ViewBuilder
 private func textBitView(bit: TextBit, style: TextBitsStyle) -> some View {
+    let itemNameBitBackground: Color = style == .line ? itemNameBitBackgroundForLine : Color.black.opacity(0)
     switch bit {
     case .ing(let ing, item: _):
         let bgColor = switch ing.superkind {
@@ -111,8 +136,7 @@ private func textBitView(bit: TextBit, style: TextBitsStyle) -> some View {
         }
         BitBoxView(text: ing.text, bgColor: bgColor, style: style)
     case .character(item: let item):
-    
-        BitBoxView(text: item.character, bgColor: itemNameBitBackground, style: style, isCharacter: true)
+        BitBoxView(text: item.character, bgColor: itemNameBitBackground, style: style, isFullWidth: style == .prompt)
     case .flashcardFront(item: let item):
         BitBoxView(text: item.front, bgColor: itemNameBitBackground, style: style)
     case .unknownItemName(item: let item):
@@ -127,14 +151,19 @@ private func textBitView(bit: TextBit, style: TextBitsStyle) -> some View {
 struct PromptOutputView: View {
     let prompt: Prompt
     let showEverything: Bool
+
     var body: some View {
         let _ = print("POV render")
-        let bits = showEverything ? TextBit.allBits(for: prompt.item) : [TextBit.bitForPromptOutput(prompt)]
         let shapeStyle: AnyShapeStyle = style(for: prompt.item)
-        
+        let bits = identifiableWrapArray(TextBit.allBits(for: prompt.item))
+
         VStack {
-            ForEach(identifiableWrapArray(bits)) { bit in
-                textBitView(bit: bit.t, style: .prompt)
+            ForEach(bits) { bit in
+                let visible = showEverything || TextBit.shouldShowTopLevelBitForPromptOutput(bit: bit.t, prompt: prompt)
+                if visible {
+                    textBitView(bit: bit.t, style: .prompt)
+                        .animation(.easeInOut(duration: 0.05), value: showEverything)
+                }
             }
         }
             .padding()
@@ -142,9 +171,11 @@ struct PromptOutputView: View {
             .backgroundStyle(shapeStyle)
 
     }
+
     private func style(for item: Item) -> AnyShapeStyle {
         switch type(of: item).kind {
             case .word: AnyShapeStyle(vocabBlue.gradient)
+            case .kanji: AnyShapeStyle(kanjiPink.gradient)
             default: AnyShapeStyle(lightGreen.gradient)
         }
     }
@@ -361,6 +392,7 @@ struct ContentView: View {
 #Preview {
 
     ContentView(test: buildTestTest(itemKind: .word, name: "貰う", testKind: .meaningToReading, input: "asdf"))
+    //ContentView(test: buildTestTest(itemKind: .kanji, name: "貰", testKind: .characterToRM, input: nil))
     
 }
 

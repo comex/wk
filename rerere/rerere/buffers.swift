@@ -194,12 +194,10 @@ struct TotallySendable<T: ~Copyable>: ~Copyable, @unchecked Sendable {
     let value: T
 }
 
-/*
-class Box<T: ~Copyable> {
+final class Box<T: ~Copyable> {
     let value: T
     init(value: consuming T) { self.value = value }
 }
-*/
 
 typealias BlockOnCallback<T: ~Copyable> = () async throws -> sending T
 func blockOnLikeYoureNotSupposedTo<T: ~Copyable>(_ cb: sending BlockOnCallback<T>) rethrows -> sending T {

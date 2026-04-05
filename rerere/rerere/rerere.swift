@@ -600,18 +600,23 @@ enum TextBit {
     static func allBits(for item: Item) -> [TextBit] {
         return [bitForName(of: item)] + bitsForAllIngs(of: item)
     }
-
-    static func bitForPromptOutput(_ prompt: Prompt) -> TextBit {
+    static func shouldShowTopLevelBitForPromptOutput(bit: TextBit, prompt: Prompt) -> Bool {
         switch prompt.output {
         case .meanings:
-            return bitForMeanings(of: prompt.item as! NormalItem)
+            if case .ingsList(superkind: .meaning, _) = bit { return true }
         case .readings:
-            return bitForReadings(of: prompt.item as! NormalItem)
+            if case .ingsList(superkind: .reading, _) = bit { return true }
         case .flashcardFront:
-            return .flashcardFront(item: prompt.item as! Flashcard)
+            if case .flashcardFront(_) = bit { return true }
         case .character:
-            return .character(item: prompt.item as! NormalItem)
+            if case .character(_) = bit { return true }
         }
+        return false
+    }
+    static func bitForPromptOutput(_ prompt: Prompt) -> TextBit {
+        let bits = allBits(for: prompt.item).filter { shouldShowTopLevelBitForPromptOutput(bit: $0, prompt: prompt) }
+        ensure(bits.count == 1)
+        return bits[0]
     }
     
 }
