@@ -360,8 +360,6 @@ struct ContentView: View {
 
 #Preview {
 
-    //ContentView(test: buildTestTest(itemKind: .word, name: "貰う", testKind: .meaningToReading))
-        //.containerRelativeFrame([.horizontal])
     ContentView(test: buildTestTest(itemKind: .word, name: "貰う", testKind: .meaningToReading, input: "asdf"))
     
 }

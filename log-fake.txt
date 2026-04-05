@@ -132,3 +132,5 @@
 1775348114:m2r:word:貰う:wrong
 1775348132:r2m:word:貰う:wrong
 1775348271:r2m:word:貰う:wrong
+1775348328:m2r:word:貰う:wrong
+1775364268:r2m:word:貰う:wrong
