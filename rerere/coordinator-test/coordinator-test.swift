@@ -125,36 +125,7 @@ final class Presenter: NSObject, NSFilePresenter, Sendable {
 
         
     }
-    func startMonitoringConflicts() {
-        Task { @MainActor in
-            await self.conflictMonitor.withLock { @MainActor @Sendable _ in
-                let presenter = self.presenter!
 
-                let hasConflicts = withObservationTracking {
-                    presenter.hasConflicts
-                } onChange: {
-                    Task { @MainActor in self.startMonitoringConflicts() }
-                }
-                if hasConflicts {
-                    await self.resolveConflicts()
-                }
-            }
-        }
-    }
-    func resolveConflicts() async {
-        self.log("resolveConflicts")
-        defer { self.log("resolveConflicts out") }
-        if nil == NSFileVersion.unresolvedConflictVersionsOfItem(at: self.presenter!.presentedItemURL!) {
-            self.log("resolveConflicts: there were apparently no conflicts at the start")
-            return
-        }
-        try! await coordinateAsync(url: self.presenter?.presentedItemURL!, filePresenter: self.presenter!, write:  true) { myURL in
-            guard let versions = NSFileVersion.unresolvedConflictVersionsOfItem(at: myURL) else {
-                self.log("resolveConflicts: there were apparently no conflicts after coordinating")
-            }
-        }
-        
-    }
     func log(_ message: String) {
         print("\(message)")
         self.logger.yield(message)
@@ -187,7 +158,7 @@ struct ContentView: View {
 
                     self.state.log("importing: \(url.path)")
                     self.state.presenter = Presenter(url: url, logger: self.state.logger)
-                    self.state.startMonitoringConflicts()
+                    
                     NSFileCoordinator.addFilePresenter(self.state.presenter!)
                     print("==> presenters: \(NSFileCoordinator.filePresenters)")
 
@@ -219,16 +190,24 @@ struct ContentView: View {
             return
         }
         Task {
-            log("will coordinateAsync")
             do {
                 guard baseURL.startAccessingSecurityScopedResource() else {
                     log("startAccessingSecurityScopedResource failed")
                     return
                 }
                 defer {
-                    print("stopAccessingSecurityScopedResource")
+                    log("stopAccessingSecurityScopedResource")
                     baseURL.stopAccessingSecurityScopedResource()
                 }
+                /*
+                let supportedSyncControls = try baseURL.resourceValues(forKeys: [.ubiquitousItemSupportedSyncControlsKey])
+                log("supportedSyncControls=\(supportedSyncControls)")
+                return
+                log("will pauseSyncForUbiquitousItem")
+                try await FileManager.default.pauseSyncForUbiquitousItem(at: baseURL)
+                */
+                log("will coordinateAsync")
+
                 try await coordinateAsync(url: baseURL, filePresenter: nil, write: write, idForDebugging: id) { url in
                     log("coordinateAsync callback with url=\(url)")
                     if write {
