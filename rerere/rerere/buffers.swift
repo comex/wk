@@ -190,13 +190,13 @@ extension AtomicLazyReference {
     }
 }
 
-struct TotallySendable<T: ~Copyable>: ~Copyable, @unchecked Sendable {
-    let value: T
-}
-
 final class Box<T: ~Copyable> {
     let value: T
     init(value: consuming T) { self.value = value }
+}
+
+struct TotallySendable<T: ~Copyable>: ~Copyable, @unchecked Sendable {
+    let value: T
 }
 
 typealias BlockOnCallback<T: ~Copyable> = () async throws -> sending T
@@ -217,4 +217,119 @@ func blockOnLikeYoureNotSupposedTo<T: ~Copyable>(_ cb: sending BlockOnCallback<T
         }
     }
     return t.take()!
+}
+
+private struct CoordinateAsyncState<R: Sendable> {
+    var errorList: [any Error] = []
+    var successVal: R? = nil
+}
+func coordinateAsync<R: Sendable>(url urlOrig: URL, filePresenter: (any NSFilePresenter & Sendable)?, write: Bool, cb: @Sendable (URL) async throws -> R) async throws -> R {
+    // NSFileCoordinator has no way to go async within a coordination block!
+    // There is only a version that asyncly waits to _start_ the block.
+    // So we need a dedicated thread.
+    defer { print("coordinateAsync out") }
+    return try await withoutActuallyEscaping(cb) { (cb2) in
+        return try await withCheckedThrowingContinuation { (cc: CheckedContinuation<R, any Error>) -> Void in
+            print("%% about to detach")
+            withUnsafePointer(to: cb2) { (cb2ptr) in
+                Thread.detachNewThread {
+                    print("%% did detach")
+                    let coordinator = NSFileCoordinator(filePresenter: filePresenter)
+
+                    let state: Mutex<CoordinateAsyncState<R>> = .init(.init())
+                    let accessor: (URL) -> Void = { (url) in
+                        print("%% accessor start")
+                        blockOnLikeYoureNotSupposedTo { @Sendable () async -> Void in
+                            print("%% inside blockOnLikeYoureNotSupposedTo")
+                            do {
+                                let res = try await cb2ptr.pointee(url)
+                                state.withLock {
+                                    ensure($0.successVal == nil)
+                                    $0.successVal = res
+                                }
+                            } catch let e {
+                                state.withLock { $0.errorList.append(e) }
+                            }
+                        }
+                    }
+                    var errOut: NSError? = nil
+                    if write {
+                        coordinator.coordinate(writingItemAt: urlOrig, options: [], error: &errOut, byAccessor: accessor)
+                    } else {
+                        coordinator.coordinate(readingItemAt: urlOrig, options: [], error: &errOut, byAccessor: accessor)
+                    }
+                    state.withLock { (state) in
+                        if let errOut { state.errorList.append(errOut) }
+                        if let e = state.errorList.first {
+                            print("errorList: \(state.errorList)")
+                            cc.resume(throwing: e)
+                        } else if let r = state.successVal {
+                            cc.resume(returning: r)
+                        } else {
+                            cc.resume(throwing: MyError("no error but the block was not called"))
+                        }
+                    }
+                }
+            }
+            print("%% cb2ptr dead")
+        }
+    }
+}
+
+
+func warn(_ s: String) {
+    print(s)
+}
+struct MyError: Error {
+    let message: String
+    init(_ message: String) { self.message = message }
+}
+struct ExitStatusError: Error {
+    let exitStatus: Int
+}
+#if false
+func trim<S: StringProtocol>(_ s: S) -> String {
+    // this goes to foundation
+    return s.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+}
+#endif
+@inline(__always)
+func isSpace(_ c: UTF8.CodeUnit) -> Bool {
+    return c == 32 || c == 10
+}
+func trim(_ s: String) -> String {
+    let a = s.utf8
+    guard let start = a.firstIndex(where: { !isSpace($0) }) else {
+        return ""
+    }
+    let end = a.lastIndex(where: { !isSpace($0) })!
+    if start == a.startIndex && a.index(after: end) == a.endIndex {
+        return s
+    } else {
+        return String(a[start...end])!
+    }
+}
+func trim(_ s: Substring) -> String {
+    return trim(String(s))
+}
+func d2s(_ d: Data) -> String {
+    String(data: d, encoding: .utf8)!
+}
+func d2s(_ ud: UnsafeData) -> String {
+    ud.ubp.withMemoryRebound(to: UInt8.self) { String(bytes: $0, encoding: .utf8)! }
+}
+func commaSplitNoTrim(_ s: String) -> [String] {
+    return s.split(separator: ",").map { String($0) }
+}
+func ensure(
+    _ condition: Bool, _ message: @autoclosure () -> String = String(), file: StaticString = #file,
+    line: UInt = #line
+) {
+    if !condition {
+        fatalError(message(), file: file, line: line)
+    }
+}
+func unwrapOrThrow<T>(_ t: T?, err: @autoclosure () -> Error) throws -> T {
+    guard let t = t else { throw err() }
+    return t
 }
