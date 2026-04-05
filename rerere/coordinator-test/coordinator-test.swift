@@ -132,6 +132,49 @@ final class Presenter: NSObject, NSFilePresenter, Sendable {
     }
 }
 
+func intPrefix(_ x: Data) -> Int {
+    var number = 0
+    for c in x {
+        if c >= 0x30 && c <= 0x39 {
+            number = (number * 10) + Int(c - 0x30)
+        } else {
+            break
+        }
+    }
+    return number
+}
+
+func mergeFiles(to output: URL, from inputs: [URL]) async throws {
+    try await withThrowingTaskGroup { group in
+        for input in inputs {
+            group.addTask {
+                try Data(contentsOf: input)
+            }
+        }
+        var allLines: [Data] = []
+        for try await content in group {
+            for line in content.split(separator: 10, omittingEmptySubsequences: true) {
+                allLines.append(Data(line))
+            }
+        }
+        allLines.sort {
+            let ip0 = intPrefix($0), ip1 = intPrefix($1)
+            if ip0 < ip1 { return true }
+            if ip0 == ip1 { return String(data: $0, encoding: .isoLatin1)! < String(data: $1, encoding: .isoLatin1)! }
+            return false
+        }
+        var last: Data? = nil
+        var outText: Data = Data()
+        for line in allLines {
+            if let last, last == line { continue }
+            outText.append(line)
+            outText.append(10)
+            last = line
+        }
+        try outText.write(to: output, options: [.atomic])
+    }
+}
+
 struct ContentView: View {
     @State var state = MyState()
     @State private var isImporting: Bool = false
@@ -206,28 +249,51 @@ struct ContentView: View {
                 log("will pauseSyncForUbiquitousItem")
                 try await FileManager.default.pauseSyncForUbiquitousItem(at: baseURL)
                 */
-                log("will coordinateAsync")
-
-                try await coordinateAsync(url: baseURL, filePresenter: nil, write: write, idForDebugging: id) { url in
-                    log("coordinateAsync callback with url=\(url)")
-                    if write {
-                        let fh = try FileHandle(forUpdating: url)
-                        try fh.seekToEnd()
-                        
-                        let data = "\(id)\n".data(using: .utf8)!
-                        for c in data {
-                            log("wrote: \(String(data: Data([c]), encoding: .utf8)!)")
-                            try fh.write(contentsOf: Data([c]))
-                            try! await Task.sleep(for: .milliseconds(200))
+                var gotConflicts = false
+                while true {
+                    if gotConflicts {
+                        log("coordinating conflicts first")
+                        gotConflicts = false
+                        try await coordinateAsync(url: baseURL, filePresenter: nil, write: true, idForDebugging: id) { url in
+                            log("[conflict] coordinateAsync callback with url=\(url)")
+                            let conflicts = NSFileVersion.unresolvedConflictVersionsOfItem(at: url)
+                            log("[conflict] conflicts=\(String(describing: conflicts))")
+                            if conflicts?.isEmpty ?? true { return }
+                            try await mergeFiles(to: url, from: [url] + conflicts!.map { $0.url })
+                            for conflict in conflicts! { conflict.isResolved = true }
                         }
-                        try fh.close()
-                    } else {
-                        let fh = try FileHandle(forReadingFrom: url)
-                        let data = try fh.readToEnd()
-                        try fh.close()
-                        log("read: \(String(data: data ?? Data(), encoding: .utf8)!)")
+                        log("done coordinating conflicts")
                     }
-                    log("coordinateAsync callback finished r/w")
+                    
+                    log("will coordinateAsync")
+
+                    gotConflicts = try await coordinateAsync(url: baseURL, filePresenter: nil, write: write, idForDebugging: id) { url in
+                        log("coordinateAsync callback with url=\(url)")
+                        guard NSFileVersion.unresolvedConflictVersionsOfItem(at: url)?.isEmpty ?? true else {
+                            return true
+                        }
+
+                        if write {
+                            let fh = try FileHandle(forUpdating: url)
+                            try fh.seekToEnd()
+                            
+                            let data = "\(id)\n".data(using: .utf8)!
+                            for c in data {
+                                log("wrote: \(String(data: Data([c]), encoding: .utf8)!)")
+                                try fh.write(contentsOf: Data([c]))
+                                try! await Task.sleep(for: .milliseconds(200))
+                            }
+                            try fh.close()
+                        } else {
+                            let fh = try FileHandle(forReadingFrom: url)
+                            let data = try fh.readToEnd()
+                            try fh.close()
+                            log("read: \(String(data: data ?? Data(), encoding: .utf8)!)")
+                        }
+                        log("coordinateAsync callback finished r/w")
+                        return false
+                    }
+                    if !gotConflicts { break }
                 }
                 log("coordinateAsync finished")
                 

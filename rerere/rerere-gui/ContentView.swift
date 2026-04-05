@@ -344,13 +344,20 @@ struct AnswerInputView: View {
     }
 }
 
+final class Initializer {
+    init() {
+        let defaults = UserDefaults.standard
+        // ...
+    }
+}
 
 struct ContentView: View {
     let test: Test
-    @State private var selection = 2
+    @State var initializer = Initializer()
 
     var body: some View {
         let _ = print("** ContentView recalc")
+        
         // lazy-load SRS:
         let _ = Task { await Subete.withSRS { _ in } }
         TestSnapshotView(testSnapshot: self.test.snapshot.container, submitCallback: { (input: String) in
@@ -370,7 +377,7 @@ struct ContentView: View {
 
 func buildTestTest(itemKind: ItemKind, name: String, testKind: TestKind, input: String? = nil) -> Test {
     blockOnLikeYoureNotSupposedTo {
-        await Subete.initialize(useFakeLog: true)
+        await Subete.initialize(settings: SubeteSettings(useFakeLog: true, wkDir: findWKDirOnBuildMachine()))
 
         let item = Subete.itemData.allByKind(itemKind).findByName(name)!
         let question = Question(item: item, testKind: testKind)

@@ -111,19 +111,6 @@ func loadStudyMaterials(basePath: String) -> [Int: StudyMaterial] {
     return ret
 }
 
-func getWkDir() -> String {
-    var path = FilePath(#filePath).removingLastComponent()
-    while !(FileManager.default.fileExists(atPath: path.pushing("kanji.json").string)) {
-        path.push("..")
-        if path.length > 512 {
-            fatalError("failed to find wk directory")
-        }
-    }
-
-    return try! URL(fileURLWithPath: path.string).resourceValues(forKeys: [.canonicalPathKey])
-        .canonicalPath!
-}
-
 final actor LogTxtManager {
     var linesAppendedToLog: AsyncMutex<[Test.Id: Data]>
     let theURLDontUseDirectly: URL
@@ -131,7 +118,7 @@ final actor LogTxtManager {
     
     init(useFakeLog: Bool) {
         self.linesAppendedToLog = AsyncMutex([:])
-        self.theURLDontUseDirectly = URL(fileURLWithPath: Subete.basePath + "/" + (useFakeLog ? "log-fake.txt" : "log.txt"))
+        self.theURLDontUseDirectly = URL(fileURLWithPath: Subete.settings.wkDir + "/" + (useFakeLog ? "log-fake.txt" : "log.txt"))
         self.presenter = Presenter(url: self.theURLDontUseDirectly)
     }
 
@@ -211,7 +198,7 @@ final class ItemLoader: Sendable {
     let allWords: AtomicLazyReference<ItemList<Word>> = AtomicLazyReference()
     let allKanji: AtomicLazyReference<ItemList<Kanji>> = AtomicLazyReference()
     init() {
-        self.studyMaterials = loadStudyMaterials(basePath: Subete.basePath)
+        self.studyMaterials = loadStudyMaterials(basePath: Subete.settings.wkDir)
     }
 }
 
@@ -224,7 +211,7 @@ final class ItemData: Sendable {
     let startupDate: Date = Date()
 
     init() async {
-        let basePath = Subete.basePath
+        let basePath = Subete.settings.wkDir
         print("loading json pid=\(ProcessInfo.processInfo.processIdentifier)...", terminator: "")
         let itemLoader = ItemLoader()
         async let allWords = ItemList(
@@ -274,7 +261,7 @@ struct RetiredReplace {
     let replace: [ItemKind: [String: String]]
     init() {
         let retiredInfo: RetiredYaml = try! YAMLDecoder().decode(
-            RetiredYaml.self, from: data(of: "\(Subete.basePath)/retired.yaml"))
+            RetiredYaml.self, from: data(of: "\(Subete.settings.wkDir)/retired.yaml"))
         self.retired = retiredInfo.retired.mapValues { Set($0) }
         self.replace = retiredInfo.replace
     }
@@ -308,8 +295,22 @@ actor SRSManager {
     }
 }
 
+func findWKDirOnBuildMachine() -> String {
+    var path = FilePath(#filePath).removingLastComponent()
+    while !(FileManager.default.fileExists(atPath: path.pushing("kanji.json").string)) {
+        path.push("..")
+        if path.length > 512 {
+            fatalError("failed to find wk directory")
+        }
+    }
+
+    return try! URL(fileURLWithPath: path.string).resourceValues(forKeys: [.canonicalPathKey])
+        .canonicalPath!
+}
+
 struct SubeteSettings: Sendable, Equatable {
     let useFakeLog: Bool
+    let wkDir: String
 }
 
 final class DidInit: Sendable {
@@ -327,7 +328,6 @@ struct Subete: Sendable, ~Copyable {
     static let settings: SubeteSettings = didInit.load()!.settings
     static let initMutex = AsyncMutex<(ItemData, SubeteSettings)?>(nil)
     static let retrep = RetiredReplace()
-    static let basePath = getWkDir()
     static let srsManager = SRSManager()
 
     static let nextItemID: Mutex<Int> = Mutex(0)
@@ -341,10 +341,8 @@ struct Subete: Sendable, ~Copyable {
         return mdf
     }()
 
-    static func initialize(useFakeLog: Bool = false) async {
+    static func initialize(settings mySettings: SubeteSettings) async {
         await Subete.initMutex.withLock({ (_) async in
-            let mySettings = SubeteSettings(useFakeLog: useFakeLog)
-
             if let didInit = Subete.didInit.load() {
                 // any prior initialize calls must have used the same settings:
                 ensure(didInit.settings == mySettings)

@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import System
 
 #if false
 func runAndGetOutput(_ args: [String]) throws -> String {
@@ -79,6 +80,13 @@ func runAndGetOutput(_ args: [String]) throws -> String {
     queue.sync {}
     return try unwrapOrThrow(
         String(decoding: output!, as: UTF8.self), err: MyError("invalid utf8 in output"))
+
+}
+
+
+func initFromCLI() async {
+    await Subete.initialize(settings: SubeteSettings(useFakeLog: false, wkDir: findWKDirOnBuildMachine()))
+    
 
 }
 
@@ -266,9 +274,9 @@ struct CLI {
             print(promptText)
             let args: [String]
             if kana {
-                args = [Subete.basePath + "/read-kana.zsh", CLI.readingPrompt]
+                args = [Subete.settings.wkDir + "/read-kana.zsh", CLI.readingPrompt]
             } else {
-                args = [Subete.basePath + "/read-english.zsh", CLI.meaningPrompt]
+                args = [Subete.settings.wkDir + "/read-english.zsh", CLI.meaningPrompt]
             }
             let output = trim(try runAndGetOutput(args))
             if output == "" {
@@ -361,7 +369,7 @@ struct ForecastCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "forecast")
     func run() async {
-        await Subete.initialize()
+        await initFromCLI()
         let now = Date().timeIntervalSince1970
         let srsItems: [(nextTestDate: Int, question: Question)] = await Subete.withSRS {
             (srs: inout SRS) in
@@ -406,7 +414,7 @@ struct TestOneCommand: AsyncParsableCommand {
         await runOrExit { try await runImpl() }
     }
     func runImpl() async throws {
-        await Subete.initialize()
+        await initFromCLI()
         let item = try unwrapOrThrow(
             Subete.itemData.allByKind(itemKind).findByName(name),
             err: MyError("no such item kind \(itemKind) name \(name)"))
@@ -422,7 +430,7 @@ struct BenchSTSCommand: AsyncParsableCommand {
         commandName: "bench-sts")
     @Flag() var deser: Bool = false
     func run() async {
-        await Subete.initialize()
+        await initFromCLI()
         let sts = SerializableTestSession(
             pulledIncompleteQuestions: IndexableSet(Subete.itemData.allQuestions[..<500]),
             randomMode: .all
@@ -444,7 +452,7 @@ struct BenchStartupCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "bench-startup")
     func run() async {
-        await Subete.initialize()
+        await initFromCLI()
     }
 }
 
@@ -537,8 +545,8 @@ struct Rerere: AsyncParsableCommand {
     }
 
     func run() async throws {
-        await Subete.initialize()
-        let path = "\(Subete.basePath)/sess.json"
+        await initFromCLI()
+        let path = "\(Subete.settings.wkDir)/sess.json"
         let url = URL(fileURLWithPath: path)
         let sess: TestSession
         do {
