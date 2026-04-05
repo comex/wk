@@ -261,10 +261,14 @@ func coordinateAsync<R: Sendable>(url urlOrig: URL, filePresenter: (any NSFilePr
                 }
                 var errOut: NSError? = nil
                 if write {
-                    coordinator.coordinate(writingItemAt: urlOrig, options: [], error: &errOut, byAccessor: accessor)
+                    print("%%\(id) coordinating to write")
+                    coordinator.coordinate(writingItemAt: urlOrig, options: [.forMerging], error: &errOut, byAccessor: accessor)
                 } else {
+                    print("%%\(id) coordinating to read")
                     coordinator.coordinate(readingItemAt: urlOrig, options: [], error: &errOut, byAccessor: accessor)
                 }
+                print("%%\(id) coordinator.coordinate end")
+
                 let _ = mutexTake(maybeCB2)
                 state.withLock { (state) in
                     if let errOut { state.errorList.append(errOut) }

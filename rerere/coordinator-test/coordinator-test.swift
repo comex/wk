@@ -21,6 +21,9 @@ final class Presenter: NSObject, NSFilePresenter, Sendable {
         self.logger = logger
         super.init()
         self.log("presenter init")
+        self.presentedItemOperationQueue.addOperation {
+            self.log("btw I am on an operation queue")
+        }
     }
 
     func log(_ message: String) {
@@ -129,6 +132,9 @@ struct ContentView: View {
                 case .success(let url):
                     self.state.logger.yield("importing: \(url.path)")
                     self.state.presenter = Presenter(url: url, logger: self.state.logger)
+                    NSFileCoordinator.addFilePresenter(self.state.presenter!)
+                    print("==> presenters: \(NSFileCoordinator.filePresenters)")
+
                 case .failure:
                     self.state.logger.yield("import failed")
                 }
@@ -167,7 +173,7 @@ struct ContentView: View {
                     print("stopAccessingSecurityScopedResource")
                     baseURL.stopAccessingSecurityScopedResource()
                 }
-                try await coordinateAsync(url: baseURL, filePresenter: presenter, write: write, idForDebugging: id) { url in
+                try await coordinateAsync(url: baseURL, filePresenter: nil, write: write, idForDebugging: id) { url in
                     log("coordinateAsync callback with url=\(url)")
                     if write {
                         let fh = try FileHandle(forUpdating: url)
