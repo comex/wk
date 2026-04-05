@@ -10,12 +10,12 @@ import SwiftUI
 import Observation
 internal import UniformTypeIdentifiers
 
-
+@Observable
 final class Presenter: NSObject, NSFilePresenter, Sendable {
     let presentedItemURL: URL?
     let presentedItemOperationQueue: OperationQueue = .init()
     let logger: AsyncStream<String>.Continuation
-    
+    @MainActor var hasConflicts: Bool = false
     init(url: URL, logger: AsyncStream<String>.Continuation) {
         self.presentedItemURL = url
         self.logger = logger
@@ -33,10 +33,16 @@ final class Presenter: NSObject, NSFilePresenter, Sendable {
 
     func relinquishPresentedItem(toReader reader: @escaping @Sendable ((@Sendable () -> Void)?) -> Void) {
         self.log("relinquishPresentedItem(toReader:)")
+        reader({
+            self.log("relinquishPresentedItem(toReader:) reacquire callback")
+        })
     }
 
     func relinquishPresentedItem(toWriter writer: @escaping @Sendable ((@Sendable () -> Void)?) -> Void) {
         self.log("relinquishPresentedItem(toWriter:)")
+        writer({
+            self.log("relinquishPresentedItem(toWriter:) reacquire callback")
+        })
     }
 
 
@@ -62,6 +68,13 @@ final class Presenter: NSObject, NSFilePresenter, Sendable {
     }
     func presentedItemDidChangeUbiquityAttributes(_ attributes: Set<URLResourceKey>) {
         self.log("presentedItemDidChangeUbiquityAttributes(\(attributes))")
+        Task { @MainActor in
+            let resourceValues = try! self.presentedItemURL!.resourceValues(forKeys: attributes)
+            self.log(" ===> \(resourceValues)")
+            if let hasConflicts = resourceValues.ubiquitousItemHasUnresolvedConflicts {
+                self.hasConflicts = hasConflicts
+            }
+        }
     }
     func presentedItemDidGain(_ version: NSFileVersion) {
         self.log("presentedItemDidGain(\(version))")
@@ -99,6 +112,7 @@ final class Presenter: NSObject, NSFilePresenter, Sendable {
     var logMessages: [(id: Int, msg: String)] = []
     let logger: AsyncStream<String>.Continuation
     var presenter: Presenter? = nil
+    let conflictMonitor: AsyncMutex<()> = .init(())
     init() {
         let stream: AsyncStream<String>
         (stream, self.logger) = AsyncStream.makeStream(of: String.self)
@@ -107,9 +121,43 @@ final class Presenter: NSObject, NSFilePresenter, Sendable {
                 self.logMessages.append((id: self.logMessages.count, msg: msg))
             }
         }
-        self.logger.yield("hullo")
+        self.log("hullo")
 
         
+    }
+    func startMonitoringConflicts() {
+        Task { @MainActor in
+            await self.conflictMonitor.withLock { @MainActor @Sendable _ in
+                let presenter = self.presenter!
+
+                let hasConflicts = withObservationTracking {
+                    presenter.hasConflicts
+                } onChange: {
+                    Task { @MainActor in self.startMonitoringConflicts() }
+                }
+                if hasConflicts {
+                    await self.resolveConflicts()
+                }
+            }
+        }
+    }
+    func resolveConflicts() async {
+        self.log("resolveConflicts")
+        defer { self.log("resolveConflicts out") }
+        if nil == NSFileVersion.unresolvedConflictVersionsOfItem(at: self.presenter!.presentedItemURL!) {
+            self.log("resolveConflicts: there were apparently no conflicts at the start")
+            return
+        }
+        try! await coordinateAsync(url: self.presenter?.presentedItemURL!, filePresenter: self.presenter!, write:  true) { myURL in
+            guard let versions = NSFileVersion.unresolvedConflictVersionsOfItem(at: myURL) else {
+                self.log("resolveConflicts: there were apparently no conflicts after coordinating")
+            }
+        }
+        
+    }
+    func log(_ message: String) {
+        print("\(message)")
+        self.logger.yield(message)
     }
 }
 
@@ -125,13 +173,21 @@ struct ContentView: View {
                     Text("\(message.id). \(message.msg)")
                 }
             }
+            Button("Clear") {
+                self.state.logMessages.removeAll()
+            }
             Button("Select File") {
                 self.isImporting = true
             }.fileImporter(isPresented: $isImporting, allowedContentTypes: [.item]) { result in
                 switch result {
                 case .success(let url):
-                    self.state.logger.yield("importing: \(url.path)")
+                    guard url.startAccessingSecurityScopedResource() else {
+                        fatalError("couldn't access \(url)")
+                    }
+
+                    self.state.log("importing: \(url.path)")
                     self.state.presenter = Presenter(url: url, logger: self.state.logger)
+                    self.state.startMonitoringConflicts()
                     NSFileCoordinator.addFilePresenter(self.state.presenter!)
                     print("==> presenters: \(NSFileCoordinator.filePresenters)")
 
@@ -188,7 +244,9 @@ struct ContentView: View {
                         try fh.close()
                     } else {
                         let fh = try FileHandle(forReadingFrom: url)
+                        let data = try fh.readToEnd()
                         try fh.close()
+                        log("read: \(String(data: data ?? Data(), encoding: .utf8)!)")
                     }
                     log("coordinateAsync callback finished r/w")
                 }
