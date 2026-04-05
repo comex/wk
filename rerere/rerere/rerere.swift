@@ -181,64 +181,84 @@ func getWkDir() -> String {
 }
 
 final actor LogTxtManager {
-    let useFakeLog: Bool
-    var lastAppend: (test: Test, appendedData: Data)? = nil
+    var linesAppendedToLog: [Test.Id: Data] = [:]
+    let presenter: Presenter
+    let coordinator: NSFileCoordinator
+    let theURLDontUseDirectly: URL
     
     init(useFakeLog: Bool) {
-        self.useFakeLog = useFakeLog
+        self.theURLDontUseDirectly = URL(fileURLWithPath: Subete.basePath + "/" + (useFakeLog ? "log-fake.txt" : "log.txt"))
+        self.presenter = Presenter(manager: self)
+        self.coordinator = NSFileCoordinator(filePresenter: self.presenter)
     }
 
-    func removeFromLog(test: Test) throws {
-        if self.lastAppend?.test !== test {
-            throw MyError("removeFromLog out of order")
+    func removeFromLog(test: Test) async throws {
+        guard let appendedData = linesAppendedToLog[test.uniqueId] else {
+            throw MyError("removeFromLog when we did not append")
         }
-        let toRemove = self.lastAppend!.appendedData
-        try self.openLogTxt(write: true) { (fh: FileHandle) throws in
-            let welp = MyError("log.txt did not end with what we just appended to it")
-            let len = fh.seekToEndOfFile()
-            if len < toRemove.count {
-                print("len=\(len) toRemove.count=\(toRemove.count)")
-                throw welp
+        try await self.openLogTxt(write: true) { (url: URL) throws in
+            // Fast path if it's the last thing in the file.
+            let fh: FileHandle = try FileHandle(forUpdating: url)
+            let len = try fh.seekToEnd()
+            if len >= appendedData.count {
+                let truncOffset = len - UInt64(appendedData.count)
+                try fh.seek(toOffset: truncOffset)
+                let actualData = try fh.readToEnd()
+                if actualData == appendedData {
+                    fh.truncateFile(atOffset: truncOffset)
+                    return
+                }
             }
-            let truncOffset = len - UInt64(toRemove.count)
-            fh.seek(toFileOffset: truncOffset)
-            let actualData = fh.readDataToEndOfFile()
-            if actualData != toRemove {
-                print(actualData)
-                print(toRemove)
-                throw welp
+    
+            // Otherwise, is it anywhere in the file?
+            try fh.seek(toOffset: 0)
+            let entireContents: Data = try fh.readToEnd() ?? Data()
+            let newContents = entireContents.replacing(appendedData, with: Data())
+            if entireContents.count - newContents.count <= 0 {
+                throw MyError("removeFromLog but it was not in the log: \(appendedData)")
             }
-            fh.truncateFile(atOffset: truncOffset)
-            self.lastAppend = nil
+            if entireContents.count - newContents.count > appendedData.count {
+                // Generally this shouldn't happen due to the timestamps, though it could theoretically happen if there were multiple identical
+                // tests in one second.
+                throw MyError("removeFromLog but it was in the log multiple times: \(appendedData)")
+            }
+            try fh.close()
+            try newContents.write(to: url, options: [.atomic])
         }
     }
 
     func addToLog(test: Test) async throws {
         let toAppend = Data((await test.result!.getRecordLine() + "\n").utf8)
-        try self.openLogTxt(write: true) { (fh: FileHandle) throws in
-            fh.seekToEndOfFile()
-            fh.write(toAppend)
-            self.lastAppend = (test: test, appendedData: toAppend)
+        try await self.openLogTxt(write: true) { (url: URL) throws in
+            let fh: FileHandle = try FileHandle(forUpdating: url)
+            try fh.seekToEnd()
+            try fh.write(contentsOf: toAppend)
+            self.linesAppendedToLog[test.uniqueId] = toAppend
         }
     }
 
-    func openLogTxt<R>(write: Bool, cb: (FileHandle) throws -> R) throws -> R {
-        // todo: clowd!
-        let url = URL(fileURLWithPath: Subete.basePath + "/" + (useFakeLog ? "log-fake.txt" : "log.txt"))
-        let fh: FileHandle
-        if write {
-            fh = try FileHandle(forUpdating: url)
-        } else {
-            fh = try FileHandle(forReadingFrom: url)
+    func openLogTxt<R>(write: Bool, cb: (URL) async throws -> R) async throws -> R {
+        let url = self.theURLDontUseDirectly
+        return try await withCheckedThrowingContinuation { (cc: CheckedContinuation<R, any Error>) -> Void in
+            let intents: [NSFileAccessIntent] = [write ? .writingIntent(with: url) : .readingIntent(with: url)]
+            self.coordinator.coordinate(with: intents, queue: self.presenter.presentedItemOperationQueue) { (err: (any Error)?) in
+                if let err {
+                    cc.resume(throwing: err)
+                    return
+                }
+                
+                
+            }
         }
-        let flockRet = flock(fh.fileDescriptor, (write ? LOCK_EX : LOCK_SH) | LOCK_NB)
-        if flockRet != 0 {
-            throw MyError("failed to flock log.txt")
+    }
+    
+    final class Presenter: NSObject, NSFilePresenter {
+        let presentedItemURL: URL?
+        let presentedItemOperationQueue: OperationQueue = .init()
+        
+        init(manager: LogTxtManager) {
+            self.presentedItemURL = manager.theURLDontUseDirectly
         }
-        let ret = try cb(fh)
-        flock(fh.fileDescriptor, LOCK_UN)
-        fh.closeFile()
-        return ret
     }
 }
 
@@ -1161,8 +1181,8 @@ struct TestResult {
         }
     }
     static func readAllFromLog(manager: LogTxtManager) async throws -> [TestResult] {
-        let data = try await manager.openLogTxt(write: false) { (fh: FileHandle) in
-            fh.readDataToEndOfFile()
+        let data = try await manager.openLogTxt(write: false) { (url: URL) in
+            try Data(contentsOf: url)
         }
         var parser = TestResultParser()
         return data.split(separator: 10 /*"\n"*/).compactMap {
@@ -1276,7 +1296,8 @@ final class OffMainContainer<Value: Sendable>: Sendable {
 actor Test {
     let question: Question
     let testSession: TestSession
-    
+    let uniqueId: Id
+
     var state: TestState {
         didSet { updateSnapshot() }
     }
@@ -1308,8 +1329,18 @@ actor Test {
             ))
         }
     }
-
+    
+    struct Id: Equatable, Hashable { let raw: Int }
+    static let nextUniqueIdRaw: Mutex<Int> = .init(1)
+    static func nextUniqueId() -> Id {
+        nextUniqueIdRaw.withLock {
+            let uniqueId = Id(raw: $0)
+            $0 += 1
+            return uniqueId
+        }
+    }
     init(question: Question, testSession: TestSession) async {
+        self.uniqueId = Test.nextUniqueId()
         self.question = question
         self.testSession = testSession
         self.state = Test.initialState(item: question.item, testKind: question.testKind)

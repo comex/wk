@@ -202,9 +202,11 @@ struct AlternativesSectionView: View {
         } label: {
             Label(label, systemImage: "wat")
                 .labelStyle(.titleOnly)
-                .onTapGesture {
-                    expanded.toggle()
-                }
+#if os(macOS)
+                    .onTapGesture {
+                        expanded.toggle()
+                    }
+#endif
         }
     }
 }
@@ -231,7 +233,7 @@ struct ResponseAcknowledgementView: View {
                     AlternativesSectionView(sect: sect.t)
                 }
             }
-        }
+        }.padding(.horizontal, 5)
     }
 }
 struct TestSnapshotView : View {
@@ -252,7 +254,6 @@ struct TestSnapshotView : View {
                     AnswerInputView(expectedInput: prompt.expectedInput, submitCallback: submitCallback)
                         .padding(.horizontal, 4)
                 }
-                Text("Boo \(snapshot.counterForDebugging)")
                             
             } else {
                 Text("Loading")
@@ -352,38 +353,9 @@ struct ContentView: View {
         let _ = print("** ContentView recalc")
         // lazy-load SRS:
         let _ = Task { await Subete.withSRS { _ in } }
-        VStack {
-            /*
-            Text("Hello, world!")
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            
-            */
-            TabView(selection: $selection) {
-                Tab(value: 1) {
-                    Text("not implemented")
-                } label: {
-                    Text("History")
-                }
-                Tab(value: 2) {
-                    TestSnapshotView(testSnapshot: self.test.snapshot.container, submitCallback: { (input: String) in
-                        Task { try! await self.test.handlePromptResponse(input: input) }
-                    })
-                } label: {
-                    Text("Test")
-                }
-                Tab(value: 3) {
-                    Text("not implemented")
-                } label: {
-                    Text("Options")
-                }
-            }
-            
-            
-
-        }
-        
+        TestSnapshotView(testSnapshot: self.test.snapshot.container, submitCallback: { (input: String) in
+            Task { try! await self.test.handlePromptResponse(input: input) }
+        })
         
     }
 }
