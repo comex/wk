@@ -1,6 +1,5 @@
 import Foundation
 import Synchronization
-import System
 import Combine
 import Yams
 // TODO: very messed up:
@@ -25,8 +24,11 @@ import rerere_c
 // TODO: !wrong doesn't act as expected when halfway through a k2rm
 // TODO: don't let you mu more than once
 
-func data(of path: String) throws -> Data {
-    return try Data(contentsOf: URL(fileURLWithPath: path))
+func data(of path: URL) async throws -> Data {
+    // Avoid blocking on iCloud downloads.
+    try await coordinateAsync(url: path, filePresenter: nil, write: false) { path2 in
+        try Data(contentsOf: path2)
+    }
 }
 
 @discardableResult
@@ -47,13 +49,13 @@ func blackBox<T>(_ t: T) {
     }
 }
 
-func loadJSONAndExtraYAML<T>(basePath: String, stem: String, class: T.Type, itemLoader: ItemLoader)
-    -> [T]
+func loadJSONAndExtraYAML<T>(basePath: URL, stem: String, class: T.Type, itemLoader: ItemLoader)
+    async throws -> [T]
 where
     T: DecodableWithConfiguration, T.DecodingConfiguration == NormalItem.DecodingConfiguration,
     T: Decodable
 {
-    let jsonData = try! data(of: "\(basePath)/\(stem).json")
+    let jsonData = try! await data(of: basePath.appending(path: "\(stem).json"))
     let base = try! JSONDecoder().decode(
         [T].self, from: jsonData,
         configuration: NormalItem.DecodingConfiguration(
@@ -61,8 +63,8 @@ where
             itemLoader: itemLoader
         )
     )
-    let yamlData = try! data(of: "\(basePath)/extra-\(stem).yaml")
-    let extra = try! YAMLDecoder().decode(
+    let yamlData = try await data(of: basePath.appending(path: "extra-\(stem).yaml"))
+    let extra = try YAMLDecoder().decode(
         [T].self, from: yamlData,
         userInfo: [
             CodingUserInfoKey(rawValue: "decodingConfiguration")!:
@@ -75,9 +77,9 @@ where
     return base + extra
 }
 
-func loadFlashcardYAML(basePath: String, itemLoader: ItemLoader) -> [Flashcard] {
-    let yamlData = try! data(of: "\(basePath)/flashcards.yaml")
-    return try! YAMLDecoder().decode(
+func loadFlashcardYAML(basePath: URL, itemLoader: ItemLoader) async throws -> [Flashcard] {
+    let yamlData = try await data(of: basePath.appending(path: "flashcards.yaml"))
+    return try YAMLDecoder().decode(
         [Flashcard].self, from: yamlData,
         userInfo: [
             CodingUserInfoKey(rawValue: "decodingConfiguration")!:
@@ -91,35 +93,38 @@ func loadFlashcardYAML(basePath: String, itemLoader: ItemLoader) -> [Flashcard] 
 struct StudyMaterial {
     let meaningSynonyms: [String]
 }
-func loadStudyMaterials(basePath: String) -> [Int: StudyMaterial] {
-    struct StudyMaterialsJSONEntry: Decodable {
-        struct Data: Decodable {
-            let subject_id: Int
-            let meaning_synonyms: [String]
+
+final class StudyMaterials: Sendable {
+    let materials: [Int: StudyMaterial]
+    init(basePath: URL) async throws {
+        struct StudyMaterialsJSONEntry: Decodable {
+            struct Data: Decodable {
+                let subject_id: Int
+                let meaning_synonyms: [String]
+            }
+            let data: Data
         }
-        let data: Data
+        let entries = try JSONDecoder().decode(
+            [StudyMaterialsJSONEntry].self, from: try await data(of: basePath.appending(path: "study_materials.json")))
+        var ret: [Int: StudyMaterial] = [:]
+        for entry in entries {
+            let subjectId = entry.data.subject_id
+            let meaningSynonyms = entry.data.meaning_synonyms
+            ensure(ret[subjectId] == nil)
+            ret[subjectId] = StudyMaterial(meaningSynonyms: meaningSynonyms)
+        }
+        self.materials = ret
     }
-    let entries = try! JSONDecoder().decode(
-        [StudyMaterialsJSONEntry].self, from: data(of: "\(basePath)/study_materials.json"))
-    var ret: [Int: StudyMaterial] = [:]
-    for entry in entries {
-        let subjectId = entry.data.subject_id
-        let meaningSynonyms = entry.data.meaning_synonyms
-        ensure(ret[subjectId] == nil)
-        ret[subjectId] = StudyMaterial(meaningSynonyms: meaningSynonyms)
-    }
-    return ret
 }
+
 
 final actor LogTxtManager {
     var linesAppendedToLog: AsyncMutex<[Test.Id: Data]>
     let theURLDontUseDirectly: URL
-    var presenter: Presenter
     
     init(useFakeLog: Bool) {
         self.linesAppendedToLog = AsyncMutex([:])
-        self.theURLDontUseDirectly = URL(fileURLWithPath: Subete.settings.wkDir + "/" + (useFakeLog ? "log-fake.txt" : "log.txt"))
-        self.presenter = Presenter(url: self.theURLDontUseDirectly)
+        self.theURLDontUseDirectly = Subete.settings.wkDir.appending(path: useFakeLog ? "log-fake.txt" : "log.txt")
     }
 
     func removeFromLog(test: Test) async throws {
@@ -127,7 +132,7 @@ final actor LogTxtManager {
             guard let appendedData = linesAppendedToLog[test.uniqueId] else {
                 throw MyError("removeFromLog when we did not append")
             }
-            try await self.openLogTxt(write: true) { @Sendable (url: URL) throws in
+            try await self.coordinateLogTxt(write: true) { @Sendable (url: URL) throws in
                 // Fast path if it's the last thing in the file.
                 let fh: FileHandle = try FileHandle(forUpdating: url)
                 let len = try fh.seekToEnd()
@@ -166,7 +171,7 @@ final actor LogTxtManager {
             if linesAppendedToLog[test.uniqueId] != nil {
                 throw MyError("addToLog but it was already appended: \(toAppend)")
             }
-            try await self.openLogTxt(write: true) { (url: URL) throws in
+            try await self.coordinateLogTxt(write: true) { (url: URL) throws in
                 let fh: FileHandle = try FileHandle(forUpdating: url)
                 try fh.seekToEnd()
                 try fh.write(contentsOf: toAppend)
@@ -175,30 +180,82 @@ final actor LogTxtManager {
         }
     }
 
-    func openLogTxt<R: Sendable>(write: Bool, cb: @Sendable (URL) async throws -> R) async throws -> R {
-        try await coordinateAsync(url: self.theURLDontUseDirectly, filePresenter: self.presenter, write: write, cb: cb)
+    func coordinateLogTxt<R: Sendable>(write: Bool, cb: @Sendable (URL) async throws -> R) async throws -> R {
+        let baseURL = self.theURLDontUseDirectly
+        while true {
+            let res: R? = try await coordinateAsync(url: baseURL, filePresenter: nil, write: write) { url in
+                guard NSFileVersion.unresolvedConflictVersionsOfItem(at: url)?.isEmpty ?? true else {
+                    return nil
+                }
+                return try await cb(url)
+            }
+            if let res { return res }
+            print("coordinateLogTxt: coordinating conflicts first")
+            try await coordinateAsync(url: baseURL, filePresenter: nil, write: true) { url in
+                let conflicts = NSFileVersion.unresolvedConflictVersionsOfItem(at: url)
+                print("coordinateLogTxt: conflicts=\(String(describing: conflicts))")
+                if conflicts?.isEmpty ?? true { return }
+                try await LogTxtManager.mergeFiles(to: url, from: [url] + conflicts!.map { $0.url })
+                for conflict in conflicts! { conflict.isResolved = true }
+            }
+            print("coordinateLogTxt: done coordinating conflicts")
+        }
     }
  
+    static func intPrefix(_ x: Data) -> Int {
+        var number = 0
+        for c in x {
+            if c >= 0x30 && c <= 0x39 {
+                number = (number * 10) + Int(c - 0x30)
+            } else {
+                break
+            }
+        }
+        return number
+    }
     
-    final class Presenter: NSObject, NSFilePresenter, Sendable {
-        let presentedItemURL: URL?
-        let presentedItemOperationQueue: OperationQueue = .init()
-        
-        init(url: URL) {
-            self.presentedItemURL = url
+    static func mergeFiles(to output: URL, from inputs: [URL]) async throws {
+        try await withThrowingTaskGroup { group in
+            for input in inputs {
+                group.addTask {
+                    try Data(contentsOf: input)
+                }
+            }
+            var allLines: [Data] = []
+            for try await content in group {
+                for line in content.split(separator: 10, omittingEmptySubsequences: true) {
+                    allLines.append(Data(line))
+                }
+            }
+            allLines.sort {
+                let ip0 = intPrefix($0), ip1 = intPrefix($1)
+                if ip0 < ip1 { return true }
+                if ip0 == ip1 { return String(data: $0, encoding: .isoLatin1)! < String(data: $1, encoding: .isoLatin1)! }
+                return false
+            }
+            var last: Data? = nil
+            var outText: Data = Data()
+            for line in allLines {
+                if let last, last == line { continue }
+                outText.append(line)
+                outText.append(10)
+                last = line
+            }
+            try outText.write(to: output, options: [.atomic])
         }
     }
 }
 
 final class ItemLoader: Sendable {
-    let studyMaterials: [Int: StudyMaterial]
+    // XXX: why does this class exist
     // Safety: Always initialized before being used.  No easy way to abstract
     // this pattern without allocation overhead because Swift has no concept of
-    // interior mutability.
+    // interior mutability. [XXX: yes it does, what even is this comment.]
     let allWords: AtomicLazyReference<ItemList<Word>> = AtomicLazyReference()
     let allKanji: AtomicLazyReference<ItemList<Kanji>> = AtomicLazyReference()
-    init() {
-        self.studyMaterials = loadStudyMaterials(basePath: Subete.settings.wkDir)
+    let studyMaterials: StudyMaterials?
+    init(studyMaterials: StudyMaterials?) {
+        self.studyMaterials = studyMaterials
     }
 }
 
@@ -208,37 +265,42 @@ final class ItemData: Sendable {
     let allConfusion: ItemList<Confusion>
     let allFlashcards: ItemList<Flashcard>
     let allItems: [Item]
+    let retrep: RetiredReplace
     let startupDate: Date = Date()
 
-    init() async {
-        let basePath = Subete.settings.wkDir
+    init(settings: SubeteSettings) async throws {
+        let basePath = settings.wkDir
         print("loading json pid=\(ProcessInfo.processInfo.processIdentifier)...", terminator: "")
-        let itemLoader = ItemLoader()
-        async let allWords = ItemList(
-            loadJSONAndExtraYAML(
-                basePath: basePath, stem: "vocabulary", class: Word.self, itemLoader: itemLoader))
-        async let allKanji = ItemList(
-            loadJSONAndExtraYAML(
-                basePath: basePath, stem: "kanji", class: Kanji.self, itemLoader: itemLoader))
+        // load studyMaterials first since item loading needs it:
+        let studyMaterials = try await StudyMaterials(basePath: basePath)
+        let itemLoader = ItemLoader(studyMaterials: studyMaterials)
+        async let retrep = RetiredReplace(settings: settings)
+        async let allWords = loadJSONAndExtraYAML(
+                basePath: basePath, stem: "vocabulary", class: Word.self, itemLoader: itemLoader)
+        async let allKanji = loadJSONAndExtraYAML(
+                basePath: basePath, stem: "kanji", class: Kanji.self, itemLoader: itemLoader)
+        async let allFlashcards = loadFlashcardYAML(basePath: basePath, itemLoader: itemLoader)
+        
 
-        self.allWords = await allWords
-        self.allKanji = await allKanji
+        self.allWords = try await ItemList(allWords, retrep: retrep)
+        self.allKanji = try await ItemList(allKanji, retrep: retrep)
+        self.allFlashcards = try await ItemList(allFlashcards, retrep: retrep)
+        self.retrep = try await retrep
         itemLoader.allWords.initializeUnique(self.allWords)
         itemLoader.allKanji.initializeUnique(self.allKanji)
-
-        self.allFlashcards = ItemList(loadFlashcardYAML(basePath: basePath, itemLoader: itemLoader))
+        
         print("done")
         print("loading confusion...", terminator: "")
-        async let allKanjiConfusion = ItemData.loadConfusion(
-            path: basePath + "/confusion.txt", isWord: false, itemLoader: itemLoader)
-        async let allWordConfusion = ItemData.loadConfusion(
-            path: basePath + "/confusion-vocab.txt", isWord: true, itemLoader: itemLoader)
-        self.allConfusion = ItemList(await allKanjiConfusion + allWordConfusion)
+        async let allKanjiConfusion = await ItemData.loadConfusion(
+            path: basePath.appending(path: "confusion.txt"), isWord: false, itemLoader: itemLoader)
+        async let allWordConfusion = await ItemData.loadConfusion(
+            path: basePath.appending(path: "confusion-vocab.txt"), isWord: true, itemLoader: itemLoader)
+        self.allConfusion = ItemList(try await allKanjiConfusion + allWordConfusion, retrep: try await retrep)
         self.allItems = self.allWords.items + self.allKanji.items + self.allConfusion.items + self.allFlashcards.items
         print("done")
     }
-    static func loadConfusion(path: String, isWord: Bool, itemLoader: ItemLoader) -> [Confusion] {
-        let text = try! String(contentsOfFile: path, encoding: .utf8)
+    static func loadConfusion(path: URL, isWord: Bool, itemLoader: ItemLoader) async throws -> [Confusion] {
+        let text = d2s(try await data(of: path))
         return text.split(separator: "\n").map {
             Confusion(line: String($0), isWord: isWord, itemLoader: itemLoader)
         }
@@ -259,9 +321,9 @@ final class ItemData: Sendable {
 struct RetiredReplace {
     let retired: [ItemKind: Set<String>]
     let replace: [ItemKind: [String: String]]
-    init() {
-        let retiredInfo: RetiredYaml = try! YAMLDecoder().decode(
-            RetiredYaml.self, from: data(of: "\(Subete.settings.wkDir)/retired.yaml"))
+    init(settings: SubeteSettings) async throws {
+        let retiredInfo: RetiredYaml = try YAMLDecoder().decode(
+            RetiredYaml.self, from: try await data(of: settings.wkDir.appending(path: "retired.yaml")))
         self.retired = retiredInfo.retired.mapValues { Set($0) }
         self.replace = retiredInfo.replace
     }
@@ -295,22 +357,22 @@ actor SRSManager {
     }
 }
 
-func findWKDirOnBuildMachine() -> String {
-    var path = FilePath(#filePath).removingLastComponent()
-    while !(FileManager.default.fileExists(atPath: path.pushing("kanji.json").string)) {
-        path.push("..")
-        if path.length > 512 {
+func findWKDirOnBuildMachine() -> URL {
+    var path = URL(filePath: #filePath).deletingLastPathComponent()
+    while !(FileManager.default.fileExists(atPath: path.appending(path: "kanji.json").path())) {
+        path = path.appending(path: "..")
+        if path.pathComponents.count > 512 {
             fatalError("failed to find wk directory")
         }
     }
 
-    return try! URL(fileURLWithPath: path.string).resourceValues(forKeys: [.canonicalPathKey])
-        .canonicalPath!
+    return try! URL(fileURLWithPath: path.resourceValues(forKeys: [.canonicalPathKey])
+        .canonicalPath!)
 }
 
 struct SubeteSettings: Sendable, Equatable {
     let useFakeLog: Bool
-    let wkDir: String
+    let wkDir: URL
 }
 
 final class DidInit: Sendable {
@@ -327,7 +389,6 @@ struct Subete: Sendable, ~Copyable {
     static let itemData = didInit.load()!.itemData
     static let settings: SubeteSettings = didInit.load()!.settings
     static let initMutex = AsyncMutex<(ItemData, SubeteSettings)?>(nil)
-    static let retrep = RetiredReplace()
     static let srsManager = SRSManager()
 
     static let nextItemID: Mutex<Int> = Mutex(0)
@@ -347,7 +408,7 @@ struct Subete: Sendable, ~Copyable {
                 // any prior initialize calls must have used the same settings:
                 ensure(didInit.settings == mySettings)
             } else {
-                let itemData = await ItemData()
+                let itemData = try! await ItemData(settings: mySettings)
                 Subete.didInit.initializeUnique(DidInit(itemData: itemData, settings: mySettings))
             }
         }, preWait: {
@@ -726,7 +787,7 @@ class NormalItem: Item, DecodableWithConfiguration, Decodable, @unchecked Sendab
                 try Ing(auxiliaryMeaningFrom: $0)
             }
         }
-        if let wkId, let material = configuration.itemLoader.studyMaterials[wkId] {
+        if let wkId, let material = configuration.itemLoader.studyMaterials?.materials[wkId] {
             meanings += material.meaningSynonyms.map { Ing(synonymWithText: $0) }
         }
         self.meanings = meanings
@@ -952,7 +1013,7 @@ final class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol, Sendab
     let byName: [String: X]
     let byReading: [String: [X]]?
     let byMeaning: [String: [X]]?
-    init(_ items: [X]) {
+    init(_ items: [X], retrep: RetiredReplace) {
         self.items = items
         var byName: [String: X] = [:]
         var byReading: [String: [X]]? = nil
@@ -983,7 +1044,7 @@ final class ItemList<X: Item>: CustomStringConvertible, ItemListProtocol, Sendab
         }
 
         let kind: ItemKind = X.kind
-        for (old, new) in Subete.retrep.replace[kind] ?? [:] {
+        for (old, new) in retrep.replace[kind] ?? [:] {
             byName[old] = byName[new]!
         }
 
@@ -1037,7 +1098,7 @@ struct TestResultParser: ~Copyable {
     let itemKindDataToEnumCache: DataToEnumCache<ItemKind> = DataToEnumCache()
     let testKindDataToEnumCache: DataToEnumCache<TestKind> = DataToEnumCache()
     let testOutcomeDataToEnumCache: DataToEnumCache<TestOutcome> = DataToEnumCache()
-    let retiredByName: [ItemKind: Set<MaybeOwnedData>] = Subete.retrep.retired.mapValues {
+    let retiredByName: [ItemKind: Set<MaybeOwnedData>] = Subete.itemData.retrep.retired.mapValues {
         (stringList) in
         Set(stringList.map { MaybeOwnedData.owned(Data($0.utf8)) })
     }
@@ -1120,7 +1181,7 @@ struct TestResult {
         }
     }
     static func readAllFromLog(manager: LogTxtManager) async throws -> [TestResult] {
-        let data = try await manager.openLogTxt(write: false) { (url: URL) in
+        let data = try await manager.coordinateLogTxt(write: false) { (url: URL) in
             try Data(contentsOf: url)
         }
         var parser = TestResultParser()
@@ -1623,7 +1684,7 @@ final class SRS {
 }
 
 func testSRS() {
-    let itemLoader = ItemLoader()
+    let itemLoader = ItemLoader(studyMaterials: nil)
     let item = Item((name: "test", birthday: nil), itemLoader: itemLoader)
     let question = Question(item: item, testKind: .confusion)
     var info: SRS.ItemInfo = .burned

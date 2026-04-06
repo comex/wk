@@ -1,5 +1,6 @@
 import Foundation
 import Synchronization
+import os
 
 struct UnsafeData: Hashable, CustomStringConvertible {
     let ubp: UnsafeRawBufferPointer
@@ -232,20 +233,20 @@ func coordinateAsync<R: Sendable>(url urlOrig: URL, filePresenter: (any NSFilePr
     // There is only a version that asyncly waits to _start_ the block.
     // So we need a dedicated thread.
     let id = id ?? Int.random(in: 0..<1000000)
+    let logger: Logger = Logger()
     return try await withoutActuallyEscaping(cb) { cb2 in
         let maybeCB2 = Mutex(Optional.some(cb2))
-        
         return try await withCheckedThrowingContinuation { (cc: CheckedContinuation<R, any Error>) -> Void in
-            print("%%\(id) about to detach")
+            logger.info("%%\(id) about to detach")
             return Thread.detachNewThread {
-                print("%%\(id) did detach")
+                logger.info("%%\(id) did detach")
                 let coordinator = NSFileCoordinator(filePresenter: filePresenter)
 
                 let state: Mutex<CoordinateAsyncState<R>> = .init(.init())
                 let accessor: (URL) -> Void = { (url) in
-                    print("%%\(id) accessor start")
+                    logger.info("%%\(id) accessor start")
                     blockOnLikeYoureNotSupposedTo { @Sendable () async -> Void in
-                        print("%%\(id) inside blockOnLikeYoureNotSupposedTo")
+                        logger.info("%%\(id) inside blockOnLikeYoureNotSupposedTo")
                         do {
                             let cb2 = mutexTake(maybeCB2)!
                             let res = try await cb2(url)
@@ -257,17 +258,17 @@ func coordinateAsync<R: Sendable>(url urlOrig: URL, filePresenter: (any NSFilePr
                             state.withLock { $0.errorList.append(e) }
                         }
                     }
-                    print("%%\(id) accessor end")
+                    logger.info("%%\(id) accessor end")
                 }
                 var errOut: NSError? = nil
                 if write {
-                    print("%%\(id) coordinating to write")
+                    logger.info("%%\(id) coordinating to write")
                     coordinator.coordinate(writingItemAt: urlOrig, options: [.forMerging], error: &errOut, byAccessor: accessor)
                 } else {
-                    print("%%\(id) coordinating to read")
+                    logger.info("%%\(id) coordinating to read")
                     coordinator.coordinate(readingItemAt: urlOrig, options: [], error: &errOut, byAccessor: accessor)
                 }
-                print("%%\(id) coordinator.coordinate end")
+                logger.info("%%\(id) coordinator.coordinate end")
 
                 let _ = mutexTake(maybeCB2)
                 state.withLock { (state) in

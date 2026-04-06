@@ -344,22 +344,104 @@ struct AnswerInputView: View {
     }
 }
 
-final class Initializer {
+@MainActor
+final class BookmarkManager: ObservableObject {
+    var wkURL: URL? = nil
+    enum State {
+        case Uninit, Loading, Ready
+    }
+    @Published var state: State = .Uninit
     init() {
-        let defaults = UserDefaults.standard
-        // ...
+        if let bookmark = UserDefaults.standard.data(forKey: "WKDirBookmark") {
+            var stale = false
+            
+            do {
+#if os(macOS)
+                let options: NSURL.BookmarkResolutionOptions = [.withSecurityScope]
+#else
+                let options: NSURL.BookmarkResolutionOptions = []
+#endif
+                
+                let url = try URL(resolvingBookmarkData: bookmark, options: options, relativeTo: nil, bookmarkDataIsStale: &stale)
+                if stale {
+                    try saveBookmark(url: url)
+                }
+                self.setURL(url)
+            } catch (let e) {
+                print("Failed to resolve bookmark: \(e)")
+            }
+        } else {
+            print("No WKDirBookmark setting")
+        }
+    }
+
+    func saveBookmark(url: URL) throws {
+#if os(macOS)
+        let options: NSURL.BookmarkCreationOptions = [.withSecurityScope]
+#else
+        let options: NSURL.BookmarkCreationOptions = []
+#endif
+        let bookmarkData = try url.bookmarkData(options: options, includingResourceValuesForKeys: nil, relativeTo:
+         nil)
+        UserDefaults.standard.set(bookmarkData, forKey: "WKDirBookmark")
+    }
+    func setURL(_ url: URL) {
+        
+        ensure(self.state == .Uninit)
+        self.state = .Loading
+        guard url.startAccessingSecurityScopedResource() else {
+            fatalError("startAccessingSecurityScopedResource failed for \(url)")
+        }
+        Task {
+
+
+            await Subete.initialize(settings: SubeteSettings(useFakeLog: true, wkDir: url))
+            // lazy-load SRS:
+            Task { await Subete.withSRS { _ in } }
+            self.state = .Ready
+        }
     }
 }
 
 struct ContentView: View {
-    let test: Test
-    @State var initializer = Initializer()
-
+    @StateObject var bookmarkManager = BookmarkManager()
+    @State var isImporting: Bool = false
+    @State var theTest: Test? = nil // TBD
     var body: some View {
         let _ = print("** ContentView recalc")
-        
-        // lazy-load SRS:
-        let _ = Task { await Subete.withSRS { _ in } }
+        switch bookmarkManager.state {
+        case .Uninit:
+            Button("Select WK Dir") {
+                self.isImporting = true
+            }.fileImporter(isPresented: $isImporting, allowedContentTypes: [.directory]) { result in
+                switch result {
+                case .success(let url):
+                    bookmarkManager.setURL(url)
+                    try! bookmarkManager.saveBookmark(url: url)
+                    print("import success")
+                case .failure:
+                    print("import failed")
+                }
+            }
+  
+        case .Loading:
+            Text("loading")
+        case .Ready:
+            let _ = Task {
+                if theTest == nil { theTest = buildTestTest(itemKind: .word, name: "貰う", testKind: .readingToMeaning) }
+            }
+            if let theTest {
+                TestView(test: theTest)
+            } else {
+                Text("no test yet")
+            }
+
+        }
+    }
+}
+struct TestView: View {
+    let test: Test
+    var body: some View {
         TestSnapshotView(testSnapshot: self.test.snapshot.container, submitCallback: { (input: String) in
             Task { try! await self.test.handlePromptResponse(input: input) }
         })
@@ -367,17 +449,18 @@ struct ContentView: View {
     }
 }
 
-
 #Preview {
 
-    ContentView(test: buildTestTest(itemKind: .word, name: "貰う", testKind: .meaningToReading, input: "asdf"))
+    TestView(test: buildTestTest(itemKind: .word, name: "貰う", testKind: .meaningToReading, input: "asdf"))
     //ContentView(test: buildTestTest(itemKind: .kanji, name: "貰", testKind: .characterToRM, input: nil))
     
 }
 
 func buildTestTest(itemKind: ItemKind, name: String, testKind: TestKind, input: String? = nil) -> Test {
     blockOnLikeYoureNotSupposedTo {
-        await Subete.initialize(settings: SubeteSettings(useFakeLog: true, wkDir: findWKDirOnBuildMachine()))
+        if Subete.didInit.load() == nil {
+            await Subete.initialize(settings: SubeteSettings(useFakeLog: true, wkDir: findWKDirOnBuildMachine()))
+        }
 
         let item = Subete.itemData.allByKind(itemKind).findByName(name)!
         let question = Question(item: item, testKind: testKind)

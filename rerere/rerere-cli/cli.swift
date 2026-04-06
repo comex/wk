@@ -274,9 +274,9 @@ struct CLI {
             print(promptText)
             let args: [String]
             if kana {
-                args = [Subete.settings.wkDir + "/read-kana.zsh", CLI.readingPrompt]
+                args = [Subete.settings.wkDir.appending(path: "read-kana.zsh").path(), CLI.readingPrompt]
             } else {
-                args = [Subete.settings.wkDir + "/read-english.zsh", CLI.meaningPrompt]
+                args = [Subete.settings.wkDir.appending(path: "read-english.zsh").path(), CLI.meaningPrompt]
             }
             let output = trim(try runAndGetOutput(args))
             if output == "" {
