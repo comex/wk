@@ -546,16 +546,15 @@ struct Rerere: AsyncParsableCommand {
 
     func run() async throws {
         await initFromCLI()
-        let path = "\(Subete.settings.wkDir)/sess.json"
-        let url = URL(fileURLWithPath: path)
+        let url = Subete.settings.wkDir.appending(path: "sess.json")
         let sess: TestSession
         do {
             sess = try TestSession(fromSaveURL: url)
-            print("Loaded existing session \(path)")
+            print("Loaded existing session \(url.path())")
         } catch let e as NSError
             where e.domain == NSCocoaErrorDomain && e.code == NSFileReadNoSuchFileError
         {
-            print("Starting new session \(path)")
+            print("Starting new session \(url.path())")
             let ser = await makeSerializableSession()
             sess = TestSession(base: ser, saveURL: url)
         }

@@ -23,6 +23,7 @@ let package = Package(
                 "rerere-gui",
                 "rerere-guiTests",
                 "rerere-guiUITests",
+                "coordinator-test",
             ],
             sources: [
                 "rerere/rerere.swift",
@@ -32,7 +33,7 @@ let package = Package(
             ],
             cSettings: [
                 .headerSearchPath("rerere-c")
-            ]
+            ],
         )
-    ]
+    ],
 )
