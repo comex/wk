@@ -252,6 +252,8 @@ struct TestSnapshotView : View {
                             ResponseAcknowledgementView(responseAcknowledgement: lastResponseAcknowledgement)
                         }
                     }
+                        .scrollDismissesKeyboard(.immediately)
+
                     AnswerInputView(expectedInput: prompt.expectedInput, submitCallback: submitCallback, isInputFocused: isInputFocused)
                         .padding(.horizontal, 4)
                 }
@@ -278,7 +280,9 @@ struct KanjiInputView: View {
     var body: some View {
         TextField(label, text: $myText, selection: $selection, axis: .vertical)
             .autocorrectionDisabled()
+#if os(iOS)
             .textInputAutocapitalization(.never)
+#endif
             .onChange(of: myText) {
                 var modText = myText
                 //print("onChange 1 text=\(text.wrappedValue) myText=\(myText)")
