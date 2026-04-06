@@ -239,6 +239,7 @@ struct ResponseAcknowledgementView: View {
 struct TestSnapshotView : View {
     let testSnapshot: Container<Test.Snapshot?>
     let submitCallback: (String) -> Void
+    let isInputFocused: FocusState<Bool>.Binding?
 
     var body: some View {
         VStack {
@@ -251,7 +252,7 @@ struct TestSnapshotView : View {
                             ResponseAcknowledgementView(responseAcknowledgement: lastResponseAcknowledgement)
                         }
                     }
-                    AnswerInputView(expectedInput: prompt.expectedInput, submitCallback: submitCallback)
+                    AnswerInputView(expectedInput: prompt.expectedInput, submitCallback: submitCallback, isInputFocused: isInputFocused)
                         .padding(.horizontal, 4)
                 }
                             
@@ -275,7 +276,9 @@ struct KanjiInputView: View {
     }
 
     var body: some View {
-        TextField(label, text: $myText, selection: $selection)
+        TextField(label, text: $myText, selection: $selection, axis: .vertical)
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
             .onChange(of: myText) {
                 var modText = myText
                 //print("onChange 1 text=\(text.wrappedValue) myText=\(myText)")
@@ -319,28 +322,44 @@ struct KanjiInputView: View {
 struct AnswerInputView: View {
     let expectedInput: PromptExpectedInput
     let submitCallback: (String) -> Void
+    let isInputFocused: FocusState<Bool>.Binding?
+    @FocusState var localFocused: Bool
 
     @State private var pendingText: String = ""
-    
 
     var body: some View {
+        if let isInputFocused { let _ = print("AIV: isFocused=\(isInputFocused.wrappedValue)") }
         let field: any View = switch expectedInput {
         case .meaning:
-            TextField("Meaning", text: $pendingText)
+            TextField("Meaning", text: $pendingText, axis: .vertical)
                
         case .reading:
             KanjiInputView(label: "Reading", text: $pendingText)
 
 
         case .flashcardBack:
-            TextField("Flashcard", text: $pendingText)
+            TextField("Flashcard", text: $pendingText, axis: .vertical)
         }
+        
         AnyView(field)
-            .onSubmit {
-                print("got input \(pendingText)")
-                self.submitCallback(pendingText)
-                pendingText = ""
+            .focused(isInputFocused ?? $localFocused)
+            .onAppear {
+                if let isInputFocused { isInputFocused.wrappedValue = true }
             }
+            .onSubmit {
+                self.doSubmit()
+            }
+            .onChange(of: pendingText) {
+                if pendingText.hasSuffix("\n") {
+                    pendingText.removeLast()
+                    self.doSubmit()
+                }
+            }
+    }
+    func doSubmit() {
+        print("got input \(pendingText)")
+        self.submitCallback(pendingText)
+        pendingText = ""
     }
 }
 
@@ -407,13 +426,14 @@ struct ContentView: View {
     @StateObject var bookmarkManager = BookmarkManager()
     @State var isImporting: Bool = false
     @State var theTest: Test? = nil // TBD
+    let isInputFocused: FocusState<Bool>.Binding?
     var body: some View {
         let _ = print("** ContentView recalc")
         switch bookmarkManager.state {
         case .Uninit:
             Button("Select WK Dir") {
                 self.isImporting = true
-            }.fileImporter(isPresented: $isImporting, allowedContentTypes: [.directory]) { result in
+            }.fileImporter(isPresented: $isImporting, allowedContentTypes: [.folder]) { result in
                 switch result {
                 case .success(let url):
                     bookmarkManager.setURL(url)
@@ -428,10 +448,10 @@ struct ContentView: View {
             Text("loading")
         case .Ready:
             let _ = Task {
-                if theTest == nil { theTest = buildTestTest(itemKind: .word, name: "貰う", testKind: .readingToMeaning) }
+                if theTest == nil { theTest = buildTestTest(itemKind: .word, name: "貰う", testKind: .meaningToReading) }
             }
             if let theTest {
-                TestView(test: theTest)
+                TestView(test: theTest, isInputFocused: isInputFocused)
             } else {
                 Text("no test yet")
             }
@@ -441,17 +461,18 @@ struct ContentView: View {
 }
 struct TestView: View {
     let test: Test
+    let isInputFocused: FocusState<Bool>.Binding?
     var body: some View {
         TestSnapshotView(testSnapshot: self.test.snapshot.container, submitCallback: { (input: String) in
             Task { try! await self.test.handlePromptResponse(input: input) }
-        })
+        }, isInputFocused: isInputFocused)
         
     }
 }
 
 #Preview {
 
-    TestView(test: buildTestTest(itemKind: .word, name: "貰う", testKind: .meaningToReading, input: "asdf"))
+    TestView(test: buildTestTest(itemKind: .word, name: "貰う", testKind: .meaningToReading, input: "asdf"), isInputFocused: nil)
     //ContentView(test: buildTestTest(itemKind: .kanji, name: "貰", testKind: .characterToRM, input: nil))
     
 }

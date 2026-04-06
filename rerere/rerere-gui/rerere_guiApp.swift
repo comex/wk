@@ -10,9 +10,11 @@ import SwiftUI
 
 @main
 struct rerere_guiApp: App {
+    @FocusState var isInputFocused: Bool
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(isInputFocused: $isInputFocused)
+                .defaultFocus($isInputFocused, true, priority: .userInitiated)
         }
             .windowResizability(.contentMinSize)
             // setting an explicit defaultSize is needed to avoid insanity - todo: radar
