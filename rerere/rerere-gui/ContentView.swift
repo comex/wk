@@ -262,6 +262,9 @@ struct TestSnapshotView : View {
                 Text("Loading")
             }
         }
+        .onTapGesture {
+            self.isInputFocused?.wrappedValue = false
+        }
     }
 }
 
@@ -348,7 +351,7 @@ struct AnswerInputView: View {
         AnyView(field)
             .focused(isInputFocused ?? $localFocused)
             .onAppear {
-                if let isInputFocused { isInputFocused.wrappedValue = true }
+                isInputFocused?.wrappedValue = true
             }
             .onSubmit {
                 self.doSubmit()

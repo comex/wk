@@ -237,16 +237,13 @@ func coordinateAsync<R: Sendable>(url urlOrig: URL, filePresenter: (any NSFilePr
     return try await withoutActuallyEscaping(cb) { cb2 in
         let maybeCB2 = Mutex(Optional.some(cb2))
         return try await withCheckedThrowingContinuation { (cc: CheckedContinuation<R, any Error>) -> Void in
-            logger.info("%%\(id) about to detach")
             return Thread.detachNewThread {
-                logger.info("%%\(id) did detach")
                 let coordinator = NSFileCoordinator(filePresenter: filePresenter)
 
                 let state: Mutex<CoordinateAsyncState<R>> = .init(.init())
                 let accessor: (URL) -> Void = { (url) in
                     logger.info("%%\(id) accessor start")
                     blockOnLikeYoureNotSupposedTo { @Sendable () async -> Void in
-                        logger.info("%%\(id) inside blockOnLikeYoureNotSupposedTo")
                         do {
                             let cb2 = mutexTake(maybeCB2)!
                             let res = try await cb2(url)
@@ -258,7 +255,6 @@ func coordinateAsync<R: Sendable>(url urlOrig: URL, filePresenter: (any NSFilePr
                             state.withLock { $0.errorList.append(e) }
                         }
                     }
-                    logger.info("%%\(id) accessor end")
                 }
                 var errOut: NSError? = nil
                 if write {
